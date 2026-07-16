@@ -1,0 +1,10 @@
+{
+  "name": "vroom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pixel-art, mobile-first arcade racing game.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
