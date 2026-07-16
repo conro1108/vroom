@@ -13,8 +13,9 @@ npm install
 npm run dev
 ```
 
-Desktop controls: arrows / WASD. Mobile: one thumb — drag to steer, hold to
-throttle.
+Desktop controls: arrows / WASD. Mobile: one thumb — hold to throttle, and
+drag so the stick points where you want to go on screen; the car steers
+itself toward that direction.
 
 ## Tuning the feel
 

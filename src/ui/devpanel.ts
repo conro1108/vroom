@@ -30,7 +30,9 @@ const SLIDERS: SliderSpec[] = [
   { key: "offroadFriction", label: "offroad drag ×", min: 1, max: 8, step: 0.25 },
   { key: "cameraLerp", label: "camera follow", min: 1, max: 15, step: 0.5 },
   { key: "lookAhead", label: "camera look-ahead", min: 0, max: 0.8, step: 0.05 },
-  { key: "steerRangePx", label: "thumb steer range", min: 30, max: 160, step: 5 },
+  { key: "joystickDeadzonePx", label: "stick deadzone px", min: 0, max: 30, step: 1 },
+  { key: "joystickLockDeg", label: "stick full-lock angle", min: 10, max: 90, step: 5 },
+  { key: "steerRangePx", label: "drag-x steer range", min: 30, max: 160, step: 5 },
 ];
 
 export function createDevPanel(tuning: Tuning): void {
@@ -81,21 +83,36 @@ export function createDevPanel(tuning: Tuning): void {
       panel.appendChild(row);
     }
 
-    const checkRow = document.createElement("div");
-    checkRow.className = "check-row";
-    const check = document.createElement("input");
-    check.type = "checkbox";
-    check.id = "hold-to-go";
-    check.checked = tuning.holdToGo;
-    check.addEventListener("change", () => {
-      tuning.holdToGo = check.checked;
-      saveTuning(tuning);
-    });
-    const checkLabel = document.createElement("label");
-    checkLabel.htmlFor = "hold-to-go";
-    checkLabel.textContent = "hold to go (release = coast)";
-    checkRow.append(check, checkLabel);
-    panel.appendChild(checkRow);
+    const addCheck = (id: string, text: string, get: () => boolean, set: (v: boolean) => void) => {
+      const checkRow = document.createElement("div");
+      checkRow.className = "check-row";
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.id = id;
+      check.checked = get();
+      check.addEventListener("change", () => {
+        set(check.checked);
+        saveTuning(tuning);
+      });
+      const checkLabel = document.createElement("label");
+      checkLabel.htmlFor = id;
+      checkLabel.textContent = text;
+      checkRow.append(check, checkLabel);
+      panel.appendChild(checkRow);
+    };
+
+    addCheck(
+      "joystick-steer",
+      "joystick steering (thumb points where to go)",
+      () => tuning.steerMode === "joystick",
+      (v) => (tuning.steerMode = v ? "joystick" : "dragx")
+    );
+    addCheck(
+      "hold-to-go",
+      "hold to go (release = coast)",
+      () => tuning.holdToGo,
+      (v) => (tuning.holdToGo = v)
+    );
 
     const buttons = document.createElement("div");
     buttons.className = "panel-buttons";

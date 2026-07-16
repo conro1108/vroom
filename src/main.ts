@@ -34,7 +34,7 @@ function loop(now: number): void {
   last = now;
   accumulator += frameDt;
 
-  const carInput = input.read();
+  const carInput = input.read(car.heading);
   while (accumulator >= PHYSICS_DT) {
     accumulator -= PHYSICS_DT;
     car = stepCar(car, carInput, tuning, query.surfaceAt(car.x, car.y), PHYSICS_DT);

@@ -16,7 +16,10 @@ export interface Tuning {
   offroadFriction: number; // drag multiplier on grass
   cameraLerp: number; // 1/s camera chase
   lookAhead: number; // seconds of velocity the camera leads by
-  steerRangePx: number; // css px of thumb-drag for full lock
+  steerMode: "joystick" | "dragx"; // joystick: thumb vector = screen direction to drive
+  joystickDeadzonePx: number; // css px of drag before steering engages
+  joystickLockDeg: number; // heading error (degrees) at which steer saturates
+  steerRangePx: number; // dragx mode: css px of thumb-drag for full lock
   holdToGo: boolean; // touch: throttle only while a finger is down
 }
 
@@ -35,6 +38,9 @@ export const DEFAULT_TUNING: Tuning = {
   offroadFriction: 3,
   cameraLerp: 5,
   lookAhead: 0.35,
+  steerMode: "joystick",
+  joystickDeadzonePx: 10,
+  joystickLockDeg: 40,
   steerRangePx: 70,
   holdToGo: true,
 };
