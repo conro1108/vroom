@@ -50,7 +50,7 @@ export function createInput(target: HTMLElement, tuning: Tuning): InputRig {
 
   // In fixed mode the stick lives bottom-right and survives lifting the
   // thumb — re-touching steers from the same center, so no orientation reset.
-  const fixedCenter = () => ({ x: window.innerWidth - 96, y: window.innerHeight - 200 });
+  const fixedCenter = () => ({ x: window.innerWidth - 150, y: window.innerHeight - 200 });
   const stickCenter = () =>
     tuning.fixedStick && tuning.steerMode === "joystick"
       ? fixedCenter()
