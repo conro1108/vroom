@@ -1,4 +1,14 @@
 import "./style.css";
+import {
+  createGhostRecorder,
+  finishGhostLap,
+  ghostAt,
+  loadGhosts,
+  recordGhostSample,
+  saveGhosts,
+  type GhostLap,
+  type GhostRecorder,
+} from "./game/ghost";
 import { createCarState, stepCar } from "./game/physics";
 import {
   applySpeedClass,
@@ -11,7 +21,7 @@ import {
   type SpeedClass,
 } from "./game/progression";
 import { bestSplitIndex, completeLap, createRace, raceTotalMs, type RaceState } from "./game/race";
-import { applyLap, applyRace, getRecords, loadRecords, saveRecords } from "./game/records";
+import { applyLap, applyRace, getRecords, loadRecords, recordKey, saveRecords } from "./game/records";
 import { createLapTracker, createTrack, createTrackQuery, updateLap, type LapTracker, type Track, type TrackQuery } from "./game/track";
 import { TRACKS } from "./game/tracks";
 import { loadTuning } from "./game/tuning";
@@ -46,6 +56,9 @@ let lapTracker: LapTracker = createLapTracker(0);
 let race: RaceState = createRace(RACE_LAPS);
 let raceHadBestLap = false;
 let lapStart = performance.now();
+const ghosts = loadGhosts();
+let ghost: GhostLap | null = null; // best lap being replayed
+let ghostRec: GhostRecorder = createGhostRecorder();
 
 const menu = createMenu(progress, records, (index, classId) => {
   startRace(index, classId);
@@ -75,6 +88,8 @@ function restartRace(): void {
   race = createRace(RACE_LAPS);
   raceHadBestLap = false;
   lapStart = performance.now();
+  ghost = ghosts[recordKey(track.id, cls.id)] ?? null;
+  ghostRec = createGhostRecorder();
   scene.centerOn(car);
   scene.clearMarks();
   hud.setLap(1, RACE_LAPS);
@@ -98,8 +113,13 @@ function onLapCompleted(now: number): void {
     raceHadBestLap = true;
     hud.setBest(lapMs);
     hud.toast("new best lap!");
+    // this lap is the new ghost, raced from the very next lap on
+    ghost = finishGhostLap(ghostRec, lapMs);
+    ghosts[recordKey(track.id, cls.id)] = ghost;
+    saveGhosts(ghosts);
   }
   saveRecords(records);
+  ghostRec = createGhostRecorder();
 
   if (completeLap(race, lapMs).finished) {
     finishRace();
@@ -173,6 +193,7 @@ function loop(now: number): void {
       accumulator -= PHYSICS_DT;
       car = stepCar(car, carInput, raceTuning, query.surfaceAt(car.x, car.y), PHYSICS_DT);
       applyWalls();
+      recordGhostSample(ghostRec, now - lapStart, car);
 
       const p = query.progressAt(car.x, car.y);
       if (p !== null && updateLap(lapTracker, p).completed) {
@@ -185,7 +206,9 @@ function loop(now: number): void {
     accumulator = 0;
   }
 
-  scene.frame(frameDt, car, raceTuning);
+  const ghostPose =
+    mode === "racing" && tuning.showGhost && ghost ? ghostAt(ghost, now - lapStart) : null;
+  scene.frame(frameDt, car, raceTuning, ghostPose);
   requestAnimationFrame(loop);
 }
 

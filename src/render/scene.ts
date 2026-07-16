@@ -2,6 +2,7 @@
 // then blits it to the display canvas at an integer scale. The static world
 // (grass, road, decorations, fence) is painted once; skid marks accumulate on
 // their own world-sized canvas and slowly fade.
+import type { GhostPose } from "../game/ghost";
 import type { CarState } from "../game/physics";
 import type { Track, TrackQuery } from "../game/track";
 import type { Tuning } from "../game/tuning";
@@ -95,12 +96,12 @@ export class Scene {
     this.ready = true;
   }
 
-  frame(dt: number, car: CarState, tuning: Tuning): void {
+  frame(dt: number, car: CarState, tuning: Tuning, ghost: GhostPose | null = null): void {
     if (!this.ready) this.resize();
     if (!this.ready) return; // still no layout — skip this frame
     this.updateCamera(dt, car, tuning);
     this.updateEffects(dt, car);
-    this.draw(car);
+    this.draw(car, ghost);
   }
 
   /** Snap the camera onto the car with no easing (used after a reset). */
@@ -169,7 +170,7 @@ export class Scene {
     }
   }
 
-  private draw(car: CarState): void {
+  private draw(car: CarState, ghost: GhostPose | null): void {
     const ctx = this.bufferCtx;
     const bw = this.buffer.width;
     const bh = this.buffer.height;
@@ -194,6 +195,16 @@ export class Scene {
       ctx.fillRect(Math.round(p.x - sx) - 1, Math.round(p.y - sy) - 1, 2, 2);
     }
     ctx.globalAlpha = 1;
+
+    // ghost under the real car: same pre-rendered frames, just translucent
+    if (ghost) {
+      const gFrame = this.carFrames[carFrameIndex(ghost.heading)]!;
+      const gx = Math.round(ghost.x - sx);
+      const gy = Math.round(ghost.y - sy);
+      ctx.globalAlpha = 0.45;
+      ctx.drawImage(gFrame, gx - Math.floor(gFrame.width / 2), gy - Math.floor(gFrame.height / 2));
+      ctx.globalAlpha = 1;
+    }
 
     const frame = this.carFrames[this.carFrame(car.heading)]!;
     const cx = Math.round(car.x - sx);

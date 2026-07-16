@@ -119,6 +119,12 @@ export function createDevPanel(tuning: Tuning): void {
       () => tuning.holdToGo,
       (v) => (tuning.holdToGo = v)
     );
+    addCheck(
+      "show-ghost",
+      "ghost car (race your best lap)",
+      () => tuning.showGhost,
+      (v) => (tuning.showGhost = v)
+    );
 
     // advanced: the raw physics sliders, collapsed by default
     const advanced = document.createElement("details");
