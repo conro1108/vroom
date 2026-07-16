@@ -63,7 +63,7 @@ export function createTrack(): Track {
   return {
     samples,
     progress,
-    roadWidth: 54,
+    roadWidth: 62,
     worldWidth: 1400,
     worldHeight: 1000,
     start,

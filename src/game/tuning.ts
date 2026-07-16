@@ -24,28 +24,30 @@ export interface Tuning {
 }
 
 export const DEFAULT_TUNING: Tuning = {
-  maxSpeed: 150,
+  maxSpeed: 140,
   accel: 180,
   brake: 300,
   drag: 55,
-  turnRate: 2.9,
-  speedTurnFalloff: 0.25,
-  steerResponse: 9,
+  turnRate: 3.4,
+  speedTurnFalloff: 0.15,
+  steerResponse: 12,
   lateralGrip: 6,
   driftGrip: 2.4,
-  driftThreshold: 45,
-  offroadMaxSpeed: 0.45,
-  offroadFriction: 3,
+  driftThreshold: 55,
+  offroadMaxSpeed: 0.55,
+  offroadFriction: 1.6,
   cameraLerp: 5,
   lookAhead: 0.35,
   steerMode: "joystick",
   joystickDeadzonePx: 10,
-  joystickLockDeg: 40,
+  joystickLockDeg: 35,
   steerRangePx: 70,
   holdToGo: true,
 };
 
-const STORAGE_KEY = "vroom.tuning";
+// Bump the suffix when DEFAULT_TUNING changes meaningfully, so stale saved
+// tuning doesn't mask the new baseline on devices that played before.
+const STORAGE_KEY = "vroom.tuning.v2";
 
 export function loadTuning(): Tuning {
   const tuning = { ...DEFAULT_TUNING };
