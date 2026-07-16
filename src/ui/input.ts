@@ -63,7 +63,7 @@ export function createInput(target: HTMLElement, tuning: Tuning): InputRig {
     const c = stickCenter();
     ring.style.left = `${c.x}px`;
     ring.style.top = `${c.y}px`;
-    ring.style.opacity = touching ? "1" : "0.5";
+    ring.style.opacity = touching ? "1" : "0.85";
     if (!touching) {
       nub.style.left = `${c.x}px`;
       nub.style.top = `${c.y}px`;
