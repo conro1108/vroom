@@ -60,7 +60,7 @@ const ghosts = loadGhosts();
 let ghost: GhostLap | null = null; // best lap being replayed
 let ghostRec: GhostRecorder = createGhostRecorder();
 
-const menu = createMenu(progress, records, (index, classId) => {
+const menu = createMenu(progress, records, tuning, (index, classId) => {
   startRace(index, classId);
 });
 

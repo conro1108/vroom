@@ -370,6 +370,24 @@ body {
   color: var(--cream-light);
 }
 
+.ghost-toggle {
+  padding: 8px 16px;
+  margin-bottom: 18px;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--cream-light);
+  border: 3px solid var(--brown);
+  border-radius: 999px;
+  opacity: 0.8;
+}
+
+.ghost-toggle.on {
+  color: var(--ink);
+  opacity: 1;
+}
+
 .track-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

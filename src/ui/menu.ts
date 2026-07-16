@@ -5,6 +5,7 @@ import { isTrackUnlocked, saveProgress, SPEED_CLASSES, type Progress } from "../
 import { getRecords, type Records } from "../game/records";
 import { createTrack, type TrackDef } from "../game/track";
 import { TRACKS } from "../game/tracks";
+import { saveTuning, type Tuning } from "../game/tuning";
 import { formatTime } from "./hud";
 
 const MINIMAP_W = 132;
@@ -73,6 +74,7 @@ export interface Menu {
 export function createMenu(
   progress: Progress,
   records: Records,
+  tuning: Tuning,
   onStart: (trackIndex: number, classId: string) => void
 ): Menu {
   const root = document.getElementById("menu")!;
@@ -103,6 +105,17 @@ export function createMenu(
       classRow.appendChild(btn);
     }
     root.appendChild(classRow);
+
+    // ghost toggle
+    const ghostBtn = document.createElement("button");
+    ghostBtn.className = "ghost-toggle" + (tuning.showGhost ? " on" : "");
+    ghostBtn.textContent = tuning.showGhost ? "👻 ghost on" : "👻 ghost off";
+    ghostBtn.addEventListener("click", () => {
+      tuning.showGhost = !tuning.showGhost;
+      saveTuning(tuning);
+      render();
+    });
+    root.appendChild(ghostBtn);
 
     // track grid
     const grid = document.createElement("div");
