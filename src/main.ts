@@ -6,6 +6,7 @@ import { Scene } from "./render/scene";
 import { createDevPanel } from "./ui/devpanel";
 import { createHud } from "./ui/hud";
 import { createInput } from "./ui/input";
+import { createRaceControl } from "./ui/race";
 
 const PHYSICS_DT = 1 / 120; // fixed step so feel doesn't vary with frame rate
 const WALL_MARGIN = 14;
@@ -21,9 +22,26 @@ const hud = createHud();
 createDevPanel(tuning);
 
 let car = createCarState(track.start.x, track.start.y, track.startHeading);
-const lapTracker = createLapTracker(0);
+let lapTracker = createLapTracker(0);
 let lapStart = performance.now();
 
+const race = createRaceControl({
+  onReset() {
+    car = createCarState(track.start.x, track.start.y, track.startHeading);
+    lapTracker = createLapTracker(0);
+    scene.centerOn(car);
+    scene.clearMarks();
+    hud.setLap(1);
+    hud.setLapTime(0);
+  },
+  onGo() {
+    lapStart = performance.now();
+  },
+});
+
+// Drive resize off the canvas's actual box so a racy first layout can't leave
+// us with a broken (garbled) buffer; also covers rotation and PWA chrome.
+new ResizeObserver(() => scene.resize()).observe(canvas);
 window.addEventListener("resize", () => scene.resize());
 
 let last = performance.now();
@@ -32,8 +50,15 @@ let accumulator = 0;
 function loop(now: number): void {
   const frameDt = Math.min((now - last) / 1000, 0.1);
   last = now;
-  accumulator += frameDt;
 
+  if (race.frozen()) {
+    accumulator = 0;
+    scene.frame(frameDt, car, tuning); // render the static line + countdown
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  accumulator += frameDt;
   const carInput = input.read(car.heading);
   while (accumulator >= PHYSICS_DT) {
     accumulator -= PHYSICS_DT;

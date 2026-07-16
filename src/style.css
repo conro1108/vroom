@@ -132,6 +132,91 @@ body {
   transition: left 0.06s linear, top 0.06s linear;
 }
 
+#reset-btn {
+  position: fixed;
+  left: 12px;
+  top: calc(env(safe-area-inset-top) + 74px);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 3px solid var(--brown);
+  background: var(--cream);
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1;
+  font-family: var(--font);
+  opacity: 0.75;
+  z-index: 3;
+}
+
+#race-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  z-index: 6;
+  pointer-events: none;
+}
+
+#start-btn {
+  pointer-events: auto;
+  padding: 18px 46px;
+  font-family: var(--font);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: var(--cream-light);
+  background: var(--accent);
+  border: 4px solid var(--brown);
+  border-radius: 18px;
+  box-shadow: 0 5px 0 rgba(74, 55, 40, 0.5);
+}
+
+#start-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 rgba(74, 55, 40, 0.5);
+}
+
+#lights {
+  display: flex;
+  gap: 18px;
+  padding: 16px 22px;
+  background: rgba(58, 43, 32, 0.85);
+  border: 4px solid var(--brown);
+  border-radius: 18px;
+}
+
+.bulb {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #2a2018;
+  border: 3px solid #1c140f;
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.08);
+}
+
+.bulb.on {
+  background: radial-gradient(circle at 40% 34%, #ffd27a, #e8a331 70%);
+  box-shadow: 0 0 14px rgba(240, 170, 60, 0.9);
+}
+
+.bulb.go {
+  background: radial-gradient(circle at 40% 34%, #b6f08a, #4fae43 70%);
+  box-shadow: 0 0 16px rgba(120, 210, 90, 0.95);
+}
+
+#go-text {
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: #4fae43;
+  -webkit-text-stroke: 3px var(--brown);
+  animation: toast-pop 1s ease forwards;
+}
+
 #dev-toggle {
   position: fixed;
   right: 12px;

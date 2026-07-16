@@ -56,6 +56,7 @@ export class Scene {
   private scale = 2;
   private skidFadeTimer = 0;
   private lastCarFrame = -1;
+  private ready = false;
 
   constructor(
     private track: Track,
@@ -79,21 +80,38 @@ export class Scene {
   resize(): void {
     const rect = this.display.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    this.scale = Math.max(2, Math.round((rect.width * dpr) / TARGET_BUFFER_WIDTH));
     const dispW = Math.round(rect.width * dpr);
     const dispH = Math.round(rect.height * dpr);
+    // Layout isn't ready yet (0-size box): skip so we don't lock in a broken
+    // buffer. A ResizeObserver re-runs this the moment the canvas gets a box.
+    if (dispW === 0 || dispH === 0) return;
+    this.scale = Math.max(2, Math.round((rect.width * dpr) / TARGET_BUFFER_WIDTH));
     // +2px margin so the sub-pixel scroll offset always has buffer to reveal.
     this.buffer.width = Math.ceil(dispW / this.scale) + 2;
     this.buffer.height = Math.ceil(dispH / this.scale) + 2;
     this.display.width = dispW;
     this.display.height = dispH;
     this.displayCtx.imageSmoothingEnabled = false;
+    this.ready = true;
   }
 
   frame(dt: number, car: CarState, tuning: Tuning): void {
+    if (!this.ready) this.resize();
+    if (!this.ready) return; // still no layout — skip this frame
     this.updateCamera(dt, car, tuning);
     this.updateEffects(dt, car);
     this.draw(car);
+  }
+
+  /** Snap the camera onto the car with no easing (used after a reset). */
+  centerOn(car: CarState): void {
+    this.cam.x = car.x;
+    this.cam.y = car.y;
+  }
+
+  clearMarks(): void {
+    this.skidCtx.clearRect(0, 0, this.skid.width, this.skid.height);
+    this.particles.length = 0;
   }
 
   private updateCamera(dt: number, car: CarState, tuning: Tuning): void {
