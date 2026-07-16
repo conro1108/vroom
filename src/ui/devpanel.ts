@@ -1,6 +1,9 @@
-// In-app tuning panel: a slider per feel lever, applied live to the shared
-// Tuning object and persisted. "copy json" exports the current values so a
-// good feel found on-device can be pasted back into DEFAULT_TUNING.
+// In-app tuning panel. Driving styles (coarse handling personalities) sit up
+// top; every raw feel slider lives in a collapsed "advanced" section beneath.
+// Everything applies live to the shared Tuning object and persists. "copy
+// json" exports the current values so a good feel found on-device can be
+// pasted back into DEFAULT_TUNING.
+import { activeStyleId, applyStyle, DRIVING_STYLES } from "../game/styles";
 import { DEFAULT_TUNING, saveTuning, type Tuning } from "../game/tuning";
 
 type NumericTuningKey = {
@@ -38,6 +41,7 @@ const SLIDERS: SliderSpec[] = [
 export function createDevPanel(tuning: Tuning): void {
   const toggle = document.getElementById("dev-toggle")!;
   const panel = document.getElementById("dev-panel")!;
+  let advancedOpen = false;
 
   const render = () => {
     panel.innerHTML = "";
@@ -49,39 +53,35 @@ export function createDevPanel(tuning: Tuning): void {
     panel.appendChild(close);
 
     const title = document.createElement("h2");
-    title.textContent = "Tuning";
+    title.textContent = "Settings";
     panel.appendChild(title);
     const sub = document.createElement("div");
     sub.className = "panel-sub";
     sub.textContent = "How should it feel?";
     panel.appendChild(sub);
 
-    for (const spec of SLIDERS) {
-      const row = document.createElement("div");
-      row.className = "row";
-      const label = document.createElement("label");
+    // driving styles
+    const styleGrid = document.createElement("div");
+    styleGrid.className = "style-grid";
+    const active = activeStyleId(tuning);
+    for (const style of DRIVING_STYLES) {
+      const btn = document.createElement("button");
+      btn.className = "style-btn" + (style.id === active ? " active" : "");
       const name = document.createElement("span");
-      name.textContent = spec.label;
-      const val = document.createElement("span");
-      val.className = "val";
-      val.textContent = String(tuning[spec.key]);
-      label.append(name, val);
-
-      const slider = document.createElement("input");
-      slider.type = "range";
-      slider.min = String(spec.min);
-      slider.max = String(spec.max);
-      slider.step = String(spec.step);
-      slider.value = String(tuning[spec.key]);
-      slider.addEventListener("input", () => {
-        tuning[spec.key] = Number(slider.value);
-        val.textContent = slider.value;
+      name.className = "style-name";
+      name.textContent = style.name;
+      const blurb = document.createElement("span");
+      blurb.className = "style-blurb";
+      blurb.textContent = style.blurb;
+      btn.append(name, blurb);
+      btn.addEventListener("click", () => {
+        applyStyle(tuning, style);
         saveTuning(tuning);
+        render();
       });
-
-      row.append(label, slider);
-      panel.appendChild(row);
+      styleGrid.appendChild(btn);
     }
+    panel.appendChild(styleGrid);
 
     const addCheck = (id: string, text: string, get: () => boolean, set: (v: boolean) => void) => {
       const checkRow = document.createElement("div");
@@ -120,6 +120,43 @@ export function createDevPanel(tuning: Tuning): void {
       (v) => (tuning.holdToGo = v)
     );
 
+    // advanced: the raw physics sliders, collapsed by default
+    const advanced = document.createElement("details");
+    advanced.className = "advanced";
+    advanced.open = advancedOpen;
+    advanced.addEventListener("toggle", () => (advancedOpen = advanced.open));
+    const summary = document.createElement("summary");
+    summary.textContent = "advanced tuning";
+    advanced.appendChild(summary);
+
+    for (const spec of SLIDERS) {
+      const row = document.createElement("div");
+      row.className = "row";
+      const label = document.createElement("label");
+      const name = document.createElement("span");
+      name.textContent = spec.label;
+      const val = document.createElement("span");
+      val.className = "val";
+      val.textContent = String(tuning[spec.key]);
+      label.append(name, val);
+
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.min = String(spec.min);
+      slider.max = String(spec.max);
+      slider.step = String(spec.step);
+      slider.value = String(tuning[spec.key]);
+      slider.addEventListener("input", () => {
+        tuning[spec.key] = Number(slider.value);
+        val.textContent = slider.value;
+        saveTuning(tuning);
+        highlightActiveStyle();
+      });
+
+      row.append(label, slider);
+      advanced.appendChild(row);
+    }
+
     const buttons = document.createElement("div");
     buttons.className = "panel-buttons";
 
@@ -144,7 +181,17 @@ export function createDevPanel(tuning: Tuning): void {
     });
 
     buttons.append(reset, copy);
-    panel.appendChild(buttons);
+    advanced.appendChild(buttons);
+    panel.appendChild(advanced);
+  };
+
+  // Slider tweaks shouldn't rebuild the DOM mid-drag; just retint the styles.
+  const highlightActiveStyle = () => {
+    const active = activeStyleId(tuning);
+    const buttons = panel.querySelectorAll<HTMLButtonElement>(".style-btn");
+    DRIVING_STYLES.forEach((style, i) => {
+      buttons[i]?.classList.toggle("active", style.id === active);
+    });
   };
 
   render();

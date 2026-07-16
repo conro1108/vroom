@@ -149,6 +149,24 @@ body {
   z-index: 3;
 }
 
+#home-btn {
+  position: fixed;
+  left: 12px;
+  top: calc(env(safe-area-inset-top) + 122px);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 3px solid var(--brown);
+  background: var(--cream);
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1;
+  font-family: var(--font);
+  opacity: 0.75;
+  z-index: 3;
+}
+
+/* settings live above the menu so styles can be tweaked from the splash too */
 #dev-toggle {
   position: fixed;
   right: 12px;
@@ -162,7 +180,7 @@ body {
   font-size: 18px;
   font-family: var(--font);
   opacity: 0.75;
-  z-index: 3;
+  z-index: 7;
 }
 
 #dev-panel {
@@ -176,7 +194,7 @@ body {
   border-top: 3px solid var(--brown);
   border-radius: 24px 24px 0 0;
   padding: 16px 20px calc(env(safe-area-inset-bottom) + 16px);
-  z-index: 4;
+  z-index: 8;
   font-family: var(--font);
 }
 
@@ -250,4 +268,256 @@ body {
   color: var(--ink);
   font-size: 16px;
   font-family: var(--font);
+}
+
+/* --- driving styles + advanced section in the settings panel --- */
+
+#dev-panel .style-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+#dev-panel .style-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  font-family: var(--font);
+  text-align: left;
+  color: var(--ink);
+  background: var(--cream-light);
+  border: 3px solid var(--brown);
+  border-radius: 12px;
+}
+
+#dev-panel .style-btn.active {
+  background: var(--accent);
+  color: var(--cream-light);
+}
+
+#dev-panel .style-btn .style-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+#dev-panel .style-btn .style-blurb {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+#dev-panel details.advanced {
+  margin-top: 12px;
+  border-top: 2px dashed var(--brown);
+  padding-top: 10px;
+}
+
+#dev-panel details.advanced summary {
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 10px;
+  color: var(--muted);
+}
+
+/* --- splash menu --- */
+
+#menu {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  overflow-y: auto;
+  background: var(--cream);
+  padding: calc(env(safe-area-inset-top) + 28px) 20px calc(env(safe-area-inset-bottom) + 24px);
+  text-align: center;
+}
+
+.menu-title {
+  font-size: 52px;
+  letter-spacing: 2px;
+  color: var(--accent);
+  text-shadow: 0 4px 0 rgba(74, 55, 40, 0.25);
+}
+
+.menu-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 2px 0 18px;
+}
+
+.class-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+.class-btn {
+  padding: 10px 18px;
+  font-family: var(--font);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--cream-light);
+  border: 3px solid var(--brown);
+  border-radius: 12px;
+}
+
+.class-btn.active {
+  background: var(--accent);
+  color: var(--cream-light);
+}
+
+.track-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.track-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--cream-light);
+  border: 3px solid var(--brown);
+  border-radius: 14px;
+}
+
+.track-tile:active:not(.locked) {
+  transform: translateY(2px);
+}
+
+.track-tile.locked {
+  opacity: 0.55;
+}
+
+.track-tile.locked .track-map {
+  filter: grayscale(1);
+}
+
+.track-map {
+  width: 132px;
+  height: 84px;
+  image-rendering: auto;
+}
+
+.track-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.track-records {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.track-lock {
+  position: absolute;
+  top: 34px;
+  font-size: 26px;
+}
+
+/* --- results overlay --- */
+
+#results[hidden] {
+  display: none; /* the display:flex below would otherwise defeat `hidden` */
+}
+
+#results {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(74, 55, 40, 0.45);
+  padding: 20px;
+}
+
+.results-card {
+  width: min(340px, 92vw);
+  background: var(--cream);
+  border: 3px solid var(--brown);
+  border-radius: 18px;
+  padding: 18px 20px;
+  text-align: center;
+  font-family: var(--font);
+}
+
+.results-flag {
+  font-size: 34px;
+}
+
+.results-card h2 {
+  font-size: 26px;
+  color: var(--accent);
+}
+
+.results-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.results-splits {
+  margin-bottom: 12px;
+}
+
+.split-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  padding: 3px 6px;
+}
+
+.split-row.best {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.split-row.total {
+  border-top: 2px solid var(--brown);
+  margin-top: 4px;
+  padding-top: 6px;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.results-badge {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.results-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.results-buttons button {
+  flex: 1;
+  padding: 10px 6px;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--cream-light);
+  border: 3px solid var(--brown);
+  border-radius: 12px;
+}
+
+.results-buttons button.primary {
+  background: var(--accent);
+  color: var(--cream-light);
 }

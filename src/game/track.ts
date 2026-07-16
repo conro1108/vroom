@@ -7,7 +7,18 @@ export interface TrackPoint {
   y: number;
 }
 
+export interface TrackDef {
+  id: string;
+  name: string;
+  points: TrackPoint[]; // Catmull-Rom control points, closed loop
+  roadWidth: number;
+  worldWidth: number;
+  worldHeight: number;
+}
+
 export interface Track {
+  id: string;
+  name: string;
   samples: TrackPoint[]; // dense polyline around the loop
   progress: number[]; // arc-length fraction 0..1 at each sample
   roadWidth: number;
@@ -17,25 +28,11 @@ export interface Track {
   startHeading: number;
 }
 
-const CONTROL_POINTS: TrackPoint[] = [
-  { x: 320, y: 210 },
-  { x: 700, y: 150 },
-  { x: 1060, y: 230 },
-  { x: 1185, y: 460 },
-  { x: 1090, y: 720 },
-  { x: 860, y: 790 },
-  { x: 700, y: 620 },
-  { x: 540, y: 780 },
-  { x: 300, y: 830 },
-  { x: 170, y: 600 },
-  { x: 210, y: 380 },
-];
-
 const SAMPLES_PER_SEGMENT = 24;
 const GRID_CELL = 64;
 
-export function createTrack(): Track {
-  const pts = CONTROL_POINTS;
+export function createTrack(def: TrackDef): Track {
+  const pts = def.points;
   const samples: TrackPoint[] = [];
   for (let i = 0; i < pts.length; i++) {
     const p0 = pts[(i - 1 + pts.length) % pts.length]!;
@@ -61,11 +58,13 @@ export function createTrack(): Track {
   const start = samples[0]!;
   const next = samples[1]!;
   return {
+    id: def.id,
+    name: def.name,
     samples,
     progress,
-    roadWidth: 62,
-    worldWidth: 1400,
-    worldHeight: 1000,
+    roadWidth: def.roadWidth,
+    worldWidth: def.worldWidth,
+    worldHeight: def.worldHeight,
     start,
     startHeading: Math.atan2(next.y - start.y, next.x - start.x),
   };

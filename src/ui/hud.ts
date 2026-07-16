@@ -1,11 +1,11 @@
-// Lap timer HUD + persisted best lap.
-const BEST_KEY = "vroom.bestLap";
+// Race HUD: lap timer, lap counter, best-lap display, and toast. Pure
+// display — record keeping lives in game/records.
 
 export interface Hud {
   setLapTime(ms: number): void;
-  setLap(lap: number): void;
-  /** Returns true when this lap is a new best. */
-  lapCompleted(ms: number): boolean;
+  setLap(lap: number, totalLaps: number): void;
+  setBest(ms: number | null): void;
+  toast(text: string): void;
 }
 
 export function createHud(): Hud {
@@ -14,45 +14,26 @@ export function createHud(): Hud {
   const lapCountEl = document.getElementById("lap-count")!;
   const toastEl = document.getElementById("toast")!;
 
-  let best = loadBest();
-  bestEl.textContent = best === null ? "best —" : `best ${formatTime(best)}`;
-
   return {
     setLapTime(ms) {
       lapTimeEl.textContent = formatTime(ms);
     },
-    setLap(lap) {
-      lapCountEl.textContent = `lap ${lap}`;
+    setLap(lap, totalLaps) {
+      lapCountEl.textContent = `lap ${lap}/${totalLaps}`;
     },
-    lapCompleted(ms) {
-      if (best !== null && ms >= best) return false;
-      best = ms;
-      try {
-        localStorage.setItem(BEST_KEY, String(ms));
-      } catch {
-        // storage unavailable — best lap just won't survive reloads
-      }
-      bestEl.textContent = `best ${formatTime(ms)}`;
+    setBest(ms) {
+      bestEl.textContent = ms === null ? "best —" : `best ${formatTime(ms)}`;
+    },
+    toast(text) {
+      toastEl.textContent = text;
       toastEl.hidden = false;
       // restart the pop animation
       toastEl.style.animation = "none";
       void toastEl.offsetWidth;
       toastEl.style.animation = "";
       window.setTimeout(() => (toastEl.hidden = true), 1700);
-      return true;
     },
   };
-}
-
-function loadBest(): number | null {
-  try {
-    const raw = localStorage.getItem(BEST_KEY);
-    if (!raw) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  } catch {
-    return null;
-  }
 }
 
 export function formatTime(ms: number): string {

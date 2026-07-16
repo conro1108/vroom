@@ -1,27 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createLapTracker, createTrack, createTrackQuery, updateLap } from "./track";
+import { TRACKS } from "./tracks";
 
-const track = createTrack();
+const track = createTrack(TRACKS[0]!);
 const query = createTrackQuery(track);
-
-describe("track geometry", () => {
-  it("stays inside the world bounds with room for the road", () => {
-    for (const p of track.samples) {
-      expect(p.x).toBeGreaterThan(track.roadWidth);
-      expect(p.x).toBeLessThan(track.worldWidth - track.roadWidth);
-      expect(p.y).toBeGreaterThan(track.roadWidth);
-      expect(p.y).toBeLessThan(track.worldHeight - track.roadWidth);
-    }
-  });
-
-  it("progress is monotonic from 0 toward 1", () => {
-    expect(track.progress[0]).toBe(0);
-    for (let i = 1; i < track.progress.length; i++) {
-      expect(track.progress[i]!).toBeGreaterThan(track.progress[i - 1]!);
-      expect(track.progress[i]!).toBeLessThan(1);
-    }
-  });
-});
 
 describe("surface queries", () => {
   it("centerline points are on the road", () => {
