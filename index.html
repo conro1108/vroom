@@ -3,11 +3,29 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#f2e7d2" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="icon" href="icons/icon-192.png" />
   <title>vroom</title>
-  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div id="hud">
+    <div class="hud-left">
+      <div id="lap-time">0:00.00</div>
+      <div id="best-time">best —</div>
+    </div>
+    <div class="hud-right">
+      <div class="hud-title">vroom</div>
+      <div id="lap-count">lap 1</div>
+    </div>
+  </div>
   <canvas id="game"></canvas>
-  <script type="module" src="src/main.js"></script>
+  <div id="toast" hidden>new best!</div>
+  <button id="dev-toggle" aria-label="tuning">⚙</button>
+  <div id="dev-panel" hidden></div>
+  <script type="module" src="src/main.ts"></script>
 </body>
 </html>

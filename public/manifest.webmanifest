@@ -1,0 +1,14 @@
+{
+  "name": "vroom",
+  "short_name": "vroom",
+  "description": "A cute pixel-art racing game.",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f2e7d2",
+  "theme_color": "#f2e7d2",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

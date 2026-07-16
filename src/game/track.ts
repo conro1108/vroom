@@ -1,0 +1,171 @@
+// The track is a closed Catmull-Rom loop sampled into segments. A coarse
+// spatial grid answers "how far is (x,y) from the road centerline" quickly,
+// which drives surface lookup, lap progress, and world painting.
+
+export interface TrackPoint {
+  x: number;
+  y: number;
+}
+
+export interface Track {
+  samples: TrackPoint[]; // dense polyline around the loop
+  progress: number[]; // arc-length fraction 0..1 at each sample
+  roadWidth: number;
+  worldWidth: number;
+  worldHeight: number;
+  start: TrackPoint;
+  startHeading: number;
+}
+
+const CONTROL_POINTS: TrackPoint[] = [
+  { x: 320, y: 210 },
+  { x: 700, y: 150 },
+  { x: 1060, y: 230 },
+  { x: 1185, y: 460 },
+  { x: 1090, y: 720 },
+  { x: 860, y: 790 },
+  { x: 700, y: 620 },
+  { x: 540, y: 780 },
+  { x: 300, y: 830 },
+  { x: 170, y: 600 },
+  { x: 210, y: 380 },
+];
+
+const SAMPLES_PER_SEGMENT = 24;
+const GRID_CELL = 64;
+
+export function createTrack(): Track {
+  const pts = CONTROL_POINTS;
+  const samples: TrackPoint[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const p0 = pts[(i - 1 + pts.length) % pts.length]!;
+    const p1 = pts[i]!;
+    const p2 = pts[(i + 1) % pts.length]!;
+    const p3 = pts[(i + 2) % pts.length]!;
+    for (let j = 0; j < SAMPLES_PER_SEGMENT; j++) {
+      const u = j / SAMPLES_PER_SEGMENT;
+      samples.push(catmullRom(p0, p1, p2, p3, u));
+    }
+  }
+
+  const progress: number[] = new Array(samples.length);
+  let total = 0;
+  for (let i = 0; i < samples.length; i++) {
+    progress[i] = total;
+    const a = samples[i]!;
+    const b = samples[(i + 1) % samples.length]!;
+    total += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  for (let i = 0; i < progress.length; i++) progress[i]! /= total;
+
+  const start = samples[0]!;
+  const next = samples[1]!;
+  return {
+    samples,
+    progress,
+    roadWidth: 54,
+    worldWidth: 1400,
+    worldHeight: 1000,
+    start,
+    startHeading: Math.atan2(next.y - start.y, next.x - start.x),
+  };
+}
+
+function catmullRom(p0: TrackPoint, p1: TrackPoint, p2: TrackPoint, p3: TrackPoint, t: number): TrackPoint {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const f = (a: number, b: number, c: number, d: number) =>
+    0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * (b - c) + d - a) * t3);
+  return { x: f(p0.x, p1.x, p2.x, p3.x), y: f(p0.y, p1.y, p2.y, p3.y) };
+}
+
+export interface TrackQuery {
+  distanceToRoad(x: number, y: number): number;
+  surfaceAt(x: number, y: number): "road" | "offroad";
+  /** Arc-length fraction 0..1 of the nearest centerline point, or null when far off track. */
+  progressAt(x: number, y: number): number | null;
+}
+
+export function createTrackQuery(track: Track): TrackQuery {
+  const grid = new Map<string, number[]>();
+  const n = track.samples.length;
+  const reach = track.roadWidth * 3;
+  for (let i = 0; i < n; i++) {
+    const a = track.samples[i]!;
+    const b = track.samples[(i + 1) % n]!;
+    const minX = Math.min(a.x, b.x) - reach;
+    const maxX = Math.max(a.x, b.x) + reach;
+    const minY = Math.min(a.y, b.y) - reach;
+    const maxY = Math.max(a.y, b.y) + reach;
+    for (let cx = Math.floor(minX / GRID_CELL); cx <= Math.floor(maxX / GRID_CELL); cx++) {
+      for (let cy = Math.floor(minY / GRID_CELL); cy <= Math.floor(maxY / GRID_CELL); cy++) {
+        const key = `${cx},${cy}`;
+        let list = grid.get(key);
+        if (!list) grid.set(key, (list = []));
+        list.push(i);
+      }
+    }
+  }
+
+  function nearest(x: number, y: number): { dist: number; index: number; t: number } | null {
+    const segs = grid.get(`${Math.floor(x / GRID_CELL)},${Math.floor(y / GRID_CELL)}`);
+    if (!segs) return null;
+    let best: { dist: number; index: number; t: number } | null = null;
+    for (const i of segs) {
+      const a = track.samples[i]!;
+      const b = track.samples[(i + 1) % n]!;
+      const abx = b.x - a.x;
+      const aby = b.y - a.y;
+      const len2 = abx * abx + aby * aby || 1;
+      const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (y - a.y) * aby) / len2));
+      const dist = Math.hypot(x - (a.x + abx * t), y - (a.y + aby * t));
+      if (!best || dist < best.dist) best = { dist, index: i, t };
+    }
+    return best;
+  }
+
+  return {
+    distanceToRoad(x, y) {
+      const hit = nearest(x, y);
+      return hit ? hit.dist : Infinity;
+    },
+    surfaceAt(x, y) {
+      const hit = nearest(x, y);
+      return hit && hit.dist <= track.roadWidth / 2 ? "road" : "offroad";
+    },
+    progressAt(x, y) {
+      const hit = nearest(x, y);
+      if (!hit || hit.dist > reach) return null;
+      const p0 = track.progress[hit.index]!;
+      const p1 = hit.index + 1 < n ? track.progress[hit.index + 1]! : 1;
+      return (p0 + (p1 - p0) * hit.t) % 1;
+    },
+  };
+}
+
+// Lap detection: accumulate signed progress deltas; a full +1.0 of net travel
+// is a lap. Driving backwards digs a hole you must climb back out of, so
+// wiggling across the start line can't farm laps.
+export interface LapTracker {
+  lap: number;
+  accum: number;
+  lastProgress: number;
+}
+
+export function createLapTracker(startProgress: number): LapTracker {
+  return { lap: 1, accum: 0, lastProgress: startProgress };
+}
+
+export function updateLap(state: LapTracker, progress: number): { completed: boolean } {
+  let delta = progress - state.lastProgress;
+  if (delta > 0.5) delta -= 1;
+  if (delta < -0.5) delta += 1;
+  state.lastProgress = progress;
+  state.accum += delta;
+  if (state.accum >= 1) {
+    state.accum -= 1;
+    state.lap += 1;
+    return { completed: true };
+  }
+  return { completed: false };
+}

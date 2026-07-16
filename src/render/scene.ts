@@ -1,0 +1,294 @@
+// Draws the world at 1 world unit = 1 buffer pixel into a low-res buffer,
+// then blits it to the display canvas at an integer scale. The static world
+// (grass, road, decorations, fence) is painted once; skid marks accumulate on
+// their own world-sized canvas and slowly fade.
+import type { CarState } from "../game/physics";
+import type { Track, TrackQuery } from "../game/track";
+import type { Tuning } from "../game/tuning";
+import {
+  buildCarFrames,
+  carFrameIndex,
+  drawMap,
+  MUSHROOM_MAP,
+  MUSHROOM_PALETTE,
+  STUMP_MAP,
+  STUMP_PALETTE,
+} from "./sprites";
+
+const COLORS = {
+  grass: "#7fbf4d",
+  grassPatch: "#77b747",
+  tuft: "#639e39",
+  roadEdge: "#b5975f",
+  road: "#d9c08f",
+  speckle: "#cbb283",
+  checkerDark: "#4a3728",
+  checkerLight: "#f6efdc",
+  fencePost: "#8a5a33",
+  fenceRail: "#7a5233",
+  dust: "#e3d3ae",
+  skid: "rgba(58, 43, 32, 0.35)",
+  shadow: "rgba(42, 32, 20, 0.2)",
+};
+
+const FLOWER_COLORS = ["#e88bb8", "#f2d066", "#f6efdc"];
+const TARGET_BUFFER_WIDTH = 210;
+
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+}
+
+export class Scene {
+  private world: HTMLCanvasElement;
+  private skid: HTMLCanvasElement;
+  private skidCtx: CanvasRenderingContext2D;
+  private buffer: HTMLCanvasElement;
+  private bufferCtx: CanvasRenderingContext2D;
+  private display: HTMLCanvasElement;
+  private displayCtx: CanvasRenderingContext2D;
+  private carFrames: HTMLCanvasElement[];
+  private particles: Particle[] = [];
+  private cam: { x: number; y: number };
+  private scale = 2;
+  private skidFadeTimer = 0;
+
+  constructor(
+    private track: Track,
+    query: TrackQuery,
+    display: HTMLCanvasElement
+  ) {
+    this.display = display;
+    this.displayCtx = display.getContext("2d")!;
+    this.world = paintWorld(track, query);
+    this.skid = document.createElement("canvas");
+    this.skid.width = track.worldWidth;
+    this.skid.height = track.worldHeight;
+    this.skidCtx = this.skid.getContext("2d")!;
+    this.buffer = document.createElement("canvas");
+    this.bufferCtx = this.buffer.getContext("2d")!;
+    this.carFrames = buildCarFrames();
+    this.cam = { x: track.start.x, y: track.start.y };
+    this.resize();
+  }
+
+  resize(): void {
+    const rect = this.display.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    this.scale = Math.max(2, Math.round((rect.width * dpr) / TARGET_BUFFER_WIDTH));
+    this.buffer.width = Math.ceil((rect.width * dpr) / this.scale);
+    this.buffer.height = Math.ceil((rect.height * dpr) / this.scale);
+    this.display.width = this.buffer.width * this.scale;
+    this.display.height = this.buffer.height * this.scale;
+    this.displayCtx.imageSmoothingEnabled = false;
+  }
+
+  frame(dt: number, car: CarState, tuning: Tuning): void {
+    this.updateCamera(dt, car, tuning);
+    this.updateEffects(dt, car);
+    this.draw(car);
+  }
+
+  private updateCamera(dt: number, car: CarState, tuning: Tuning): void {
+    const tx = car.x + car.vx * tuning.lookAhead;
+    const ty = car.y + car.vy * tuning.lookAhead;
+    const k = Math.min(1, tuning.cameraLerp * dt);
+    this.cam.x += (tx - this.cam.x) * k;
+    this.cam.y += (ty - this.cam.y) * k;
+    const hw = this.buffer.width / 2;
+    const hh = this.buffer.height / 2;
+    this.cam.x = clamp(this.cam.x, hw, this.track.worldWidth - hw);
+    this.cam.y = clamp(this.cam.y, hh, this.track.worldHeight - hh);
+  }
+
+  private updateEffects(dt: number, car: CarState): void {
+    if (car.drifting) {
+      const fx = Math.cos(car.heading);
+      const fy = Math.sin(car.heading);
+      const lx = -fy;
+      const ly = fx;
+      for (const side of [-1, 1]) {
+        const wx = car.x - fx * 5 + lx * side * 4;
+        const wy = car.y - fy * 5 + ly * side * 4;
+        this.skidCtx.fillStyle = COLORS.skid;
+        this.skidCtx.fillRect(Math.round(wx) - 1, Math.round(wy) - 1, 2, 2);
+      }
+      if (this.particles.length < 80) {
+        this.particles.push({
+          x: car.x - fx * 6 + (Math.random() - 0.5) * 6,
+          y: car.y - fy * 6 + (Math.random() - 0.5) * 6,
+          vx: -car.vx * 0.1 + (Math.random() - 0.5) * 20,
+          vy: -car.vy * 0.1 + (Math.random() - 0.5) * 20,
+          life: 0.5 + Math.random() * 0.3,
+        });
+      }
+    }
+
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i]!;
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (p.life <= 0) this.particles.splice(i, 1);
+    }
+
+    this.skidFadeTimer += dt;
+    if (this.skidFadeTimer >= 0.25) {
+      this.skidFadeTimer = 0;
+      this.skidCtx.save();
+      this.skidCtx.globalCompositeOperation = "destination-out";
+      this.skidCtx.globalAlpha = 0.035;
+      this.skidCtx.fillStyle = "#000";
+      this.skidCtx.fillRect(0, 0, this.skid.width, this.skid.height);
+      this.skidCtx.restore();
+    }
+  }
+
+  private draw(car: CarState): void {
+    const ctx = this.bufferCtx;
+    const bw = this.buffer.width;
+    const bh = this.buffer.height;
+    const sx = Math.round(this.cam.x - bw / 2);
+    const sy = Math.round(this.cam.y - bh / 2);
+
+    ctx.fillStyle = COLORS.grass;
+    ctx.fillRect(0, 0, bw, bh);
+    ctx.drawImage(this.world, sx, sy, bw, bh, 0, 0, bw, bh);
+    ctx.drawImage(this.skid, sx, sy, bw, bh, 0, 0, bw, bh);
+
+    for (const p of this.particles) {
+      ctx.globalAlpha = Math.min(1, p.life * 2);
+      ctx.fillStyle = COLORS.dust;
+      ctx.fillRect(Math.round(p.x - sx) - 1, Math.round(p.y - sy) - 1, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+
+    const frame = this.carFrames[carFrameIndex(car.heading)]!;
+    const cx = Math.round(car.x - sx);
+    const cy = Math.round(car.y - sy);
+    ctx.fillStyle = COLORS.shadow;
+    ctx.fillRect(cx - 6, cy + 5, 12, 3);
+    ctx.drawImage(frame, cx - Math.floor(frame.width / 2), cy - Math.floor(frame.height / 2));
+
+    this.displayCtx.drawImage(
+      this.buffer,
+      0,
+      0,
+      this.buffer.width * this.scale,
+      this.buffer.height * this.scale
+    );
+  }
+}
+
+function paintWorld(track: Track, query: TrackQuery): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = track.worldWidth;
+  canvas.height = track.worldHeight;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.fillStyle = COLORS.grass;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // mottled grass patches
+  for (let y = 0; y < canvas.height; y += 8) {
+    for (let x = 0; x < canvas.width; x += 8) {
+      if (hash(x, y) < 0.22) {
+        ctx.fillStyle = COLORS.grassPatch;
+        ctx.fillRect(x, y, 8, 8);
+      }
+    }
+  }
+
+  // road: dark edge pass, then fill pass
+  const w = track.roadWidth;
+  for (const pass of [
+    { radius: w / 2 + 3, color: COLORS.roadEdge },
+    { radius: w / 2, color: COLORS.road },
+  ]) {
+    ctx.fillStyle = pass.color;
+    for (const p of track.samples) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, pass.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // road speckle
+  ctx.fillStyle = COLORS.speckle;
+  for (let i = 0; i < track.samples.length; i += 2) {
+    const p = track.samples[i]!;
+    const a = hash(i, 1) * Math.PI * 2;
+    const r = hash(i, 2) * (w / 2 - 4);
+    ctx.fillRect(Math.round(p.x + Math.cos(a) * r), Math.round(p.y + Math.sin(a) * r), 2, 1);
+  }
+
+  // decorations, kept off the road and its shoulder
+  for (let y = 8; y < canvas.height - 8; y += 14) {
+    for (let x = 8; x < canvas.width - 8; x += 14) {
+      const dist = query.distanceToRoad(x, y);
+      if (dist < w / 2 + 8) continue;
+      const r = hash(x, y + 3);
+      if (r < 0.05) {
+        ctx.fillStyle = COLORS.tuft;
+        ctx.fillRect(x, y, 2, 1);
+        ctx.fillRect(x + 3, y + 2, 2, 1);
+      } else if (r < 0.09) {
+        const color = FLOWER_COLORS[Math.floor(hash(x, y + 7) * FLOWER_COLORS.length)]!;
+        ctx.fillStyle = COLORS.tuft;
+        ctx.fillRect(x, y + 1, 1, 2);
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, 2, 2);
+      } else if (r < 0.098 && dist > w) {
+        drawMap(ctx, MUSHROOM_MAP, MUSHROOM_PALETTE, x, y);
+      } else if (r < 0.103 && dist > w * 1.3) {
+        drawMap(ctx, STUMP_MAP, STUMP_PALETTE, x, y);
+      }
+    }
+  }
+
+  // checkered start line, two rows deep across the road
+  const start = track.start;
+  const dir = { x: Math.cos(track.startHeading), y: Math.sin(track.startHeading) };
+  const normal = { x: -dir.y, y: dir.x };
+  const cell = 4;
+  for (let row = 0; row < 2; row++) {
+    for (let k = -Math.floor(w / 2 / cell); k < Math.floor(w / 2 / cell); k++) {
+      const cx = start.x + normal.x * (k * cell + cell / 2) + dir.x * (row * cell);
+      const cy = start.y + normal.y * (k * cell + cell / 2) + dir.y * (row * cell);
+      ctx.fillStyle = (k + row) % 2 === 0 ? COLORS.checkerDark : COLORS.checkerLight;
+      ctx.fillRect(Math.round(cx - cell / 2), Math.round(cy - cell / 2), cell, cell);
+    }
+  }
+
+  // fence around the world edge
+  ctx.fillStyle = COLORS.fenceRail;
+  ctx.fillRect(4, 6, canvas.width - 8, 2);
+  ctx.fillRect(4, canvas.height - 10, canvas.width - 8, 2);
+  ctx.fillRect(4, 6, 2, canvas.height - 14);
+  ctx.fillRect(canvas.width - 8, 6, 2, canvas.height - 14);
+  ctx.fillStyle = COLORS.fencePost;
+  for (let x = 4; x < canvas.width - 6; x += 22) {
+    ctx.fillRect(x, 3, 3, 9);
+    ctx.fillRect(x, canvas.height - 13, 3, 9);
+  }
+  for (let y = 4; y < canvas.height - 6; y += 22) {
+    ctx.fillRect(3, y, 3, 9);
+    ctx.fillRect(canvas.width - 9, y, 3, 9);
+  }
+
+  return canvas;
+}
+
+function hash(x: number, y: number): number {
+  let h = (x * 374761393 + y * 668265263) | 0;
+  h = (h ^ (h >>> 13)) | 0;
+  h = Math.imul(h, 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}

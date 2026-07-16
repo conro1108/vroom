@@ -1,27 +1,29 @@
 # vroom
 
-A pixel-art, mobile-first arcade racing game. Simple, satisfying, addicting — the goal.
+A cute pixel-art racing game for your thumb. Drag sideways to steer, hold to
+go, drift the corners, beat your best lap.
 
-## Status
-
-Bootstrap stage. Currently just a canvas render loop, a touch/keyboard input rig, and
-a small pure-function car physics model (`src/physics.js`) with unit tests.
+TypeScript + Vite PWA, no framework. Deploys statically (Vercel auto-detects
+Vite; `npm run build` → `dist/`).
 
 ## Run it
 
-Open `index.html` directly in a browser, or serve the directory:
-
 ```
-npx serve .
+npm install
+npm run dev
 ```
 
-Controls: arrow keys (desktop), or touch — left edge to steer left, right half
-top/bottom to throttle/brake.
+Desktop controls: arrows / WASD. Mobile: one thumb — drag to steer, hold to
+throttle.
+
+## Tuning the feel
+
+Tap the ⚙ button in-game for live sliders over every physics/camera/steering
+lever. Values persist locally; "copy json" exports them for pasting back into
+`DEFAULT_TUNING` (`src/game/tuning.ts`).
 
 ## Test
 
 ```
 npm test
 ```
-
-Runs `src/physics.js` through Node's built-in test runner (`test/`).
