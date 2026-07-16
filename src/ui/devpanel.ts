@@ -108,6 +108,12 @@ export function createDevPanel(tuning: Tuning): void {
       (v) => (tuning.steerMode = v ? "joystick" : "dragx")
     );
     addCheck(
+      "fixed-stick",
+      "fixed stick (anchored bottom-right)",
+      () => tuning.fixedStick,
+      (v) => (tuning.fixedStick = v)
+    );
+    addCheck(
       "hold-to-go",
       "hold to go (release = coast)",
       () => tuning.holdToGo,

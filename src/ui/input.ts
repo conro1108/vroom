@@ -48,18 +48,34 @@ export function createInput(target: HTMLElement, tuning: Tuning): InputRig {
   ring.hidden = nub.hidden = true;
   document.body.append(ring, nub);
 
+  // In fixed mode the stick lives bottom-right and survives lifting the
+  // thumb — re-touching steers from the same center, so no orientation reset.
+  const fixedCenter = () => ({ x: window.innerWidth - 84, y: window.innerHeight - 128 });
+  const stickCenter = () =>
+    tuning.fixedStick && tuning.steerMode === "joystick"
+      ? fixedCenter()
+      : { x: originX, y: originY };
+
   const updateIndicator = () => {
-    ring.hidden = nub.hidden = !touching;
-    if (!touching) return;
-    ring.style.left = `${originX}px`;
-    ring.style.top = `${originY}px`;
-    const dx = curX - originX;
-    const dy = curY - originY;
+    const fixed = tuning.fixedStick && tuning.steerMode === "joystick";
+    ring.hidden = nub.hidden = !touching && !fixed;
+    if (ring.hidden) return;
+    const c = stickCenter();
+    ring.style.left = `${c.x}px`;
+    ring.style.top = `${c.y}px`;
+    ring.style.opacity = touching ? "1" : "0.5";
+    if (!touching) {
+      nub.style.left = `${c.x}px`;
+      nub.style.top = `${c.y}px`;
+      return;
+    }
+    const dx = curX - c.x;
+    const dy = curY - c.y;
     const len = Math.hypot(dx, dy);
     const max = 26; // keep the nub visually inside the ring
     const k = len > max ? max / len : 1;
-    nub.style.left = `${originX + dx * k}px`;
-    nub.style.top = `${originY + dy * k}px`;
+    nub.style.left = `${c.x + dx * k}px`;
+    nub.style.top = `${c.y + dy * k}px`;
   };
 
   target.addEventListener("pointerdown", (e) => {
@@ -94,13 +110,15 @@ export function createInput(target: HTMLElement, tuning: Tuning): InputRig {
 
   return {
     read(heading: number): CarInput {
+      updateIndicator(); // mode/anchor can change from the dev panel or resize
       let steer = 0;
       if (touching) {
+        const c = stickCenter();
         steer =
           tuning.steerMode === "joystick"
             ? joystickSteer(
-                curX - originX,
-                curY - originY,
+                curX - c.x,
+                curY - c.y,
                 heading,
                 tuning.joystickDeadzonePx,
                 (tuning.joystickLockDeg * Math.PI) / 180

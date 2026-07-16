@@ -17,6 +17,7 @@ export interface Tuning {
   cameraLerp: number; // 1/s camera chase
   lookAhead: number; // seconds of velocity the camera leads by
   steerMode: "joystick" | "dragx"; // joystick: thumb vector = screen direction to drive
+  fixedStick: boolean; // joystick anchored bottom-right instead of at touch-down
   joystickDeadzonePx: number; // css px of drag before steering engages
   joystickLockDeg: number; // heading error (degrees) at which steer saturates
   steerRangePx: number; // dragx mode: css px of thumb-drag for full lock
@@ -39,6 +40,7 @@ export const DEFAULT_TUNING: Tuning = {
   cameraLerp: 5,
   lookAhead: 0.35,
   steerMode: "joystick",
+  fixedStick: false,
   joystickDeadzonePx: 10,
   joystickLockDeg: 35,
   steerRangePx: 70,
