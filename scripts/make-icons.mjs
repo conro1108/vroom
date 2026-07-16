@@ -7,31 +7,32 @@ import { dirname, join } from "node:path";
 
 // Keep in sync with CAR_MAP in src/render/sprites.ts
 const CAR_MAP = [
-  ".....ooooo.....",
-  "....obbbbbo....",
-  ".oooobbbbboooo.",
-  ".owwobebebowwo.",
-  ".owwobbbbbowwo.",
-  ".oooobbmbboooo.",
-  "...obbbbbbbo...",
-  "...obBgggBbo...",
-  "...obbbbbbbo...",
-  ".oooobbbbboooo.",
-  ".owwobBBBbowwo.",
-  ".owwobBBBbowwo.",
-  ".oooobbbbboooo.",
-  "....obBBBbo....",
-  ".....ooooo.....",
+  ".................",
+  ".......ooo.......",
+  "......obbbo......",
+  ".....obbbbbo.....",
+  "....obbgggbbo....",
+  "....obgggggbo....",
+  "...owbbgggbbwo...",
+  "...obbbbbbbbbo...",
+  "...obbbbbbbbbo...",
+  "...obbbhhhbbbo...",
+  "...owBBhhhBBwo...",
+  "....oBBBBBBBo....",
+  "....oBBBBBBBo....",
+  ".....oBBBBBo.....",
+  "......oBBBo......",
+  ".......ooo.......",
+  ".................",
 ];
 
 const PALETTE = {
   o: [58, 43, 32, 255],
   b: [242, 163, 60, 255],
   B: [217, 134, 46, 255],
-  w: [99, 73, 52, 255],
-  e: [32, 22, 18, 255],
-  g: [249, 233, 184, 255],
-  m: [32, 22, 18, 255],
+  h: [255, 194, 102, 255],
+  w: [67, 52, 42, 255],
+  g: [207, 230, 236, 255],
 };
 const CREAM = [242, 231, 210, 255];
 

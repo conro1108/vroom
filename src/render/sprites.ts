@@ -5,33 +5,35 @@
 export type PixelMap = string[];
 export type Palette = Record<string, string>;
 
-// Keep in sync with CAR_MAP in scripts/make-icons.mjs
+// A rounded silhouette with 2px features so nearest-neighbor rotation degrades
+// gracefully at every angle. Keep in sync with CAR_MAP in scripts/make-icons.mjs.
 export const CAR_MAP: PixelMap = [
-  ".....ooooo.....",
-  "....obbbbbo....",
-  ".oooobbbbboooo.",
-  ".owwobebebowwo.",
-  ".owwobbbbbowwo.",
-  ".oooobbmbboooo.",
-  "...obbbbbbbo...",
-  "...obBgggBbo...",
-  "...obbbbbbbo...",
-  ".oooobbbbboooo.",
-  ".owwobBBBbowwo.",
-  ".owwobBBBbowwo.",
-  ".oooobbbbboooo.",
-  "....obBBBbo....",
-  ".....ooooo.....",
+  ".................",
+  ".......ooo.......",
+  "......obbbo......",
+  ".....obbbbbo.....",
+  "....obbgggbbo....",
+  "....obgggggbo....",
+  "...owbbgggbbwo...",
+  "...obbbbbbbbbo...",
+  "...obbbbbbbbbo...",
+  "...obbbhhhbbbo...",
+  "...owBBhhhBBwo...",
+  "....oBBBBBBBo....",
+  "....oBBBBBBBo....",
+  ".....oBBBBBo.....",
+  "......oBBBo......",
+  ".......ooo.......",
+  ".................",
 ];
 
 export const CAR_PALETTE: Palette = {
   o: "#3a2b20",
   b: "#f2a33c",
   B: "#d9862e",
-  w: "#634934",
-  e: "#201612",
-  g: "#f9e9b8",
-  m: "#201612",
+  h: "#ffc266",
+  w: "#43342a",
+  g: "#cfe6ec",
 };
 
 export const MUSHROOM_MAP: PixelMap = [
