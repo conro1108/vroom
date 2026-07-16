@@ -55,6 +55,7 @@ export class Scene {
   private cam: { x: number; y: number };
   private scale = 2;
   private skidFadeTimer = 0;
+  private lastCarFrame = -1;
 
   constructor(
     private track: Track,
@@ -79,10 +80,13 @@ export class Scene {
     const rect = this.display.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     this.scale = Math.max(2, Math.round((rect.width * dpr) / TARGET_BUFFER_WIDTH));
-    this.buffer.width = Math.ceil((rect.width * dpr) / this.scale);
-    this.buffer.height = Math.ceil((rect.height * dpr) / this.scale);
-    this.display.width = this.buffer.width * this.scale;
-    this.display.height = this.buffer.height * this.scale;
+    const dispW = Math.round(rect.width * dpr);
+    const dispH = Math.round(rect.height * dpr);
+    // +2px margin so the sub-pixel scroll offset always has buffer to reveal.
+    this.buffer.width = Math.ceil(dispW / this.scale) + 2;
+    this.buffer.height = Math.ceil(dispH / this.scale) + 2;
+    this.display.width = dispW;
+    this.display.height = dispH;
     this.displayCtx.imageSmoothingEnabled = false;
   }
 
@@ -151,8 +155,15 @@ export class Scene {
     const ctx = this.bufferCtx;
     const bw = this.buffer.width;
     const bh = this.buffer.height;
-    const sx = Math.round(this.cam.x - bw / 2);
-    const sy = Math.round(this.cam.y - bh / 2);
+    // Floor the camera to a whole world pixel for crisp sampling, then push the
+    // leftover fraction into the final blit so scrolling stays smooth instead of
+    // snapping the whole scene a buffer-pixel at a time (the source of the jitter).
+    const originX = this.cam.x - bw / 2;
+    const originY = this.cam.y - bh / 2;
+    const sx = Math.floor(originX);
+    const sy = Math.floor(originY);
+    const fracX = Math.round((originX - sx) * this.scale);
+    const fracY = Math.round((originY - sy) * this.scale);
 
     ctx.fillStyle = COLORS.grass;
     ctx.fillRect(0, 0, bw, bh);
@@ -166,20 +177,25 @@ export class Scene {
     }
     ctx.globalAlpha = 1;
 
-    const frame = this.carFrames[carFrameIndex(car.heading)]!;
+    const frame = this.carFrames[this.carFrame(car.heading)]!;
     const cx = Math.round(car.x - sx);
     const cy = Math.round(car.y - sy);
     ctx.fillStyle = COLORS.shadow;
     ctx.fillRect(cx - 6, cy + 5, 12, 3);
     ctx.drawImage(frame, cx - Math.floor(frame.width / 2), cy - Math.floor(frame.height / 2));
 
-    this.displayCtx.drawImage(
-      this.buffer,
-      0,
-      0,
-      this.buffer.width * this.scale,
-      this.buffer.height * this.scale
-    );
+    this.displayCtx.drawImage(this.buffer, -fracX, -fracY, bw * this.scale, bh * this.scale);
+  }
+
+  // Hysteresis: hold the current rotation frame until the heading is clearly
+  // past a neighbour, so small steering wobble doesn't flicker the sprite.
+  private carFrame(heading: number): number {
+    const target = carFrameIndex(heading);
+    if (this.lastCarFrame < 0) return (this.lastCarFrame = target);
+    const n = this.carFrames.length;
+    let diff = ((target - this.lastCarFrame + n + n / 2) % n) - n / 2;
+    if (Math.abs(diff) >= 2) this.lastCarFrame = target;
+    return this.lastCarFrame;
   }
 }
 

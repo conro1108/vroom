@@ -72,7 +72,7 @@ export function drawMap(
   }
 }
 
-export const CAR_FRAME_COUNT = 32;
+export const CAR_FRAME_COUNT = 64;
 
 /**
  * Pre-render the car at CAR_FRAME_COUNT rotations. Frame 0 faces up (-y);
