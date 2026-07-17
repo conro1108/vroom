@@ -6,7 +6,7 @@
 // its cockpit.
 import { currentAxis, ROUNDS_PER_AXIS, variants, type Calibration } from "../game/calibrate";
 
-const AUTO_SWITCH_SECONDS = 10;
+const AUTO_SWITCH_SECONDS = 5;
 
 export interface CalibrateUi {
   show(cal: Calibration, active: "a" | "b"): void;
