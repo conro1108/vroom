@@ -49,6 +49,7 @@ const WALL_MARGIN = 14;
 const WALL_BOUNCE = -0.3;
 const COUNTDOWN_BEAT_MS = 800; // 3 · 2 · 1 · go
 const GO_FLASH_MS = 650;
+const FINISH_HOLD_MS = 600; // let the car visibly cross the line before results pop
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const tuning = loadTuning();
@@ -70,6 +71,8 @@ let lapTracker: LapTracker = createLapTracker(0);
 let race: RaceState = createRace(RACE_LAPS);
 let raceHadBestLap = false;
 let lapStart = performance.now();
+let finishPending = false;
+let finishAt = 0;
 let opponents: Opponent[] = [];
 let countdownEnd = 0;
 const ghosts = loadGhosts();
@@ -174,6 +177,7 @@ function restartRace(): void {
     progress.raceMode === "group" ? createOpponents(track, query, progress.lastVehicle, tuning, cls) : [];
   race = createRace(RACE_LAPS);
   raceHadBestLap = false;
+  finishPending = false;
   countdownEnd = performance.now() + 3 * COUNTDOWN_BEAT_MS;
   lapStart = countdownEnd;
   ghost = ghosts[recordKey(track.id, cls.id)] ?? null;
@@ -214,7 +218,10 @@ function onLapCompleted(now: number): void {
   ghostRec = createGhostRecorder();
 
   if (completeLap(race, lapMs).finished) {
-    finishRace();
+    if (!finishPending) {
+      finishPending = true;
+      finishAt = now + FINISH_HOLD_MS;
+    }
   } else {
     hud.setLap(race.lap, RACE_LAPS);
   }
@@ -321,14 +328,17 @@ function loop(now: number): void {
       recordGhostSample(ghostRec, now - lapStart, car);
 
       const p = query.progressAt(car.x, car.y);
-      if (p !== null && updateLap(lapTracker, p).completed) {
+      if (p !== null && !finishPending && updateLap(lapTracker, p).completed) {
         onLapCompleted(now);
-        if (mode !== "racing") break; // race just finished
       }
     }
-    if (racing) {
+    if (racing && !finishPending) {
       hud.setLapTime(now - lapStart);
       hud.setPosition(playerPosition(lapTracker, opponents), opponents.length + 1);
+    }
+    if (finishPending && now >= finishAt) {
+      finishPending = false;
+      finishRace();
     }
   } else if (mode !== "countdown") {
     accumulator = 0;

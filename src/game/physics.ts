@@ -53,12 +53,16 @@ export function stepCar(
   const offroad = surface === "offroad";
   const maxSpeed = t.maxSpeed * (offroad ? t.offroadMaxSpeed : 1);
 
-  fwd += t.accel * clamp(input.throttle, 0, 1) * dt;
+  // Accel is capped at maxSpeed so it can't push past it, but existing speed
+  // above the cap (e.g. carrying road speed onto grass) bleeds off through
+  // drag instead of being truncated instantly — a hard clamp there would
+  // read as slamming into a wall the moment you touch the grass.
+  fwd += Math.min(t.accel * clamp(input.throttle, 0, 1) * dt, Math.max(0, maxSpeed - fwd));
   fwd -= t.brake * clamp(input.brake, 0, 1) * dt;
 
   const drag = t.drag * (offroad ? t.offroadFriction : 1);
   fwd -= Math.sign(fwd) * Math.min(Math.abs(fwd), drag * dt);
-  fwd = clamp(fwd, -maxSpeed * 0.4, maxSpeed);
+  fwd = Math.max(fwd, -maxSpeed * 0.4);
 
   const drifting = Math.abs(lat) > t.driftThreshold;
   lat *= Math.exp(-(drifting ? t.driftGrip : t.lateralGrip) * dt);
