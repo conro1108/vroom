@@ -53,7 +53,7 @@ const OPPONENT_COUNT_SLIDER: SliderSpec = {
   key: "opponentCount",
   label: "AI opponents",
   min: 1,
-  max: 7,
+  max: 11, // 11 bots + you = a crowd of 12
   step: 1,
 };
 
