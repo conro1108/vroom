@@ -6,6 +6,7 @@ import { currentAxis, ROUNDS_PER_AXIS, variants, type Calibration } from "../gam
 export interface CalibrateUi {
   show(cal: Calibration, active: "a" | "b"): void;
   update(cal: Calibration, active: "a" | "b"): void;
+  showConfirm(): void;
   hide(): void;
 }
 
@@ -14,6 +15,8 @@ export interface CalibrateHandlers {
   onPick(): void;
   onSkip(): void;
   onQuit(): void;
+  onApply(): void;
+  onDiscard(): void;
 }
 
 export function createCalibrateUi(handlers: CalibrateHandlers): CalibrateUi {
@@ -45,7 +48,19 @@ export function createCalibrateUi(handlers: CalibrateHandlers): CalibrateUi {
   quit.addEventListener("click", () => handlers.onQuit());
   actions.append(pick, skip, quit);
 
-  root.append(title, abRow, actions);
+  const confirmRow = document.createElement("div");
+  confirmRow.className = "cal-actions";
+  confirmRow.hidden = true;
+  const apply = document.createElement("button");
+  apply.className = "cal-pick";
+  apply.textContent = "✓ apply to my settings";
+  apply.addEventListener("click", () => handlers.onApply());
+  const discard = document.createElement("button");
+  discard.textContent = "discard";
+  discard.addEventListener("click", () => handlers.onDiscard());
+  confirmRow.append(apply, discard);
+
+  root.append(title, abRow, actions, confirmRow);
 
   const update = (cal: Calibration, active: "a" | "b") => {
     const axis = currentAxis(cal);
@@ -60,9 +75,18 @@ export function createCalibrateUi(handlers: CalibrateHandlers): CalibrateUi {
   return {
     show(cal, active) {
       update(cal, active);
+      abRow.hidden = false;
+      actions.hidden = false;
+      confirmRow.hidden = true;
       root.hidden = false;
     },
     update,
+    showConfirm() {
+      title.textContent = "calibration complete — keep it?";
+      abRow.hidden = true;
+      actions.hidden = true;
+      confirmRow.hidden = false;
+    },
     hide() {
       root.hidden = true;
     },

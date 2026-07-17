@@ -103,15 +103,23 @@ const calUi = createCalibrateUi({
     hud.toast("calibration discarded");
     goToMenu();
   },
+  onApply() {
+    if (!cal) return;
+    Object.assign(tuning, cal.values);
+    saveTuning(tuning);
+    hud.toast("calibrated! copy json in settings");
+    goToMenu();
+  },
+  onDiscard() {
+    hud.toast("calibration discarded");
+    goToMenu();
+  },
 });
 
 function afterCalStep(): void {
   if (!cal) return;
   if (cal.done) {
-    Object.assign(tuning, cal.values);
-    saveTuning(tuning);
-    hud.toast("calibrated! copy json in settings");
-    goToMenu();
+    calUi.showConfirm();
     return;
   }
   calVariant = "a";

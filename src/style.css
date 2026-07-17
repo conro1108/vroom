@@ -337,6 +337,11 @@ body {
   margin-bottom: 8px;
 }
 
+#calibrate .cal-ab[hidden],
+#calibrate .cal-actions[hidden] {
+  display: none;
+}
+
 #calibrate .cal-ab {
   display: flex;
   gap: 8px;
