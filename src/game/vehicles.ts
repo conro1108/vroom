@@ -137,6 +137,65 @@ export function vehicleById(id: string): Vehicle {
   return VEHICLES.find((v) => v.id === id) ?? VEHICLES[0]!;
 }
 
+// --- the custom car: one persisted, user-respec'd slot, kept apart from the
+// balanced base vehicles above. Calibration writes here; the menu offers a
+// dedicated tile plus a revert-to-starting-point button. No history — the
+// last save is the only save.
+
+export const CUSTOM_VEHICLE_ID = "custom";
+const CUSTOM_STORAGE_KEY = "vroom.customVehicle.v1";
+
+/** The starting point for a fresh (or reverted) custom car: the mean of the base vehicles. */
+function meanVehicleValues(): Record<VehicleKey, number> {
+  const keys = Object.keys(VEHICLES[0]!.values) as VehicleKey[];
+  const mean = {} as Record<VehicleKey, number>;
+  for (const key of keys) {
+    const sum = VEHICLES.reduce((s, v) => s + v.values[key], 0);
+    mean[key] = Math.round((sum / VEHICLES.length) * 100) / 100;
+  }
+  return mean;
+}
+
+function loadCustomValues(): Record<VehicleKey, number> {
+  const values = meanVehicleValues();
+  try {
+    const raw = localStorage.getItem(CUSTOM_STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw) as Partial<Record<VehicleKey, number>>;
+      for (const key of Object.keys(values) as VehicleKey[]) {
+        if (typeof saved[key] === "number") values[key] = saved[key]!;
+      }
+    }
+  } catch {
+    // corrupt or unavailable storage: fall back to the mean
+  }
+  return values;
+}
+
+export function loadCustomVehicle(): Vehicle {
+  return {
+    id: CUSTOM_VEHICLE_ID,
+    name: "Custom",
+    blurb: "yours — respec any time",
+    values: loadCustomValues(),
+  };
+}
+
+export function saveCustomVehicle(values: Record<VehicleKey, number>): void {
+  try {
+    localStorage.setItem(CUSTOM_STORAGE_KEY, JSON.stringify(values));
+  } catch {
+    // storage unavailable (private mode etc.) — it just won't persist
+  }
+}
+
+/** Revert the custom car to its starting point (the mean of the base vehicles). */
+export function resetCustomVehicle(): Vehicle {
+  const values = meanVehicleValues();
+  saveCustomVehicle(values);
+  return { id: CUSTOM_VEHICLE_ID, name: "Custom", blurb: "yours — respec any time", values };
+}
+
 export function applyVehicle(tuning: Tuning, vehicle: Vehicle): void {
   Object.assign(tuning, vehicle.values);
 }

@@ -36,6 +36,7 @@ import { applyLap, applyRace, getRecords, loadRecords, recordKey, saveRecords } 
 import { createLapTracker, createTrack, createTrackQuery, updateLap, type LapTracker, type Track, type TrackQuery } from "./game/track";
 import { TRACKS } from "./game/tracks";
 import { loadTuning, saveTuning } from "./game/tuning";
+import { CUSTOM_VEHICLE_ID, saveCustomVehicle } from "./game/vehicles";
 import { Scene, type RacerPose } from "./render/scene";
 import { createCalibrateUi } from "./ui/calibrate";
 import { createDevPanel } from "./ui/devpanel";
@@ -105,9 +106,12 @@ const calUi = createCalibrateUi({
   },
   onApply() {
     if (!cal) return;
+    saveCustomVehicle(cal.values);
     Object.assign(tuning, cal.values);
     saveTuning(tuning);
-    hud.toast("calibrated! copy json in settings");
+    progress.lastVehicle = CUSTOM_VEHICLE_ID;
+    saveProgress(progress);
+    hud.toast("saved to your custom car");
     goToMenu();
   },
   onDiscard() {

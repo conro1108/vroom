@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { simulateLap, type LapResult } from "./botdriver";
 import { TRACKS } from "./tracks";
 import { DEFAULT_TUNING, type Tuning } from "./tuning";
-import { activeVehicleId, applyVehicle, VEHICLES } from "./vehicles";
+import {
+  activeVehicleId,
+  applyVehicle,
+  CUSTOM_VEHICLE_ID,
+  loadCustomVehicle,
+  resetCustomVehicle,
+  VEHICLES,
+  type VehicleKey,
+} from "./vehicles";
 
 describe("vehicles", () => {
   it("has uniquely named vehicles", () => {
@@ -35,6 +43,27 @@ describe("vehicles", () => {
     expect(tuning.steerMode).toBe("dragx");
     expect(tuning.holdToGo).toBe(false);
     expect(tuning.cameraLerp).toBe(9);
+  });
+});
+
+describe("custom vehicle", () => {
+  it("has an id distinct from every base vehicle", () => {
+    expect(VEHICLES.some((v) => v.id === CUSTOM_VEHICLE_ID)).toBe(false);
+  });
+
+  it("starts at the mean of the base vehicles", () => {
+    const custom = resetCustomVehicle();
+    const keys = Object.keys(VEHICLES[0]!.values) as VehicleKey[];
+    for (const key of keys) {
+      const mean = VEHICLES.reduce((s, v) => s + v.values[key], 0) / VEHICLES.length;
+      expect(custom.values[key]).toBeCloseTo(mean, 1);
+    }
+  });
+
+  it("applying it behaves like any other vehicle", () => {
+    const tuning: Tuning = { ...DEFAULT_TUNING };
+    applyVehicle(tuning, loadCustomVehicle());
+    expect(tuning.maxSpeed).toBe(loadCustomVehicle().values.maxSpeed);
   });
 });
 

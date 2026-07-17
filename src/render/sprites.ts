@@ -166,6 +166,10 @@ export const VEHICLE_SPRITES: Record<string, VehicleSprite> = {
     map: CRUISER_MAP,
     palette: { o: "#3a2b20", b: "#5bbfa6", B: "#3f9c85", h: "#f2d066", w: "#43342a", g: "#d9f2ef" },
   },
+  custom: {
+    map: CAR_MAP,
+    palette: { o: "#3a2b20", b: "#9aa0a6", B: "#6e7378", h: "#ffcc33", w: "#43342a", g: "#cfe6ec" },
+  },
 };
 
 export function vehicleSprite(id: string): VehicleSprite {

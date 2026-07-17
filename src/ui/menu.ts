@@ -6,7 +6,7 @@ import { getRecords, type Records } from "../game/records";
 import { createTrack, type TrackDef } from "../game/track";
 import { trackDefById, TRACKS } from "../game/tracks";
 import { saveTuning, type Tuning } from "../game/tuning";
-import { applyVehicle, VEHICLES } from "../game/vehicles";
+import { applyVehicle, CUSTOM_VEHICLE_ID, loadCustomVehicle, resetCustomVehicle, VEHICLES } from "../game/vehicles";
 import { drawMap, vehicleSprite } from "../render/sprites";
 import { formatTime } from "./hud";
 
@@ -144,6 +144,47 @@ export function createMenu(
       });
       vehicleRow.appendChild(tile);
     }
+
+    // custom car: one persisted, user-respec'd slot kept apart from the base
+    // vehicles above. Calibration (in the dev panel) writes into it.
+    const customWrap = document.createElement("div");
+    customWrap.className = "vehicle-tile-wrap";
+    const customVehicle = loadCustomVehicle();
+    const customTile = document.createElement("button");
+    customTile.className =
+      "vehicle-tile custom-vehicle-tile" +
+      (progress.lastVehicle === CUSTOM_VEHICLE_ID ? " active" : "");
+    customTile.appendChild(vehiclePortrait(customVehicle.id));
+    const customName = document.createElement("div");
+    customName.className = "vehicle-name";
+    customName.textContent = customVehicle.name;
+    const customBlurb = document.createElement("div");
+    customBlurb.className = "vehicle-blurb";
+    customBlurb.textContent = customVehicle.blurb;
+    customTile.append(customName, customBlurb);
+    customTile.addEventListener("click", () => {
+      progress.lastVehicle = CUSTOM_VEHICLE_ID;
+      saveProgress(progress);
+      applyVehicle(tuning, customVehicle);
+      saveTuning(tuning);
+      render();
+    });
+    const revertBtn = document.createElement("button");
+    revertBtn.className = "vehicle-revert";
+    revertBtn.textContent = "↺";
+    revertBtn.setAttribute("aria-label", "revert custom car to starting point");
+    revertBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const reset = resetCustomVehicle();
+      if (progress.lastVehicle === CUSTOM_VEHICLE_ID) {
+        applyVehicle(tuning, reset);
+        saveTuning(tuning);
+      }
+      render();
+    });
+    customWrap.append(customTile, revertBtn);
+    vehicleRow.appendChild(customWrap);
+
     root.appendChild(vehicleRow);
     vehicleRow.scrollLeft = vehicleScroll;
 
