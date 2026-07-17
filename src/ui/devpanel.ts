@@ -1,9 +1,10 @@
-// In-app tuning panel: control preferences plus every raw feel slider in a
-// collapsed "advanced" section. Vehicles (coarse handling personalities) are
-// picked on the splash menu; the sliders here fine-tune on top of whichever
-// vehicle is active. Everything applies live to the shared Tuning object and
-// persists. "copy json" exports the current values so a good feel found
-// on-device can be pasted back into DEFAULT_TUNING or a vehicle definition.
+// In-app tuning panel: control preferences and race setup up top, every raw
+// feel slider in a collapsed "advanced" section below. Vehicles (coarse
+// handling personalities) are picked on the splash menu; the sliders here
+// fine-tune on top of whichever vehicle is active. Everything applies live
+// to the shared Tuning object and persists. "copy json" exports the current
+// values so a good feel found on-device can be pasted back into
+// DEFAULT_TUNING or a vehicle definition.
 import { DEFAULT_TUNING, saveTuning, type Tuning } from "../game/tuning";
 
 type NumericTuningKey = {
@@ -31,7 +32,6 @@ const SLIDERS: SliderSpec[] = [
   { key: "driftThreshold", label: "drift threshold", min: 10, max: 120, step: 5 },
   { key: "offroadMaxSpeed", label: "offroad max speed", min: 0.2, max: 1, step: 0.05 },
   { key: "offroadFriction", label: "offroad drag ×", min: 1, max: 8, step: 0.25 },
-  { key: "opponentCount", label: "AI opponents", min: 1, max: 7, step: 1 },
   { key: "rubberBand", label: "rubber band", min: 0, max: 0.4, step: 0.02 },
   { key: "botSloppiness", label: "bot sloppiness", min: 0, max: 1, step: 0.05 },
   { key: "startBoostWindowMs", label: "rocket-start window ms", min: 100, max: 800, step: 25 },
@@ -47,6 +47,14 @@ const SLIDERS: SliderSpec[] = [
   { key: "joystickLockDeg", label: "stick full-lock angle", min: 10, max: 90, step: 5 },
   { key: "steerRangePx", label: "drag-x steer range", min: 30, max: 160, step: 5 },
 ];
+
+const OPPONENT_COUNT_SLIDER: SliderSpec = {
+  key: "opponentCount",
+  label: "AI opponents",
+  min: 1,
+  max: 7,
+  step: 1,
+};
 
 export function createDevPanel(
   tuning: Tuning,
@@ -92,6 +100,33 @@ export function createDevPanel(
       panel.appendChild(checkRow);
     };
 
+    const buildSliderRow = (spec: SliderSpec): HTMLDivElement => {
+      const row = document.createElement("div");
+      row.className = "row";
+      const label = document.createElement("label");
+      const name = document.createElement("span");
+      name.textContent = spec.label;
+      const val = document.createElement("span");
+      val.className = "val";
+      val.textContent = String(tuning[spec.key]);
+      label.append(name, val);
+
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.min = String(spec.min);
+      slider.max = String(spec.max);
+      slider.step = String(spec.step);
+      slider.value = String(tuning[spec.key]);
+      slider.addEventListener("input", () => {
+        tuning[spec.key] = Number(slider.value);
+        val.textContent = slider.value;
+        saveTuning(tuning);
+      });
+
+      row.append(label, slider);
+      return row;
+    };
+
     addCheck(
       "joystick-steer",
       "joystick steering (thumb points where to go)",
@@ -110,6 +145,8 @@ export function createDevPanel(
       () => tuning.holdToGo,
       (v) => (tuning.holdToGo = v)
     );
+
+    panel.appendChild(buildSliderRow(OPPONENT_COUNT_SLIDER));
 
     if (onCalibrate) {
       const calBtn = document.createElement("button");
@@ -144,30 +181,7 @@ export function createDevPanel(
     advanced.appendChild(summary);
 
     for (const spec of SLIDERS) {
-      const row = document.createElement("div");
-      row.className = "row";
-      const label = document.createElement("label");
-      const name = document.createElement("span");
-      name.textContent = spec.label;
-      const val = document.createElement("span");
-      val.className = "val";
-      val.textContent = String(tuning[spec.key]);
-      label.append(name, val);
-
-      const slider = document.createElement("input");
-      slider.type = "range";
-      slider.min = String(spec.min);
-      slider.max = String(spec.max);
-      slider.step = String(spec.step);
-      slider.value = String(tuning[spec.key]);
-      slider.addEventListener("input", () => {
-        tuning[spec.key] = Number(slider.value);
-        val.textContent = slider.value;
-        saveTuning(tuning);
-      });
-
-      row.append(label, slider);
-      advanced.appendChild(row);
+      advanced.appendChild(buildSliderRow(spec));
     }
 
     const buttons = document.createElement("div");
