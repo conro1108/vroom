@@ -125,6 +125,8 @@ export function createMenu(
     const vehicleRow = document.createElement("div");
     vehicleRow.className = "vehicle-row";
     for (const vehicle of VEHICLES) {
+      const wrap = document.createElement("div");
+      wrap.className = "vehicle-tile-wrap";
       const tile = document.createElement("button");
       tile.className = "vehicle-tile" + (vehicle.id === progress.lastVehicle ? " active" : "");
       tile.appendChild(vehiclePortrait(vehicle.id));
@@ -142,7 +144,22 @@ export function createMenu(
         saveTuning(tuning);
         render();
       });
-      vehicleRow.appendChild(tile);
+      const revertBtn = document.createElement("button");
+      revertBtn.className = "vehicle-revert";
+      revertBtn.textContent = "↺";
+      revertBtn.setAttribute("aria-label", `reset ${vehicle.name} to its base stats`);
+      revertBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        // dev-panel sliders fine-tune the shared tuning object live, so a
+        // vehicle's stats can drift from its own definition even while it's
+        // the active one — this snaps just its fields back, same values a
+        // fresh selection would apply.
+        applyVehicle(tuning, vehicle);
+        saveTuning(tuning);
+        render();
+      });
+      wrap.append(tile, revertBtn);
+      vehicleRow.appendChild(wrap);
     }
 
     // custom car: one persisted, user-respec'd slot kept apart from the base
