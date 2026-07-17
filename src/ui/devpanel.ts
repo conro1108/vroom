@@ -1,9 +1,9 @@
-// In-app tuning panel. Driving styles (coarse handling personalities) sit up
-// top; every raw feel slider lives in a collapsed "advanced" section beneath.
-// Everything applies live to the shared Tuning object and persists. "copy
-// json" exports the current values so a good feel found on-device can be
-// pasted back into DEFAULT_TUNING.
-import { activeStyleId, applyStyle, DRIVING_STYLES } from "../game/styles";
+// In-app tuning panel: control preferences plus every raw feel slider in a
+// collapsed "advanced" section. Vehicles (coarse handling personalities) are
+// picked on the splash menu; the sliders here fine-tune on top of whichever
+// vehicle is active. Everything applies live to the shared Tuning object and
+// persists. "copy json" exports the current values so a good feel found
+// on-device can be pasted back into DEFAULT_TUNING or a vehicle definition.
 import { DEFAULT_TUNING, saveTuning, type Tuning } from "../game/tuning";
 
 type NumericTuningKey = {
@@ -59,29 +59,6 @@ export function createDevPanel(tuning: Tuning): void {
     sub.className = "panel-sub";
     sub.textContent = "How should it feel?";
     panel.appendChild(sub);
-
-    // driving styles
-    const styleGrid = document.createElement("div");
-    styleGrid.className = "style-grid";
-    const active = activeStyleId(tuning);
-    for (const style of DRIVING_STYLES) {
-      const btn = document.createElement("button");
-      btn.className = "style-btn" + (style.id === active ? " active" : "");
-      const name = document.createElement("span");
-      name.className = "style-name";
-      name.textContent = style.name;
-      const blurb = document.createElement("span");
-      blurb.className = "style-blurb";
-      blurb.textContent = style.blurb;
-      btn.append(name, blurb);
-      btn.addEventListener("click", () => {
-        applyStyle(tuning, style);
-        saveTuning(tuning);
-        render();
-      });
-      styleGrid.appendChild(btn);
-    }
-    panel.appendChild(styleGrid);
 
     const addCheck = (id: string, text: string, get: () => boolean, set: (v: boolean) => void) => {
       const checkRow = document.createElement("div");
@@ -150,7 +127,6 @@ export function createDevPanel(tuning: Tuning): void {
         tuning[spec.key] = Number(slider.value);
         val.textContent = slider.value;
         saveTuning(tuning);
-        highlightActiveStyle();
       });
 
       row.append(label, slider);
@@ -183,15 +159,6 @@ export function createDevPanel(tuning: Tuning): void {
     buttons.append(reset, copy);
     advanced.appendChild(buttons);
     panel.appendChild(advanced);
-  };
-
-  // Slider tweaks shouldn't rebuild the DOM mid-drag; just retint the styles.
-  const highlightActiveStyle = () => {
-    const active = activeStyleId(tuning);
-    const buttons = panel.querySelectorAll<HTMLButtonElement>(".style-btn");
-    DRIVING_STYLES.forEach((style, i) => {
-      buttons[i]?.classList.toggle("active", style.id === active);
-    });
   };
 
   render();

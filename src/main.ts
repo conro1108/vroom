@@ -70,7 +70,7 @@ function startRace(index: number, classId: string): void {
   const def = TRACKS[index]!;
   track = createTrack(def);
   query = createTrackQuery(track);
-  scene = new Scene(track, query, canvas);
+  scene = new Scene(track, query, canvas, progress.lastVehicle);
   progress.lastClass = classId;
   progress.lastTrack = def.id;
   saveProgress(progress);

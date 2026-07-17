@@ -14,6 +14,7 @@ import {
   MUSHROOM_PALETTE,
   STUMP_MAP,
   STUMP_PALETTE,
+  vehicleSprite,
 } from "./sprites";
 
 const COLORS = {
@@ -62,7 +63,8 @@ export class Scene {
   constructor(
     private track: Track,
     query: TrackQuery,
-    display: HTMLCanvasElement
+    display: HTMLCanvasElement,
+    vehicleId = "classic"
   ) {
     this.display = display;
     this.displayCtx = display.getContext("2d")!;
@@ -73,7 +75,7 @@ export class Scene {
     this.skidCtx = this.skid.getContext("2d")!;
     this.buffer = document.createElement("canvas");
     this.bufferCtx = this.buffer.getContext("2d")!;
-    this.carFrames = buildCarFrames();
+    this.carFrames = buildCarFrames(vehicleSprite(vehicleId));
     this.cam = { x: track.start.x, y: track.start.y };
     this.resize();
   }

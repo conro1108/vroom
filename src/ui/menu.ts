@@ -1,11 +1,13 @@
-// Splash menu: pick a speed class, pick a track. Each track tile shows a
-// minimap, its course records for the selected class, and a lock when the
-// previous track's race hasn't been finished in that class.
+// Splash menu: pick a speed class, pick a vehicle, pick a track. Each track
+// tile shows a minimap, its course records for the selected class, and a lock
+// when the previous track's race hasn't been finished in that class.
 import { isTrackUnlocked, saveProgress, SPEED_CLASSES, type Progress } from "../game/progression";
 import { getRecords, type Records } from "../game/records";
 import { createTrack, type TrackDef } from "../game/track";
 import { TRACKS } from "../game/tracks";
 import { saveTuning, type Tuning } from "../game/tuning";
+import { applyVehicle, VEHICLES } from "../game/vehicles";
+import { drawMap, vehicleSprite } from "../render/sprites";
 import { formatTime } from "./hud";
 
 const MINIMAP_W = 132;
@@ -66,6 +68,17 @@ function minimap(def: TrackDef): HTMLCanvasElement {
   return canvas;
 }
 
+/** Pixel-art portrait of a vehicle, drawn 1:1 and scaled up crisply by CSS. */
+function vehiclePortrait(id: string): HTMLCanvasElement {
+  const sprite = vehicleSprite(id);
+  const canvas = document.createElement("canvas");
+  canvas.className = "vehicle-sprite";
+  canvas.width = sprite.map[0]!.length;
+  canvas.height = sprite.map.length;
+  drawMap(canvas.getContext("2d")!, sprite.map, sprite.palette, 0, 0);
+  return canvas;
+}
+
 export interface Menu {
   show(): void;
   hide(): void;
@@ -80,6 +93,8 @@ export function createMenu(
   const root = document.getElementById("menu")!;
 
   const render = () => {
+    // the vehicle row scrolls sideways; keep its position across re-renders
+    const vehicleScroll = root.querySelector(".vehicle-row")?.scrollLeft ?? 0;
     root.innerHTML = "";
 
     const title = document.createElement("h1");
@@ -105,6 +120,32 @@ export function createMenu(
       classRow.appendChild(btn);
     }
     root.appendChild(classRow);
+
+    // vehicle picker: selecting one writes its handling into the live tuning
+    const vehicleRow = document.createElement("div");
+    vehicleRow.className = "vehicle-row";
+    for (const vehicle of VEHICLES) {
+      const tile = document.createElement("button");
+      tile.className = "vehicle-tile" + (vehicle.id === progress.lastVehicle ? " active" : "");
+      tile.appendChild(vehiclePortrait(vehicle.id));
+      const name = document.createElement("div");
+      name.className = "vehicle-name";
+      name.textContent = vehicle.name;
+      const blurb = document.createElement("div");
+      blurb.className = "vehicle-blurb";
+      blurb.textContent = vehicle.blurb;
+      tile.append(name, blurb);
+      tile.addEventListener("click", () => {
+        progress.lastVehicle = vehicle.id;
+        saveProgress(progress);
+        applyVehicle(tuning, vehicle);
+        saveTuning(tuning);
+        render();
+      });
+      vehicleRow.appendChild(tile);
+    }
+    root.appendChild(vehicleRow);
+    vehicleRow.scrollLeft = vehicleScroll;
 
     // ghost toggle
     const ghostBtn = document.createElement("button");

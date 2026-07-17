@@ -3,6 +3,7 @@
 // class. Track order comes from the TRACKS catalog.
 import { TRACKS } from "./tracks";
 import type { Tuning } from "./tuning";
+import { VEHICLES } from "./vehicles";
 
 export const RACE_LAPS = 3;
 
@@ -39,10 +40,16 @@ export interface Progress {
   completed: Record<string, string[]>;
   lastClass: string;
   lastTrack: string;
+  lastVehicle: string;
 }
 
 export function createProgress(): Progress {
-  return { completed: {}, lastClass: SPEED_CLASSES[0]!.id, lastTrack: TRACKS[0]!.id };
+  return {
+    completed: {},
+    lastClass: SPEED_CLASSES[0]!.id,
+    lastTrack: TRACKS[0]!.id,
+    lastVehicle: VEHICLES[0]!.id,
+  };
 }
 
 export function isTrackUnlocked(progress: Progress, classId: string, trackIndex: number): boolean {
@@ -80,6 +87,7 @@ export function loadProgress(): Progress {
       }
       if (typeof saved.lastClass === "string") progress.lastClass = saved.lastClass;
       if (typeof saved.lastTrack === "string") progress.lastTrack = saved.lastTrack;
+      if (typeof saved.lastVehicle === "string") progress.lastVehicle = saved.lastVehicle;
     }
   } catch {
     // corrupt or unavailable storage: start fresh

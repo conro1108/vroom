@@ -270,43 +270,7 @@ body {
   font-family: var(--font);
 }
 
-/* --- driving styles + advanced section in the settings panel --- */
-
-#dev-panel .style-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-#dev-panel .style-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 8px 10px;
-  font-family: var(--font);
-  text-align: left;
-  color: var(--ink);
-  background: var(--cream-light);
-  border: 3px solid var(--brown);
-  border-radius: 12px;
-}
-
-#dev-panel .style-btn.active {
-  background: var(--accent);
-  color: var(--cream-light);
-}
-
-#dev-panel .style-btn .style-name {
-  font-size: 14px;
-  font-weight: 700;
-}
-
-#dev-panel .style-btn .style-blurb {
-  font-size: 10px;
-  opacity: 0.8;
-}
+/* --- advanced section in the settings panel --- */
 
 #dev-panel details.advanced {
   margin-top: 12px;
@@ -368,6 +332,65 @@ body {
 .class-btn.active {
   background: var(--accent);
   color: var(--cream-light);
+}
+
+/* --- vehicle picker: a sideways-scrolling garage --- */
+
+.vehicle-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding: 4px 4px 10px;
+  margin: 0 -8px 12px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.vehicle-row::-webkit-scrollbar {
+  display: none;
+}
+
+.vehicle-tile {
+  flex: 0 0 auto;
+  width: 108px;
+  scroll-snap-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px 8px;
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--cream-light);
+  border: 3px solid var(--brown);
+  border-radius: 14px;
+}
+
+.vehicle-tile:active {
+  transform: translateY(2px);
+}
+
+.vehicle-tile.active {
+  background: var(--accent);
+  color: var(--cream-light);
+}
+
+.vehicle-sprite {
+  width: 51px;
+  height: 51px;
+  image-rendering: pixelated;
+}
+
+.vehicle-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.vehicle-blurb {
+  font-size: 9px;
+  opacity: 0.75;
+  line-height: 1.3;
 }
 
 .ghost-toggle {

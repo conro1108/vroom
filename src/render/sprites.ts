@@ -36,6 +36,142 @@ export const CAR_PALETTE: Palette = {
   g: "#cfe6ec",
 };
 
+// Per-vehicle art. All maps are 17x17 and share the palette letter scheme
+// (o outline, b body, B body shaded, h highlight, w wheels/dark detail,
+// g glass) so buildCarFrames treats them uniformly.
+export interface VehicleSprite {
+  map: PixelMap;
+  palette: Palette;
+}
+
+const SLOTCAR_MAP: PixelMap = [
+  ".................",
+  "........o........",
+  ".......obo.......",
+  ".......obo.......",
+  "......obbbo......",
+  "......obgbo......",
+  ".....obbgbbo.....",
+  "....wobgggbow....",
+  "....wobbbbbow....",
+  ".....obbbbbo.....",
+  ".....obbbbbo.....",
+  "....wobBBBbow....",
+  "....woBBBBBow....",
+  ".....oBBBBBo.....",
+  "....ohhhhhhho....",
+  ".....ooooooo.....",
+  ".................",
+];
+
+const DRIFTKING_MAP: PixelMap = [
+  ".................",
+  ".................",
+  ".......ooo.......",
+  "......obbbo......",
+  ".....obbbbbo.....",
+  "....wobgggbow....",
+  "....wobgggbow....",
+  ".....obbbbbo.....",
+  ".....obbbbbo.....",
+  "....obbbbbbbo....",
+  "...owbbbbbbbwo...",
+  "...owBBBBBBBwo...",
+  "...oBBBBBBBBBo...",
+  "...ohBBBBBBBho...",
+  "....ooooooooo....",
+  ".................",
+  ".................",
+];
+
+const GOKART_MAP: PixelMap = [
+  ".................",
+  ".................",
+  ".................",
+  "......obbbo......",
+  "...ww.obbbo.ww...",
+  "...ww.obgbo.ww...",
+  "......obbbo......",
+  ".....obhhhbo.....",
+  ".....obhhhbo.....",
+  "......obbbo......",
+  "......obbbo......",
+  "...ww.obbbo.ww...",
+  "...wwoBBBBBoww...",
+  "...ww.ooooo.ww...",
+  ".................",
+  ".................",
+  ".................",
+];
+
+const MUSCLE_MAP: PixelMap = [
+  ".................",
+  ".....ooooooo.....",
+  "....obbbbbbbo....",
+  "...owbbbhbbbwo...",
+  "...owbbbhbbbwo...",
+  "....obbbhbbbo....",
+  "....obgggggbo....",
+  "....obgggggbo....",
+  "....obbbbbbbo....",
+  "....obbbbbbbo....",
+  "...owbbbbbbbwo...",
+  "...owBBBBBBBwo...",
+  "....oBBBBBBBo....",
+  "....ohBBBBBho....",
+  ".....ooooooo.....",
+  ".................",
+  ".................",
+];
+
+const CRUISER_MAP: PixelMap = [
+  ".................",
+  "......ooooo......",
+  ".....obbbbbo.....",
+  "....wobbbbbow....",
+  "....wobgggbow....",
+  "....obgggggbo....",
+  "....obbbbbbbo....",
+  "....obbbbbbbo....",
+  "....obhbbbhbo....",
+  "....obbbbbbbo....",
+  "....obbbbbbbo....",
+  "...owbbbbbbbwo...",
+  "...owBBBBBBBwo...",
+  "....oBBBBBBBo....",
+  "....oBBBBBBBo....",
+  "......ooooo......",
+  ".................",
+];
+
+export const VEHICLE_SPRITES: Record<string, VehicleSprite> = {
+  classic: { map: CAR_MAP, palette: CAR_PALETTE },
+  slotcar: {
+    map: SLOTCAR_MAP,
+    palette: { o: "#3a2b20", b: "#e04a3a", B: "#b23325", h: "#f6efdc", w: "#43342a", g: "#cfe6ec" },
+  },
+  driftking: {
+    map: DRIFTKING_MAP,
+    palette: { o: "#3a2b20", b: "#9b59d0", B: "#7a3fb0", h: "#ffd166", w: "#43342a", g: "#e3d6f7" },
+  },
+  gokart: {
+    map: GOKART_MAP,
+    palette: { o: "#3a2b20", b: "#58b558", B: "#3f8f3f", h: "#f2d066", w: "#3a3a3a", g: "#cfe6ec" },
+  },
+  muscle: {
+    map: MUSCLE_MAP,
+    palette: { o: "#3a2b20", b: "#3d5f8a", B: "#2c486b", h: "#f6efdc", w: "#43342a", g: "#cfe6ec" },
+  },
+  cruiser: {
+    map: CRUISER_MAP,
+    palette: { o: "#3a2b20", b: "#5bbfa6", B: "#3f9c85", h: "#f2d066", w: "#43342a", g: "#d9f2ef" },
+  },
+};
+
+export function vehicleSprite(id: string): VehicleSprite {
+  return VEHICLE_SPRITES[id] ?? VEHICLE_SPRITES.classic!;
+}
+
 export const MUSHROOM_MAP: PixelMap = [
   ".rrr.",
   "rrWrr",
@@ -77,15 +213,16 @@ export function drawMap(
 export const CAR_FRAME_COUNT = 64;
 
 /**
- * Pre-render the car at CAR_FRAME_COUNT rotations. Frame 0 faces up (-y);
- * frame k is rotated k * 2PI/N clockwise.
+ * Pre-render a vehicle sprite at CAR_FRAME_COUNT rotations. Frame 0 faces up
+ * (-y); frame k is rotated k * 2PI/N clockwise.
  */
-export function buildCarFrames(): HTMLCanvasElement[] {
-  const mapW = CAR_MAP[0]!.length;
-  const mapH = CAR_MAP.length;
+export function buildCarFrames(sprite: VehicleSprite = VEHICLE_SPRITES.classic!): HTMLCanvasElement[] {
+  const { map, palette } = sprite;
+  const mapW = map[0]!.length;
+  const mapH = map.length;
   const size = Math.ceil(Math.hypot(mapW, mapH)) + 2;
   const rgba = new Map<string, [number, number, number]>();
-  for (const [key, hex] of Object.entries(CAR_PALETTE)) {
+  for (const [key, hex] of Object.entries(palette)) {
     rgba.set(key, [
       parseInt(hex.slice(1, 3), 16),
       parseInt(hex.slice(3, 5), 16),
@@ -110,7 +247,7 @@ export function buildCarFrames(): HTMLCanvasElement[] {
         const sx = Math.floor(u * cos - v * sin + mapW / 2);
         const sy = Math.floor(u * sin + v * cos + mapH / 2);
         if (sx < 0 || sy < 0 || sx >= mapW || sy >= mapH) continue;
-        const color = rgba.get(CAR_MAP[sy]![sx]!);
+        const color = rgba.get(map[sy]![sx]!);
         if (!color) continue;
         const i = (dy * size + dx) * 4;
         img.data[i] = color[0];
