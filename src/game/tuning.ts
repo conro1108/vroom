@@ -17,6 +17,9 @@ export interface Tuning {
   opponentCount: number; // AI cars in a group race
   rubberBand: number; // 0..0.4, how hard the field converges on the player
   botSloppiness: number; // 0..1, how human (wobbly, mistake-prone) bots drive
+  startBoostWindowMs: number; // committing to throttle within this window before green = rocket start
+  boostPower: number; // maxSpeed/accel multiplier while a boost is live
+  boostSeconds: number; // how long a rocket start's boost lasts
   cameraLerp: number; // 1/s camera chase
   lookAhead: number; // seconds of velocity the camera leads by
   steerMode: "joystick" | "dragx"; // joystick: thumb vector = screen direction to drive
@@ -43,6 +46,9 @@ export const DEFAULT_TUNING: Tuning = {
   opponentCount: 3,
   rubberBand: 0.12,
   botSloppiness: 0.6,
+  startBoostWindowMs: 350,
+  boostPower: 1.35,
+  boostSeconds: 1.2,
   cameraLerp: 5,
   lookAhead: 0.35,
   steerMode: "joystick",

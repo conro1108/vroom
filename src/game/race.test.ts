@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bestSplitIndex, completeLap, createRace, raceTotalMs } from "./race";
+import { bestSplitIndex, completeLap, createRace, raceTotalMs, rocketStart } from "./race";
 
 describe("race", () => {
   it("finishes after the configured lap count", () => {
@@ -19,6 +19,14 @@ describe("race", () => {
     completeLap(race, 29000);
     expect(raceTotalMs(race)).toBe(90000);
     expect(bestSplitIndex(race)).toBe(2);
+  });
+
+  it("rewards throttle committed inside the start window, not gun-jumpers or idlers", () => {
+    const green = 10000;
+    expect(rocketStart(green - 200, green, 350)).toBe(true); // nailed the beat
+    expect(rocketStart(green - 350, green, 350)).toBe(true); // window edge counts
+    expect(rocketStart(green - 900, green, 350)).toBe(false); // held all along
+    expect(rocketStart(null, green, 350)).toBe(false); // not holding at green
   });
 
   it("ignores extra laps after the finish", () => {

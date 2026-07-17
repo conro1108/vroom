@@ -26,6 +26,15 @@ export function raceTotalMs(race: RaceState): number {
   return race.splits.reduce((a, b) => a + b, 0);
 }
 
+/**
+ * A rocket start is throttle committed within the timing window before green
+ * and still held at green. Jumping the gun earlier than the window gets
+ * nothing — the reward is for nailing the beat, not for holding all along.
+ */
+export function rocketStart(heldSinceMs: number | null, greenAtMs: number, windowMs: number): boolean {
+  return heldSinceMs !== null && greenAtMs - heldSinceMs <= windowMs;
+}
+
 export function bestSplitIndex(race: RaceState): number {
   let best = 0;
   for (let i = 1; i < race.splits.length; i++) {

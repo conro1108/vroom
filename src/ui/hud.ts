@@ -39,6 +39,7 @@ export function createHud(): Hud {
       }
       if (countdownEl.textContent !== text || countdownEl.hidden) {
         countdownEl.textContent = text;
+        countdownEl.classList.toggle("go", text === "go!");
         countdownEl.hidden = false;
         // restart the beat animation on each new number
         countdownEl.style.animation = "none";

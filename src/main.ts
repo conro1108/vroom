@@ -31,7 +31,7 @@ import {
   speedClassById,
   type SpeedClass,
 } from "./game/progression";
-import { bestSplitIndex, completeLap, createRace, raceTotalMs, type RaceState } from "./game/race";
+import { bestSplitIndex, completeLap, createRace, raceTotalMs, rocketStart, type RaceState } from "./game/race";
 import { applyLap, applyRace, getRecords, loadRecords, recordKey, saveRecords } from "./game/records";
 import { createLapTracker, createTrack, createTrackQuery, updateLap, type LapTracker, type Track, type TrackQuery } from "./game/track";
 import { TRACKS } from "./game/tracks";
@@ -76,6 +76,8 @@ let finishPending = false;
 let finishAt = 0;
 let opponents: Opponent[] = [];
 let countdownEnd = 0;
+let boostTimer = 0; // seconds of player speed boost remaining (rocket start etc.)
+let throttleHeldSince: number | null = null; // when the player committed to throttle pre-green
 const ghosts = loadGhosts();
 let ghost: GhostLap | null = null; // best lap being replayed
 let ghostRec: GhostRecorder = createGhostRecorder();
@@ -180,6 +182,8 @@ function restartRace(): void {
   race = createRace(RACE_LAPS);
   raceHadBestLap = false;
   finishPending = false;
+  boostTimer = 0;
+  throttleHeldSince = null;
   countdownEnd = performance.now() + 3 * COUNTDOWN_BEAT_MS;
   lapStart = countdownEnd;
   ghost = ghosts[recordKey(track.id, cls.id)] ?? null;
@@ -303,11 +307,19 @@ function loop(now: number): void {
 
   if (mode === "countdown") {
     accumulator = 0;
-    input.read(car.heading); // keep the joystick visible/live so you're ready on "go"
+    // keep the joystick visible/live so you're ready on "go" — and watch the
+    // throttle so nailing the beat can be rewarded with a rocket start
+    const preInput = input.read(car.heading);
+    if (preInput.throttle > 0) throttleHeldSince ??= now;
+    else throttleHeldSince = null;
     const remaining = countdownEnd - now;
     if (remaining <= 0) {
       mode = "racing";
       lapStart = countdownEnd; // clock starts exactly on green
+      if (rocketStart(throttleHeldSince, countdownEnd, raceTuning.startBoostWindowMs)) {
+        boostTimer = raceTuning.boostSeconds;
+        hud.toast("rocket start!");
+      }
       hud.countdown("go!");
       window.setTimeout(() => mode !== "countdown" && hud.countdown(null), GO_FLASH_MS);
     } else {
@@ -320,7 +332,16 @@ function loop(now: number): void {
     const racing = mode === "racing";
     while (accumulator >= PHYSICS_DT) {
       accumulator -= PHYSICS_DT;
-      car = stepCar(car, carInput, raceTuning, query.surfaceAt(car.x, car.y), PHYSICS_DT);
+      let stepTuning = raceTuning;
+      if (boostTimer > 0) {
+        boostTimer = Math.max(0, boostTimer - PHYSICS_DT);
+        stepTuning = {
+          ...raceTuning,
+          maxSpeed: raceTuning.maxSpeed * raceTuning.boostPower,
+          accel: raceTuning.accel * raceTuning.boostPower,
+        };
+      }
+      car = stepCar(car, carInput, stepTuning, query.surfaceAt(car.x, car.y), PHYSICS_DT);
       if (racing) {
         stepOpponents(opponents, query, PHYSICS_DT, true, raceDistance(lapTracker));
         separateCars([car, ...opponents.map((o) => o.car)]);
