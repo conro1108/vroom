@@ -5,11 +5,12 @@
 //   turbo   — short speed burst for yourself
 //   rocket  — fired straight out where you're facing; hits whoever's in its path
 //   missile — the cute one: locks a nearby racer and curves toward them
+//   crown   — the rare one: relentlessly chases down whoever's in first place
 //   oil     — dropped behind you; the next car over it spins out
 import type { CarInput, CarState } from "./physics";
 import type { Track } from "./track";
 
-export type ItemKind = "turbo" | "rocket" | "missile" | "oil";
+export type ItemKind = "turbo" | "rocket" | "missile" | "crown" | "oil";
 
 /** The item-relevant view of one racer. Opponents satisfy this directly;
  * main.ts keeps one for the player. `car` must be re-pointed whenever the
@@ -43,6 +44,7 @@ export interface Missile {
   y: number;
   heading: number; // direction of travel; straight rockets never change it
   homing: boolean; // true = the seeker that curves; false = a dumb straight shot
+  chaseLeader: boolean; // true = re-locks the current 1st-place racer every step
   target: number | null; // racer index the seeker is locked onto (drops to null if it's gone)
   owner: number; // the shooter — immune to its own shot for the whole flight
   ttl: number;
@@ -56,7 +58,7 @@ export interface ItemWorld {
 
 export type ItemEvent =
   | { type: "pickup"; racer: number; item: ItemKind }
-  | { type: "spin"; racer: number; by: "missile" | "oil" };
+  | { type: "spin"; racer: number; by: "missile" | "crown" | "oil" };
 
 export const PICKUP_RADIUS = 11;
 const OIL_RADIUS = 9;
@@ -67,6 +69,8 @@ const MISSILE_ACQUIRE_RADIUS = 260; // the seeker only locks racers in this vici
 const MISSILE_HIT_RADIUS = 10;
 const ROCKET_TTL_SECONDS = 2.2; // straight shots expire sooner — they don't chase
 const MISSILE_TTL_SECONDS = 5;
+const CROWN_TURN_RATE = 4.2; // the leader-hunter corners harder — it will not be shaken
+const CROWN_TTL_SECONDS = 9; // and it stays airborne long enough to run the leader down
 const SHOT_NOSE_PX = 9; // spawn a shot at the car's nose, not its center
 const BOX_RESPAWN_SECONDS = 4;
 const SPIN_SECONDS = 1.1;
@@ -124,9 +128,9 @@ export function createItemWorld(track: Track, rowsPerLap?: number): ItemWorld {
 /**
  * Position-weighted roll: leaders mostly get oil to defend with, backmarkers
  * mostly get turbos and shots to close with. The plain straight rocket is the
- * common attack; the homing missile is the rare treat, weighted hard to the
- * back so it's a comeback tool, not a sniper everyone gets. Not full parity —
- * a nudge toward it.
+ * common attack; the homing missile is the rare treat and the leader-chasing
+ * crown is rarer still — both weighted hard to the back so they're comeback
+ * tools, not snipers everyone gets. Not full parity — a nudge toward it.
  */
 export function rollItem(
   position: number,
@@ -138,11 +142,13 @@ export function rollItem(
   const leading = position === 1; // nothing ahead of the leader to shoot at
   const rocket = leading ? 0 : 0.35 + 0.2 * p;
   const missile = leading ? 0 : 0.5 * p * p; // rare, and only really shows up near the back
+  const crown = leading ? 0 : 0.16 * p * p * p; // rarest: a near-last comeback treat
   const oil = 0.65 - 0.45 * p;
-  const roll = rng() * (turbo + rocket + missile + oil);
+  const roll = rng() * (turbo + rocket + missile + crown + oil);
   if (roll < turbo) return "turbo";
   if (roll < turbo + rocket) return "rocket";
   if (roll < turbo + rocket + missile) return "missile";
+  if (roll < turbo + rocket + missile + crown) return "crown";
   return "oil";
 }
 
@@ -193,9 +199,11 @@ export function stepItems(
     }
 
     // seekers steer toward their locked target at a capped turn rate — the
-    // gentle driving-style arc. A lost target (spun off, finished) drops the
-    // lock and the shot flies on straight.
+    // gentle driving-style arc. The crown re-locks the current leader every
+    // step (so it hunts the position, not a fixed car); a plain missile that
+    // loses its target (spun off, finished) drops the lock and flies straight.
     if (m.homing) {
+      if (m.chaseLeader) m.target = leaderIndex(racers);
       const target = m.target !== null ? racers[m.target] : undefined;
       if (!target || target.finished) {
         m.target = null;
@@ -204,7 +212,7 @@ export function stepItems(
         let diff = want - m.heading;
         while (diff > Math.PI) diff -= 2 * Math.PI;
         while (diff < -Math.PI) diff += 2 * Math.PI;
-        const turn = MISSILE_TURN_RATE * dt;
+        const turn = (m.chaseLeader ? CROWN_TURN_RATE : MISSILE_TURN_RATE) * dt;
         m.heading += Math.max(-turn, Math.min(turn, diff));
       }
     }
@@ -227,7 +235,7 @@ export function stepItems(
     if (hit >= 0) {
       racers[hit]!.spin = SPIN_SECONDS;
       world.missiles.splice(mi, 1);
-      events.push({ type: "spin", racer: hit, by: "missile" });
+      events.push({ type: "spin", racer: hit, by: m.chaseLeader ? "crown" : "missile" });
     }
   }
 
@@ -265,10 +273,17 @@ function acquireTarget(racers: ItemRacer[], index: number): number | null {
   return best >= 0 ? best : null;
 }
 
+/** The racer currently running 1st (position 1), or null if none is left in. */
+function leaderIndex(racers: ItemRacer[]): number | null {
+  const i = racers.findIndex((r) => !r.finished && r.position === 1);
+  return i >= 0 ? i : null;
+}
+
 /**
  * Use racer `index`'s held item. Returns what was used (null if nothing to
- * use). Both shot types fire from the nose in the direction the car faces —
- * the rocket flies straight, the missile curves toward whatever it locked.
+ * use). All three shot types fire from the nose in the direction the car
+ * faces — the rocket flies straight, the missile curves toward whatever it
+ * locked, and the crown curves after whoever leads the race.
  */
 export function useItem(world: ItemWorld, racers: ItemRacer[], index: number): ItemKind | null {
   const r = racers[index]!;
@@ -278,16 +293,18 @@ export function useItem(world: ItemWorld, racers: ItemRacer[], index: number): I
 
   if (item === "turbo") {
     r.boost = TURBO_SECONDS;
-  } else if (item === "rocket" || item === "missile") {
-    const homing = item === "missile";
+  } else if (item === "rocket" || item === "missile" || item === "crown") {
+    const homing = item !== "rocket";
+    const chaseLeader = item === "crown";
     world.missiles.push({
       x: r.car.x + Math.cos(r.car.heading) * SHOT_NOSE_PX,
       y: r.car.y + Math.sin(r.car.heading) * SHOT_NOSE_PX,
       heading: r.car.heading,
       homing,
-      target: homing ? acquireTarget(racers, index) : null,
+      chaseLeader,
+      target: chaseLeader ? leaderIndex(racers) : homing ? acquireTarget(racers, index) : null,
       owner: index,
-      ttl: homing ? MISSILE_TTL_SECONDS : ROCKET_TTL_SECONDS,
+      ttl: chaseLeader ? CROWN_TTL_SECONDS : homing ? MISSILE_TTL_SECONDS : ROCKET_TTL_SECONDS,
     });
   } else {
     world.oils.push({

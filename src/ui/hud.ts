@@ -7,6 +7,7 @@ const ITEM_ICONS: Record<ItemKind, string> = {
   turbo: "⚡",
   rocket: "🚀",
   missile: "💘", // the cute homing seeker
+  crown: "👑", // the rare one — hunts down 1st place
   oil: "🛢️",
 };
 

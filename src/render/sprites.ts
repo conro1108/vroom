@@ -245,6 +245,17 @@ export const HOMING_MAP: PixelMap = [
 
 export const HOMING_PALETTE: Palette = { p: "#b83a63", P: "#ff6f9c", W: "#ffd9e6" };
 
+// The leader-hunting crown: a little gold crown with a red gem, so the rarest
+// shot reads at a glance as "this one's coming for 1st".
+export const CROWN_MAP: PixelMap = [
+  "y.y.y",
+  "yyyyy",
+  "yryry",
+  "ooooo",
+];
+
+export const CROWN_PALETTE: Palette = { y: "#ffd23f", r: "#d94f3d", o: "#5a3a12" };
+
 export function drawMap(
   ctx: CanvasRenderingContext2D,
   map: PixelMap,

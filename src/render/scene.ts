@@ -11,6 +11,8 @@ import { themeById, type WorldTheme } from "./themes";
 import {
   buildCarFrames,
   carFrameIndex,
+  CROWN_MAP,
+  CROWN_PALETTE,
   drawMap,
   HOMING_MAP,
   HOMING_PALETTE,
@@ -267,8 +269,8 @@ export class Scene {
         drawMap(ctx, ITEM_BOX_MAP, ITEM_BOX_PALETTE, Math.round(box.x - sx) - 4, Math.round(box.y - sy) - 4);
       }
       for (const m of items.missiles) {
-        const map = m.homing ? HOMING_MAP : ROCKET_MAP;
-        const palette = m.homing ? HOMING_PALETTE : ROCKET_PALETTE;
+        const map = m.chaseLeader ? CROWN_MAP : m.homing ? HOMING_MAP : ROCKET_MAP;
+        const palette = m.chaseLeader ? CROWN_PALETTE : m.homing ? HOMING_PALETTE : ROCKET_PALETTE;
         drawMap(ctx, map, palette, Math.round(m.x - sx) - 2, Math.round(m.y - sy) - 2);
       }
     }

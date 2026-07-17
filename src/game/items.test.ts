@@ -59,9 +59,9 @@ describe("item world", () => {
 
 describe("rollItem", () => {
   const rolls = (position: number, fieldSize: number) => {
-    const counts = { turbo: 0, rocket: 0, missile: 0, oil: 0 };
-    for (let i = 0; i < 200; i++) {
-      counts[rollItem(position, fieldSize, () => (i + 0.5) / 200)]++;
+    const counts = { turbo: 0, rocket: 0, missile: 0, crown: 0, oil: 0 };
+    for (let i = 0; i < 400; i++) {
+      counts[rollItem(position, fieldSize, () => (i + 0.5) / 400)]++;
     }
     return counts;
   };
@@ -72,6 +72,7 @@ describe("rollItem", () => {
     expect(leader.oil).toBeGreaterThan(leader.turbo);
     expect(leader.rocket).toBe(0); // no one ahead to shoot
     expect(leader.missile).toBe(0);
+    expect(leader.crown).toBe(0);
     expect(last.turbo + last.rocket + last.missile).toBeGreaterThan(last.oil * 2);
   });
 
@@ -82,6 +83,12 @@ describe("rollItem", () => {
     expect(midfield.rocket).toBeGreaterThan(midfield.missile);
     // and they cluster at the back of the field
     expect(last.missile).toBeGreaterThan(midfield.missile);
+  });
+
+  it("the crown is the rarest shot, scarcer than the missile and pinned to the back", () => {
+    const last = rolls(4, 4);
+    expect(last.crown).toBeGreaterThan(0); // it does show up at the back
+    expect(last.crown).toBeLessThan(last.missile); // but rarer than the homing missile
   });
 });
 
@@ -145,6 +152,53 @@ describe("items in flight", () => {
     }
     expect(spun).toEqual([1]); // only the car in its path
     expect(aside.spin).toBe(0);
+  });
+
+  it("a crown ignores nearer cars and runs down whoever is in 1st", () => {
+    const world = emptyWorld();
+    const shooter = createItemRacer(createCarState(100, 100, 0)); // faces +x
+    shooter.position = 3;
+    shooter.held = "crown";
+    // a nearer car (2nd) sits off the flight path; the leader is farther away
+    const decoy = createItemRacer(createCarState(140, 40, 0));
+    decoy.position = 2;
+    const leader = createItemRacer(createCarState(300, 260, 0));
+    leader.position = 1;
+    const racers = [shooter, decoy, leader];
+
+    expect(useItem(world, racers, 0)).toBe("crown");
+    expect(world.missiles[0]!.chaseLeader).toBe(true);
+    expect(world.missiles[0]!.target).toBe(2); // locked the leader, not the closer decoy
+
+    let spunRacer = -1;
+    for (let i = 0; i < 120 * 6 && spunRacer < 0; i++) {
+      for (const e of stepItems(world, racers, 1 / 120)) {
+        if (e.type === "spin") spunRacer = e.racer;
+      }
+    }
+    expect(spunRacer).toBe(2); // the leader went down
+    expect(decoy.spin).toBe(0); // the decoy was never touched
+  });
+
+  it("a crown keeps hunting the position when the lead changes hands", () => {
+    const world = emptyWorld();
+    const shooter = createItemRacer(createCarState(100, 100, 0));
+    shooter.position = 3;
+    shooter.held = "crown";
+    const a = createItemRacer(createCarState(260, 100, 0));
+    a.position = 1; // leads at fire time
+    const b = createItemRacer(createCarState(260, 260, 0));
+    b.position = 2;
+    const racers = [shooter, a, b];
+
+    useItem(world, racers, 0);
+    expect(world.missiles[0]!.target).toBe(1);
+
+    // b takes the lead a moment later — the crown should re-lock onto b
+    a.position = 2;
+    b.position = 1;
+    stepItems(world, racers, 1 / 120);
+    expect(world.missiles[0]!.target).toBe(2);
   });
 
   it("a shot never spins the racer who fired it", () => {

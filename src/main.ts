@@ -535,7 +535,7 @@ function stepItemWorld(): void {
       if (ev.racer === 0) hud.setItem(playerRacer.held);
       else opponents[ev.racer - 1]!.itemUseDelay = 0.8 + Math.random() * 2.2;
     } else if (ev.racer === 0) {
-      hud.toast(ev.by === "oil" ? "slicked!" : "rocketed!");
+      hud.toast(ev.by === "oil" ? "slicked!" : ev.by === "crown" ? "dethroned!" : "rocketed!");
     }
   }
   for (let i = 0; i < opponents.length; i++) {
