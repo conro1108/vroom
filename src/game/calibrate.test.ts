@@ -19,9 +19,10 @@ function fresh(): Calibration {
 describe("calibration", () => {
   it("starts on the first axis with an interval around the current value", () => {
     const cal = fresh();
-    expect(currentAxis(cal).key).toBe("maxSpeed");
-    expect(cal.lo).toBeLessThan(DEFAULT_TUNING.maxSpeed);
-    expect(cal.hi).toBeGreaterThan(DEFAULT_TUNING.maxSpeed);
+    const first = CALIBRATION_AXES[0]!;
+    expect(currentAxis(cal).key).toBe(first.key);
+    expect(cal.lo).toBeLessThan(DEFAULT_TUNING[first.key]);
+    expect(cal.hi).toBeGreaterThan(DEFAULT_TUNING[first.key]);
     const { a, b } = variants(cal);
     expect(a).toBeLessThan(b);
   });
@@ -36,11 +37,12 @@ describe("calibration", () => {
 
   it("variant tunings differ only on the active axis", () => {
     const cal = fresh();
+    const key = CALIBRATION_AXES[0]!.key;
     const a = variantTuning(cal, { ...DEFAULT_TUNING }, "a");
     const b = variantTuning(cal, { ...DEFAULT_TUNING }, "b");
-    expect(a.maxSpeed).not.toBe(b.maxSpeed);
-    const { maxSpeed: _a, ...restA } = a;
-    const { maxSpeed: _b, ...restB } = b;
+    expect(a[key]).not.toBe(b[key]);
+    const { [key]: _a, ...restA } = a;
+    const { [key]: _b, ...restB } = b;
     expect(restA).toEqual(restB);
   });
 
@@ -55,16 +57,18 @@ describe("calibration", () => {
 
   it("an axis settles after its rounds and the next axis begins", () => {
     const cal = fresh();
+    const key = CALIBRATION_AXES[0]!.key;
     for (let i = 0; i < ROUNDS_PER_AXIS; i++) choose(cal, "b");
     expect(currentAxis(cal).key).toBe(CALIBRATION_AXES[1]!.key);
-    // consistently preferring faster should settle above the default
-    expect(cal.values.maxSpeed).toBeGreaterThan(DEFAULT_TUNING.maxSpeed);
+    // consistently preferring the higher variant should settle above the default
+    expect(cal.values[key]).toBeGreaterThan(DEFAULT_TUNING[key]);
   });
 
   it("skipping keeps the axis at its original value", () => {
     const cal = fresh();
+    const key = CALIBRATION_AXES[0]!.key;
     skipAxis(cal);
-    expect(cal.values.maxSpeed).toBe(DEFAULT_TUNING.maxSpeed);
+    expect(cal.values[key]).toBe(DEFAULT_TUNING[key]);
     expect(currentAxis(cal).key).toBe(CALIBRATION_AXES[1]!.key);
   });
 
@@ -77,15 +81,17 @@ describe("calibration", () => {
       expect(cal.values[axis.key]).toBeLessThanOrEqual(axis.max);
     }
     // settled values feed the variant tuning untouched once done
+    const key = CALIBRATION_AXES[0]!.key;
     const t = variantTuning(cal, { ...DEFAULT_TUNING }, "a");
-    expect(t.maxSpeed).toBe(cal.values.maxSpeed);
+    expect(t[key]).toBe(cal.values[key]);
   });
 
   it("settled axes carry into later comparisons", () => {
     const cal = fresh();
-    for (let i = 0; i < ROUNDS_PER_AXIS; i++) choose(cal, "b"); // settle maxSpeed high
+    const key = CALIBRATION_AXES[0]!.key;
+    for (let i = 0; i < ROUNDS_PER_AXIS; i++) choose(cal, "b"); // settle the first axis high
     const t = variantTuning(cal, { ...DEFAULT_TUNING }, "a");
-    expect(t.maxSpeed).toBe(cal.values.maxSpeed);
-    expect(t.maxSpeed).toBeGreaterThan(DEFAULT_TUNING.maxSpeed);
+    expect(t[key]).toBe(cal.values[key]);
+    expect(t[key]).toBeGreaterThan(DEFAULT_TUNING[key]);
   });
 });

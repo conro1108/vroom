@@ -16,8 +16,9 @@ export interface CalibrationAxis {
 
 // Ranges match the dev-panel sliders; order runs from the most feel-defining
 // axes to the subtler ones so an early bail-out still calibrated what matters.
+// Top speed goes last: it's the easiest axis to judge by feel alone, so it
+// doesn't need to front-load the priority order the way handling does.
 export const CALIBRATION_AXES: CalibrationAxis[] = [
-  { key: "maxSpeed", label: "top speed", min: 60, max: 320 },
   { key: "turnRate", label: "turn rate", min: 1, max: 6 },
   { key: "lateralGrip", label: "grip", min: 0.5, max: 15 },
   { key: "accel", label: "acceleration", min: 60, max: 500 },
@@ -25,6 +26,7 @@ export const CALIBRATION_AXES: CalibrationAxis[] = [
   { key: "driftGrip", label: "drift grip", min: 0.2, max: 8 },
   { key: "driftThreshold", label: "drift threshold", min: 10, max: 120 },
   { key: "speedTurnFalloff", label: "turn falloff @ speed", min: 0, max: 0.9 },
+  { key: "maxSpeed", label: "top speed", min: 60, max: 320 },
 ];
 
 export const ROUNDS_PER_AXIS = 2;
