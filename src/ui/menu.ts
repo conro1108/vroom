@@ -11,6 +11,7 @@ import {
   SPEED_CLASSES,
   type Progress,
 } from "../game/progression";
+import { trackDefById } from "../game/tracks";
 import { saveTuning, type Tuning } from "../game/tuning";
 import { applyVehicle, CUSTOM_VEHICLE_ID, loadCustomVehicle, resetCustomVehicle, VEHICLES } from "../game/vehicles";
 import { drawMap, vehicleSprite } from "../render/sprites";
@@ -117,9 +118,44 @@ export interface Menu {
 export function createMenu(
   progress: Progress,
   tuning: Tuning,
-  onStart: (cupId: string, classId: string) => void
+  onStart: (cupId: string, classId: string, startTrackIndex?: number) => void
 ): Menu {
   const root = document.getElementById("menu")!;
+
+  // Solo is per-track practice, so tapping a cup opens a picker for its four
+  // tracks (start wherever you like) rather than committing to the full series.
+  const openTrackPicker = (mapWrap: HTMLElement, cup: CupDef, classId: string): void => {
+    mapWrap.querySelector(".track-picker")?.remove();
+    const picker = document.createElement("div");
+    picker.className = "track-picker";
+
+    const heading = document.createElement("div");
+    heading.className = "track-picker-title";
+    heading.textContent = `${cup.icon} ${cup.name}`;
+    const hint = document.createElement("div");
+    hint.className = "track-picker-sub";
+    hint.textContent = "pick a track";
+    picker.append(heading, hint);
+
+    const list = document.createElement("div");
+    list.className = "track-picker-list";
+    cup.trackIds.forEach((trackId, i) => {
+      const btn = document.createElement("button");
+      btn.className = "track-pick-btn";
+      btn.textContent = trackDefById(trackId).name;
+      btn.addEventListener("click", () => onStart(cup.id, classId, i));
+      list.appendChild(btn);
+    });
+    picker.appendChild(list);
+
+    const back = document.createElement("button");
+    back.className = "track-picker-back";
+    back.textContent = "← back";
+    back.addEventListener("click", () => picker.remove());
+    picker.appendChild(back);
+
+    mapWrap.appendChild(picker);
+  };
 
   const render = () => {
     // the vehicle row scrolls sideways; keep its position across re-renders
@@ -304,7 +340,9 @@ export function createMenu(
       }
 
       node.addEventListener("click", () => {
-        if (unlocked) onStart(cup.id, progress.lastClass);
+        if (!unlocked) return;
+        if (progress.raceMode === "solo") openTrackPicker(mapWrap, cup, progress.lastClass);
+        else onStart(cup.id, progress.lastClass);
       });
       mapWrap.appendChild(node);
     }

@@ -128,8 +128,8 @@ let ghostRec: GhostRecorder = createGhostRecorder();
 let cal: Calibration | null = null;
 let calVariant: "a" | "b" = "a";
 
-const menu = createMenu(progress, tuning, (cupId, classId) => {
-  startCup(cupId, classId);
+const menu = createMenu(progress, tuning, (cupId, classId, startTrackIndex) => {
+  startCup(cupId, classId, startTrackIndex);
 });
 
 // --- feel calibration: free-drive A/B taste test on the first track ---
@@ -198,8 +198,12 @@ function startCalibration(): void {
   mode = "calibrating";
 }
 
-/** Begin a cup: fix the bot roster for the whole series, then race track 1. */
-function startCup(cupId: string, classId: string): void {
+/**
+ * Begin a cup: fix the bot roster for the whole series, then race a track.
+ * Group always starts at track 1; solo may pick any track in the cup to
+ * practice, so `startTrackIndex` seeds where the series begins.
+ */
+function startCup(cupId: string, classId: string, startTrackIndex = 0): void {
   cup = cupById(cupId);
   cls = speedClassById(classId);
   progress.lastClass = classId;
@@ -207,7 +211,7 @@ function startCup(cupId: string, classId: string): void {
   saveProgress(progress);
   const oppCount = progress.raceMode === "group" ? Math.max(1, Math.round(tuning.opponentCount)) : 0;
   series = createCupState(cupId, oppCount > 0 ? buildRoster(progress.lastVehicle, oppCount) : []);
-  startSeriesRace(0);
+  startSeriesRace(startTrackIndex);
 }
 
 /** Load race `raceIndex` of the running series onto the canvas. */
@@ -366,7 +370,9 @@ function finishRace(): void {
       hasNext: !lastRace,
     },
     {
-      onAgain: () => (lastRace ? startCup(cup.id, cls.id) : restartRace()),
+      // group's last-race "run it back" replays the whole cup; solo is
+      // per-track practice, so it always just re-runs the track you're on.
+      onAgain: () => (lastRace && !solo ? startCup(cup.id, cls.id) : restartRace()),
       onNext: () => startSeriesRace(raceIndex + 1),
       onMenu: () => goToMenu(),
     }
