@@ -15,7 +15,6 @@ import {
   playerGridSlot,
   playerPlacement,
   playerPosition,
-  RACER_COUNT,
   separateCars,
   stepOpponents,
   type Opponent,
@@ -171,7 +170,8 @@ function restartRace(): void {
   const slot = playerGridSlot(track);
   car = createCarState(slot.x, slot.y, track.startHeading);
   lapTracker = createLapTracker(query.progressAt(slot.x, slot.y) ?? 0);
-  opponents = createOpponents(track, query, progress.lastVehicle, tuning, cls);
+  opponents =
+    progress.raceMode === "group" ? createOpponents(track, query, progress.lastVehicle, tuning, cls) : [];
   race = createRace(RACE_LAPS);
   raceHadBestLap = false;
   countdownEnd = performance.now() + 3 * COUNTDOWN_BEAT_MS;
@@ -182,7 +182,7 @@ function restartRace(): void {
   scene.clearMarks();
   hud.setLap(1, RACE_LAPS);
   hud.setLapTime(0);
-  hud.setPosition(RACER_COUNT, RACER_COUNT);
+  hud.setPosition(opponents.length + 1, opponents.length + 1);
   hideResults();
   mode = "countdown";
 }
@@ -227,7 +227,9 @@ function finishRace(): void {
   const newBestRace = applyRace(records, track.id, cls.id, totalMs);
   saveRecords(records);
   const placement = playerPlacement(opponents);
-  const unlocked = recordRaceResult(progress, cls.id, track.id, placement);
+  // solo races have no field to place in, so they don't feed placement-gated unlocks
+  const unlocked =
+    progress.raceMode === "group" ? recordRaceResult(progress, cls.id, track.id, placement) : [];
   saveProgress(progress);
 
   showResults(
@@ -235,7 +237,8 @@ function finishRace(): void {
       trackName: track.name,
       classLabel: cls.label,
       placement,
-      racerCount: RACER_COUNT,
+      racerCount: opponents.length + 1,
+      solo: progress.raceMode === "solo",
       splits: race.splits,
       totalMs,
       bestSplitIndex: bestSplitIndex(race),
@@ -291,6 +294,7 @@ function loop(now: number): void {
 
   if (mode === "countdown") {
     accumulator = 0;
+    input.read(car.heading); // keep the joystick visible/live so you're ready on "go"
     const remaining = countdownEnd - now;
     if (remaining <= 0) {
       mode = "racing";
@@ -324,14 +328,14 @@ function loop(now: number): void {
     }
     if (racing) {
       hud.setLapTime(now - lapStart);
-      hud.setPosition(playerPosition(lapTracker, opponents), RACER_COUNT);
+      hud.setPosition(playerPosition(lapTracker, opponents), opponents.length + 1);
     }
   } else if (mode !== "countdown") {
     accumulator = 0;
   }
 
   const ghostPose =
-    mode === "racing" && tuning.showGhost && ghost ? ghostAt(ghost, now - lapStart) : null;
+    mode === "racing" && progress.raceMode === "solo" && ghost ? ghostAt(ghost, now - lapStart) : null;
   const racerPoses: RacerPose[] =
     mode === "racing" || mode === "countdown"
       ? opponents.map((o) => ({ x: o.car.x, y: o.car.y, heading: o.car.heading, vehicleId: o.vehicleId }))

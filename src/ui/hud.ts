@@ -27,7 +27,7 @@ export function createHud(): Hud {
       lapCountEl.textContent = `lap ${lap}/${totalLaps}`;
     },
     setPosition(pos, racers) {
-      posEl.textContent = `${ordinal(pos)}/${racers}`;
+      posEl.textContent = racers <= 1 ? "solo" : `${ordinal(pos)}/${racers}`;
     },
     setBest(ms) {
       bestEl.textContent = ms === null ? "best —" : `best ${formatTime(ms)}`;

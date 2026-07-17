@@ -39,12 +39,18 @@ export function applySpeedClass(tuning: Tuning, cls: SpeedClass): Tuning {
 /** Placing this or better counts as a podium. */
 export const PODIUM_PLACEMENT = 3;
 
+// Solo vs group is a binary switch, not two independent toggles: solo races
+// alone against your ghost (no AI opponents, no placement), group races the
+// full field and is what placement-gated unlocks require.
+export type RaceMode = "solo" | "group";
+
 export interface Progress {
   /** classId -> trackId -> best race placement (1 = win) in that class */
   placements: Record<string, Record<string, number>>;
   lastClass: string;
   lastTrack: string;
   lastVehicle: string;
+  raceMode: RaceMode;
 }
 
 export function createProgress(): Progress {
@@ -53,6 +59,7 @@ export function createProgress(): Progress {
     lastClass: SPEED_CLASSES[0]!.id,
     lastTrack: TRACKS[0]!.id,
     lastVehicle: VEHICLES[0]!.id,
+    raceMode: "group",
   };
 }
 
@@ -117,6 +124,7 @@ export function parseProgress(raw: string): Progress {
   if (typeof saved.lastClass === "string") progress.lastClass = saved.lastClass;
   if (typeof saved.lastTrack === "string") progress.lastTrack = saved.lastTrack;
   if (typeof saved.lastVehicle === "string") progress.lastVehicle = saved.lastVehicle;
+  if (saved.raceMode === "solo" || saved.raceMode === "group") progress.raceMode = saved.raceMode;
   return progress;
 }
 

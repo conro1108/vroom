@@ -553,9 +553,15 @@ body {
   transform: translateY(1px);
 }
 
-.ghost-toggle {
-  padding: 8px 16px;
+.mode-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
   margin-bottom: 18px;
+}
+
+.mode-btn {
+  padding: 8px 16px;
   font-family: var(--font);
   font-size: 13px;
   font-weight: 700;
@@ -563,12 +569,11 @@ body {
   background: var(--cream-light);
   border: 3px solid var(--brown);
   border-radius: 999px;
-  opacity: 0.8;
 }
 
-.ghost-toggle.on {
-  color: var(--ink);
-  opacity: 1;
+.mode-btn.active {
+  color: var(--cream-light);
+  background: var(--accent);
 }
 
 .track-grid {

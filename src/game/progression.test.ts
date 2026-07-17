@@ -107,6 +107,17 @@ describe("saved progress", () => {
     expect(parsed).toEqual(p);
   });
 
+  it("defaults to group and parses a saved solo mode", () => {
+    expect(createProgress().raceMode).toBe("group");
+    const parsed = parseProgress(JSON.stringify({ raceMode: "solo" }));
+    expect(parsed.raceMode).toBe("solo");
+  });
+
+  it("falls back to the default on a garbage raceMode", () => {
+    const parsed = parseProgress(JSON.stringify({ raceMode: "chaos" }));
+    expect(parsed.raceMode).toBe("group");
+  });
+
   it("migrates the old finished-track lists as podiums", () => {
     const parsed = parseProgress(
       JSON.stringify({ completed: { "100": ["meadow", "speedway"] }, lastClass: "100" })

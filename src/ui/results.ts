@@ -7,6 +7,7 @@ export interface ResultsData {
   classLabel: string;
   placement: number; // 1-based finish position
   racerCount: number;
+  solo: boolean; // no field to place against — skip placement language
   splits: number[];
   totalMs: number;
   bestSplitIndex: number;
@@ -31,10 +32,13 @@ export function showResults(data: ResultsData, handlers: ResultsHandlers): void 
 
   const flag = document.createElement("div");
   flag.className = "results-flag";
-  flag.textContent = data.placement === 1 ? "🏆" : data.placement <= 3 ? "🏁" : "💨";
+  flag.textContent = data.solo ? "🏁" : data.placement === 1 ? "🏆" : data.placement <= 3 ? "🏁" : "💨";
   const title = document.createElement("h2");
-  title.textContent =
-    data.placement === 1 ? "you win!" : `${ordinal(data.placement)} of ${data.racerCount}`;
+  title.textContent = data.solo
+    ? "lap complete"
+    : data.placement === 1
+      ? "you win!"
+      : `${ordinal(data.placement)} of ${data.racerCount}`;
   const sub = document.createElement("div");
   sub.className = "results-sub";
   sub.textContent = `${data.trackName} · ${data.classLabel}`;

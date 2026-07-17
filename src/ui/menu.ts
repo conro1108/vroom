@@ -188,16 +188,27 @@ export function createMenu(
     root.appendChild(vehicleRow);
     vehicleRow.scrollLeft = vehicleScroll;
 
-    // ghost toggle
-    const ghostBtn = document.createElement("button");
-    ghostBtn.className = "ghost-toggle" + (tuning.showGhost ? " on" : "");
-    ghostBtn.textContent = tuning.showGhost ? "👻 ghost on" : "👻 ghost off";
-    ghostBtn.addEventListener("click", () => {
-      tuning.showGhost = !tuning.showGhost;
-      saveTuning(tuning);
-      render();
-    });
-    root.appendChild(ghostBtn);
+    // solo (ghost) vs group (AI opponents): a binary switch, not two
+    // independent toggles. Only group races count toward placement-gated
+    // track unlocks — solo is practice against your own ghost.
+    const modeRow = document.createElement("div");
+    modeRow.className = "mode-row";
+    const modes: { id: "group" | "solo"; label: string }[] = [
+      { id: "group", label: "🏁 group" },
+      { id: "solo", label: "👻 solo" },
+    ];
+    for (const m of modes) {
+      const btn = document.createElement("button");
+      btn.className = "mode-btn" + (progress.raceMode === m.id ? " active" : "");
+      btn.textContent = m.label;
+      btn.addEventListener("click", () => {
+        progress.raceMode = m.id;
+        saveProgress(progress);
+        render();
+      });
+      modeRow.appendChild(btn);
+    }
+    root.appendChild(modeRow);
 
     // track grid
     const grid = document.createElement("div");

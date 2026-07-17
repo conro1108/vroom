@@ -22,7 +22,6 @@ export interface Tuning {
   joystickLockDeg: number; // heading error (degrees) at which steer saturates
   steerRangePx: number; // dragx mode: css px of thumb-drag for full lock
   holdToGo: boolean; // touch: throttle only while a finger is down
-  showGhost: boolean; // replay your best lap as a translucent car
 }
 
 export const DEFAULT_TUNING: Tuning = {
@@ -46,7 +45,6 @@ export const DEFAULT_TUNING: Tuning = {
   joystickLockDeg: 35,
   steerRangePx: 70,
   holdToGo: true,
-  showGhost: true,
 };
 
 // Bump the suffix when DEFAULT_TUNING changes meaningfully, so stale saved
