@@ -3,6 +3,7 @@
 // Pure logic — main.ts steps them alongside the player and the scene draws
 // them by vehicle id.
 import { createBot, type BotPersonality } from "./botdriver";
+import { createDraft, inSlipstream, stepDraft, type DraftState } from "./draft";
 import { createCarState, stepCar, type CarInput, type CarState } from "./physics";
 import { applySpeedClass, RACE_LAPS, type SpeedClass } from "./progression";
 import { createLapTracker, updateLap, type LapTracker, type Track, type TrackQuery } from "./track";
@@ -39,6 +40,9 @@ export interface Opponent {
   tracker: LapTracker;
   tuning: Tuning;
   bot: (car: CarState) => CarInput;
+  draft: DraftState;
+  /** Seconds of speed boost remaining (earned from slipstreaming). */
+  boostTimer: number;
   /** 1-based order in which this bot finished the race, or null if racing. */
   finishOrder: number | null;
 }
@@ -96,6 +100,8 @@ export function createOpponents(
       tracker: createLapTracker(startProgress),
       tuning,
       bot: createBot(track, query, tuning, personality),
+      draft: createDraft(),
+      boostTimer: 0,
       finishOrder: null,
     };
   });
@@ -110,23 +116,48 @@ export function rubberMult(gapLaps: number, strength: number): number {
   return 1 + catchup * strength;
 }
 
+/** What the bots know about the player mid-race, for rubber-banding and drafting. */
+export interface PlayerContext {
+  distance: number; // laps covered
+  car: CarState;
+}
+
 /** One physics step for every bot (throttle only once the race is `live`).
- * With `playerDistance` (laps), the field rubber-bands toward the player. */
+ * With `player` context, the field rubber-bands toward the player and bots
+ * earn slipstream boosts off every car, the player's included. */
 export function stepOpponents(
   opponents: Opponent[],
   query: TrackQuery,
   dt: number,
   live: boolean,
-  playerDistance: number | null = null
+  player: PlayerContext | null = null
 ): void {
   let finished = opponents.filter((o) => o.finishOrder !== null).length;
   for (const o of opponents) {
     const input = live ? o.bot(o.car) : { steer: 0, throttle: 0, brake: 0 };
-    let tuning = o.tuning;
-    if (live && playerDistance !== null && o.tuning.rubberBand > 0 && o.finishOrder === null) {
-      const mult = rubberMult(raceDistance(o.tracker) - playerDistance, o.tuning.rubberBand);
-      tuning = { ...o.tuning, maxSpeed: o.tuning.maxSpeed * mult, accel: o.tuning.accel * mult };
+    let mult = 1;
+    if (live && player !== null && o.tuning.rubberBand > 0 && o.finishOrder === null) {
+      mult = rubberMult(raceDistance(o.tracker) - player.distance, o.tuning.rubberBand);
     }
+    if (live) {
+      const minSpeed = o.tuning.maxSpeed * 0.5;
+      const drafting =
+        (player !== null && inSlipstream(o.car, player.car, o.tuning.draftRangePx, minSpeed)) ||
+        opponents.some(
+          (other) => other !== o && inSlipstream(o.car, other.car, o.tuning.draftRangePx, minSpeed)
+        );
+      if (stepDraft(o.draft, drafting, dt, o.tuning.draftChargeSeconds)) {
+        o.boostTimer = o.tuning.draftBoostSeconds;
+      }
+      if (o.boostTimer > 0) {
+        o.boostTimer = Math.max(0, o.boostTimer - dt);
+        mult *= o.tuning.boostPower;
+      }
+    }
+    const tuning =
+      mult === 1
+        ? o.tuning
+        : { ...o.tuning, maxSpeed: o.tuning.maxSpeed * mult, accel: o.tuning.accel * mult };
     o.car = stepCar(o.car, input, tuning, query.surfaceAt(o.car.x, o.car.y), dt);
     const p = query.progressAt(o.car.x, o.car.y);
     if (p !== null && updateLap(o.tracker, p).completed) {

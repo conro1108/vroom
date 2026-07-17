@@ -10,6 +10,7 @@ import {
   type GhostRecorder,
 } from "./game/ghost";
 import { choose, createCalibration, skipAxis, variantTuning, type Calibration } from "./game/calibrate";
+import { createDraft, inSlipstream, stepDraft } from "./game/draft";
 import {
   createOpponents,
   playerGridSlot,
@@ -76,8 +77,9 @@ let finishPending = false;
 let finishAt = 0;
 let opponents: Opponent[] = [];
 let countdownEnd = 0;
-let boostTimer = 0; // seconds of player speed boost remaining (rocket start etc.)
+let boostTimer = 0; // seconds of player speed boost remaining (rocket start, slipstream)
 let throttleHeldSince: number | null = null; // when the player committed to throttle pre-green
+let playerDraft = createDraft();
 const ghosts = loadGhosts();
 let ghost: GhostLap | null = null; // best lap being replayed
 let ghostRec: GhostRecorder = createGhostRecorder();
@@ -184,6 +186,7 @@ function restartRace(): void {
   finishPending = false;
   boostTimer = 0;
   throttleHeldSince = null;
+  playerDraft = createDraft();
   countdownEnd = performance.now() + 3 * COUNTDOWN_BEAT_MS;
   lapStart = countdownEnd;
   ghost = ghosts[recordKey(track.id, cls.id)] ?? null;
@@ -343,8 +346,18 @@ function loop(now: number): void {
       }
       car = stepCar(car, carInput, stepTuning, query.surfaceAt(car.x, car.y), PHYSICS_DT);
       if (racing) {
-        stepOpponents(opponents, query, PHYSICS_DT, true, raceDistance(lapTracker));
+        stepOpponents(opponents, query, PHYSICS_DT, true, {
+          distance: raceDistance(lapTracker),
+          car,
+        });
         separateCars([car, ...opponents.map((o) => o.car)]);
+        const drafting = opponents.some((o) =>
+          inSlipstream(car, o.car, raceTuning.draftRangePx, raceTuning.maxSpeed * 0.5)
+        );
+        if (stepDraft(playerDraft, drafting, PHYSICS_DT, raceTuning.draftChargeSeconds)) {
+          boostTimer = Math.max(boostTimer, raceTuning.draftBoostSeconds);
+          hud.toast("slipstream!");
+        }
       }
       applyWalls();
       if (!racing) continue;
@@ -373,7 +386,7 @@ function loop(now: number): void {
     mode === "racing" || mode === "countdown"
       ? opponents.map((o) => ({ x: o.car.x, y: o.car.y, heading: o.car.heading, vehicleId: o.vehicleId }))
       : [];
-  scene.frame(frameDt, car, raceTuning, ghostPose, racerPoses);
+  scene.frame(frameDt, car, raceTuning, ghostPose, racerPoses, boostTimer > 0);
   requestAnimationFrame(loop);
 }
 

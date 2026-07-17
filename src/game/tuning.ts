@@ -20,6 +20,9 @@ export interface Tuning {
   startBoostWindowMs: number; // committing to throttle within this window before green = rocket start
   boostPower: number; // maxSpeed/accel multiplier while a boost is live
   boostSeconds: number; // how long a rocket start's boost lasts
+  draftRangePx: number; // how close behind a car the slipstream reaches
+  draftChargeSeconds: number; // continuous drafting needed to earn a boost
+  draftBoostSeconds: number; // how long a slipstream boost lasts
   cameraLerp: number; // 1/s camera chase
   lookAhead: number; // seconds of velocity the camera leads by
   steerMode: "joystick" | "dragx"; // joystick: thumb vector = screen direction to drive
@@ -49,6 +52,9 @@ export const DEFAULT_TUNING: Tuning = {
   startBoostWindowMs: 350,
   boostPower: 1.35,
   boostSeconds: 1.2,
+  draftRangePx: 55,
+  draftChargeSeconds: 1.0,
+  draftBoostSeconds: 0.8,
   cameraLerp: 5,
   lookAhead: 0.35,
   steerMode: "joystick",

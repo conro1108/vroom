@@ -129,10 +129,11 @@ describe("rubber banding", () => {
     const behind = field(1);
     ahead[0]!.tracker.lap = 3; // ~2 laps covered, a full lap up on the player
     behind[0]!.tracker.lap = 1; // still on the opening lap, a lap down
-    const playerDistance = 1.0;
+    // player mid-race, parked far off in a corner so no one drafts off them
+    const player = { distance: 1.0, car: createCarState(5, 5, 0) };
     for (let i = 0; i < 600; i++) {
-      stepOpponents(ahead, query, 1 / 120, true, playerDistance);
-      stepOpponents(behind, query, 1 / 120, true, playerDistance);
+      stepOpponents(ahead, query, 1 / 120, true, player);
+      stepOpponents(behind, query, 1 / 120, true, player);
     }
     const speed = (o: { car: { vx: number; vy: number } }) => Math.hypot(o.car.vx, o.car.vy);
     expect(speed(ahead[0]!)).toBeLessThan(speed(behind[0]!));

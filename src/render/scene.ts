@@ -29,6 +29,7 @@ const COLORS = {
   fencePost: "#8a5a33",
   fenceRail: "#7a5233",
   dust: "#e3d3ae",
+  boost: "#fff6df",
   skid: "rgba(58, 43, 32, 0.35)",
   shadow: "rgba(42, 32, 20, 0.2)",
 };
@@ -42,6 +43,7 @@ interface Particle {
   vx: number;
   vy: number;
   life: number;
+  color?: string; // defaults to dust
 }
 
 /** A drawable racer that isn't the player: position + which sprite set. */
@@ -112,12 +114,13 @@ export class Scene {
     car: CarState,
     tuning: Tuning,
     ghost: GhostPose | null = null,
-    racers: RacerPose[] = []
+    racers: RacerPose[] = [],
+    boosting = false
   ): void {
     if (!this.ready) this.resize();
     if (!this.ready) return; // still no layout — skip this frame
     this.updateCamera(dt, car, tuning);
-    this.updateEffects(dt, car);
+    this.updateEffects(dt, car, boosting);
     this.draw(car, ghost, racers);
   }
 
@@ -144,7 +147,20 @@ export class Scene {
     this.cam.y = clamp(this.cam.y, hh, this.track.worldHeight - hh);
   }
 
-  private updateEffects(dt: number, car: CarState): void {
+  private updateEffects(dt: number, car: CarState, boosting = false): void {
+    if (boosting && this.particles.length < 120) {
+      // speed streaks trailing off the tail while a boost is live
+      const bfx = Math.cos(car.heading);
+      const bfy = Math.sin(car.heading);
+      this.particles.push({
+        x: car.x - bfx * 8 + (Math.random() - 0.5) * 6,
+        y: car.y - bfy * 8 + (Math.random() - 0.5) * 6,
+        vx: -bfx * 70 + (Math.random() - 0.5) * 15,
+        vy: -bfy * 70 + (Math.random() - 0.5) * 15,
+        life: 0.2 + Math.random() * 0.15,
+        color: COLORS.boost,
+      });
+    }
     if (car.drifting) {
       const fx = Math.cos(car.heading);
       const fy = Math.sin(car.heading);
@@ -217,7 +233,7 @@ export class Scene {
 
     for (const p of this.particles) {
       ctx.globalAlpha = Math.min(1, p.life * 2);
-      ctx.fillStyle = COLORS.dust;
+      ctx.fillStyle = p.color ?? COLORS.dust;
       ctx.fillRect(Math.round(p.x - sx) - 1, Math.round(p.y - sy) - 1, 2, 2);
     }
     ctx.globalAlpha = 1;
