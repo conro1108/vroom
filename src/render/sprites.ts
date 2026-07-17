@@ -222,7 +222,8 @@ export const OIL_MAP: PixelMap = [
 
 export const OIL_PALETTE: Palette = { d: "#33302c", D: "#1f1c19" };
 
-export const MISSILE_MAP: PixelMap = [
+// The dumb straight rocket: a plain red bolt.
+export const ROCKET_MAP: PixelMap = [
   ".ooo.",
   "oRRRo",
   "oRWRo",
@@ -230,7 +231,19 @@ export const MISSILE_MAP: PixelMap = [
   ".ooo.",
 ];
 
-export const MISSILE_PALETTE: Palette = { o: "#3a2b20", R: "#d94f3d", W: "#f6efdc" };
+export const ROCKET_PALETTE: Palette = { o: "#3a2b20", R: "#d94f3d", W: "#f6efdc" };
+
+// The cute homing seeker: a little pink heart, so it reads as the friendly-
+// but-relentless one that curves after you.
+export const HOMING_MAP: PixelMap = [
+  ".p.p.",
+  "pPPPp",
+  "pPWPp",
+  ".pPp.",
+  "..p..",
+];
+
+export const HOMING_PALETTE: Palette = { p: "#b83a63", P: "#ff6f9c", W: "#ffd9e6" };
 
 export function drawMap(
   ctx: CanvasRenderingContext2D,

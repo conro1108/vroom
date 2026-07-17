@@ -5,7 +5,8 @@ import type { ItemKind } from "../game/items";
 
 const ITEM_ICONS: Record<ItemKind, string> = {
   turbo: "⚡",
-  missile: "🚀",
+  rocket: "🚀",
+  missile: "💘", // the cute homing seeker
   oil: "🛢️",
 };
 

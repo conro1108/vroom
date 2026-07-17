@@ -59,7 +59,7 @@ describe("item world", () => {
 
 describe("rollItem", () => {
   const rolls = (position: number, fieldSize: number) => {
-    const counts = { turbo: 0, missile: 0, oil: 0 };
+    const counts = { turbo: 0, rocket: 0, missile: 0, oil: 0 };
     for (let i = 0; i < 200; i++) {
       counts[rollItem(position, fieldSize, () => (i + 0.5) / 200)]++;
     }
@@ -70,8 +70,18 @@ describe("rollItem", () => {
     const leader = rolls(1, 4);
     const last = rolls(4, 4);
     expect(leader.oil).toBeGreaterThan(leader.turbo);
-    expect(leader.missile).toBe(0); // no one ahead to shoot
-    expect(last.turbo + last.missile).toBeGreaterThan(last.oil * 2);
+    expect(leader.rocket).toBe(0); // no one ahead to shoot
+    expect(leader.missile).toBe(0);
+    expect(last.turbo + last.rocket + last.missile).toBeGreaterThan(last.oil * 2);
+  });
+
+  it("the homing missile is the rare treat, and only near the back", () => {
+    const midfield = rolls(2, 4);
+    const last = rolls(4, 4);
+    // straight rockets are the common attack; homing missiles stay scarce
+    expect(midfield.rocket).toBeGreaterThan(midfield.missile);
+    // and they cluster at the back of the field
+    expect(last.missile).toBeGreaterThan(midfield.missile);
   });
 });
 
@@ -86,21 +96,24 @@ describe("items in flight", () => {
     expect(events).toEqual([{ type: "spin", racer: 0, by: "oil" }]);
   });
 
-  it("a missile homes to its target and spins it", () => {
+  it("a homing missile curves onto a nearby racer and spins it", () => {
     const world = emptyWorld();
-    const shooter = createItemRacer(createCarState(100, 100, 0));
+    const shooter = createItemRacer(createCarState(100, 100, 0)); // faces +x
     shooter.position = 2;
     shooter.held = "missile";
-    const leader = createItemRacer(createCarState(300, 140, 0));
+    // target is off to the side, so only a *curving* shot connects
+    const leader = createItemRacer(createCarState(280, 190, 0));
     leader.position = 1;
     const racers = [shooter, leader];
 
     expect(useItem(world, racers, 0)).toBe("missile");
     expect(shooter.held).toBeNull();
     expect(world.missiles).toHaveLength(1);
+    expect(world.missiles[0]!.homing).toBe(true);
+    expect(world.missiles[0]!.target).toBe(1);
 
     let spun = false;
-    for (let i = 0; i < 120 * 3 && !spun; i++) {
+    for (let i = 0; i < 120 * 4 && !spun; i++) {
       spun = stepItems(world, racers, 1 / 120).some((e) => e.type === "spin");
     }
     expect(spun).toBe(true);
@@ -108,14 +121,40 @@ describe("items in flight", () => {
     expect(world.missiles).toHaveLength(0);
   });
 
-  it("the leader's missile is wasted (no target ahead)", () => {
+  it("a straight rocket flies where you face and never turns", () => {
     const world = emptyWorld();
-    const leader = createItemRacer(createCarState(100, 100, 0));
-    leader.position = 1;
-    leader.held = "missile";
-    expect(useItem(world, [leader], 0)).toBe("missile");
-    expect(world.missiles).toHaveLength(0);
-    expect(leader.held).toBeNull();
+    const shooter = createItemRacer(createCarState(100, 100, 0)); // faces +x
+    shooter.position = 2;
+    shooter.held = "rocket";
+    // a car directly ahead gets hit; one off to the side is missed
+    const ahead = createItemRacer(createCarState(260, 100, 0));
+    ahead.position = 1;
+    const aside = createItemRacer(createCarState(180, 220, 0));
+    aside.position = 3;
+    const racers = [shooter, ahead, aside];
+
+    expect(useItem(world, racers, 0)).toBe("rocket");
+    expect(world.missiles[0]!.homing).toBe(false);
+    expect(world.missiles[0]!.target).toBeNull();
+
+    const spun: number[] = [];
+    for (let i = 0; i < 120 * 3; i++) {
+      for (const e of stepItems(world, racers, 1 / 120)) {
+        if (e.type === "spin") spun.push(e.racer);
+      }
+    }
+    expect(spun).toEqual([1]); // only the car in its path
+    expect(aside.spin).toBe(0);
+  });
+
+  it("a shot never spins the racer who fired it", () => {
+    const world = emptyWorld();
+    const shooter = createItemRacer(createCarState(100, 100, 0));
+    shooter.position = 1;
+    shooter.held = "rocket";
+    expect(useItem(world, [shooter], 0)).toBe("rocket");
+    for (let i = 0; i < 120 * 3; i++) stepItems(world, [shooter], 1 / 120);
+    expect(shooter.spin).toBe(0);
   });
 
   it("turbo boosts the user; oil drops behind the car", () => {

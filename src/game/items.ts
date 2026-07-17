@@ -3,12 +3,13 @@
 // Pure logic: main.ts owns when to step this, render/ui draw what's here.
 //
 //   turbo   — short speed burst for yourself
-//   missile — homes in on the car one place ahead and spins it out
+//   rocket  — fired straight out where you're facing; hits whoever's in its path
+//   missile — the cute one: locks a nearby racer and curves toward them
 //   oil     — dropped behind you; the next car over it spins out
 import type { CarInput, CarState } from "./physics";
 import type { Track } from "./track";
 
-export type ItemKind = "turbo" | "missile" | "oil";
+export type ItemKind = "turbo" | "rocket" | "missile" | "oil";
 
 /** The item-relevant view of one racer. Opponents satisfy this directly;
  * main.ts keeps one for the player. `car` must be re-pointed whenever the
@@ -40,7 +41,10 @@ export interface OilSlick {
 export interface Missile {
   x: number;
   y: number;
-  target: number; // racer index it homes in on
+  heading: number; // direction of travel; straight rockets never change it
+  homing: boolean; // true = the seeker that curves; false = a dumb straight shot
+  target: number | null; // racer index the seeker is locked onto (drops to null if it's gone)
+  owner: number; // the shooter — immune to its own shot for the whole flight
   ttl: number;
 }
 
@@ -56,9 +60,14 @@ export type ItemEvent =
 
 export const PICKUP_RADIUS = 11;
 const OIL_RADIUS = 9;
-const MISSILE_SPEED = 330;
+const ROCKET_SPEED = 360; // dumb straight shot: fast and flat
+const MISSILE_SPEED = 300; // seeker: a touch slower so its curve reads
+const MISSILE_TURN_RATE = 3.2; // rad/s cap on the seeker's steering — the driving-style curve
+const MISSILE_ACQUIRE_RADIUS = 260; // the seeker only locks racers in this vicinity
 const MISSILE_HIT_RADIUS = 10;
+const ROCKET_TTL_SECONDS = 2.2; // straight shots expire sooner — they don't chase
 const MISSILE_TTL_SECONDS = 5;
+const SHOT_NOSE_PX = 9; // spawn a shot at the car's nose, not its center
 const BOX_RESPAWN_SECONDS = 4;
 const SPIN_SECONDS = 1.1;
 const SPIN_RATE = 3 * 2 * Math.PI; // three full rotations per second of spin
@@ -114,8 +123,10 @@ export function createItemWorld(track: Track, rowsPerLap?: number): ItemWorld {
 
 /**
  * Position-weighted roll: leaders mostly get oil to defend with, backmarkers
- * mostly get turbos and missiles to close with. Not full parity — a nudge
- * toward it.
+ * mostly get turbos and shots to close with. The plain straight rocket is the
+ * common attack; the homing missile is the rare treat, weighted hard to the
+ * back so it's a comeback tool, not a sniper everyone gets. Not full parity —
+ * a nudge toward it.
  */
 export function rollItem(
   position: number,
@@ -123,12 +134,15 @@ export function rollItem(
   rng: () => number = Math.random
 ): ItemKind {
   const p = fieldSize <= 1 ? 1 : (position - 1) / (fieldSize - 1); // 0 = leader, 1 = last
-  const turbo = 0.2 + 0.8 * p;
-  const missile = position === 1 ? 0 : 0.25 + 0.45 * p; // nothing ahead of the leader to shoot
+  const turbo = 0.2 + 0.7 * p;
+  const leading = position === 1; // nothing ahead of the leader to shoot at
+  const rocket = leading ? 0 : 0.35 + 0.2 * p;
+  const missile = leading ? 0 : 0.5 * p * p; // rare, and only really shows up near the back
   const oil = 0.65 - 0.45 * p;
-  const roll = rng() * (turbo + missile + oil);
+  const roll = rng() * (turbo + rocket + missile + oil);
   if (roll < turbo) return "turbo";
-  if (roll < turbo + missile) return "missile";
+  if (roll < turbo + rocket) return "rocket";
+  if (roll < turbo + rocket + missile) return "missile";
   return "oil";
 }
 
@@ -172,23 +186,49 @@ export function stepItems(
 
   for (let mi = world.missiles.length - 1; mi >= 0; mi--) {
     const m = world.missiles[mi]!;
-    const target = racers[m.target];
     m.ttl -= dt;
-    if (!target || target.finished || m.ttl <= 0) {
+    if (m.ttl <= 0) {
       world.missiles.splice(mi, 1);
       continue;
     }
-    const dx = target.car.x - m.x;
-    const dy = target.car.y - m.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist < MISSILE_HIT_RADIUS) {
-      target.spin = SPIN_SECONDS;
-      world.missiles.splice(mi, 1);
-      events.push({ type: "spin", racer: m.target, by: "missile" });
-      continue;
+
+    // seekers steer toward their locked target at a capped turn rate — the
+    // gentle driving-style arc. A lost target (spun off, finished) drops the
+    // lock and the shot flies on straight.
+    if (m.homing) {
+      const target = m.target !== null ? racers[m.target] : undefined;
+      if (!target || target.finished) {
+        m.target = null;
+      } else {
+        const want = Math.atan2(target.car.y - m.y, target.car.x - m.x);
+        let diff = want - m.heading;
+        while (diff > Math.PI) diff -= 2 * Math.PI;
+        while (diff < -Math.PI) diff += 2 * Math.PI;
+        const turn = MISSILE_TURN_RATE * dt;
+        m.heading += Math.max(-turn, Math.min(turn, diff));
+      }
     }
-    m.x += (dx / dist) * MISSILE_SPEED * dt;
-    m.y += (dy / dist) * MISSILE_SPEED * dt;
+
+    const speed = m.homing ? MISSILE_SPEED : ROCKET_SPEED;
+    m.x += Math.cos(m.heading) * speed * dt;
+    m.y += Math.sin(m.heading) * speed * dt;
+
+    // a shot spins whoever it touches (except the racer who fired it)
+    let hit = -1;
+    for (let i = 0; i < racers.length; i++) {
+      if (i === m.owner) continue;
+      const r = racers[i]!;
+      if (r.spin > 0 || r.finished) continue;
+      if (Math.hypot(r.car.x - m.x, r.car.y - m.y) <= MISSILE_HIT_RADIUS) {
+        hit = i;
+        break;
+      }
+    }
+    if (hit >= 0) {
+      racers[hit]!.spin = SPIN_SECONDS;
+      world.missiles.splice(mi, 1);
+      events.push({ type: "spin", racer: hit, by: "missile" });
+    }
   }
 
   for (const r of racers) {
@@ -199,9 +239,36 @@ export function stepItems(
 }
 
 /**
+ * The seeker locks onto the nearest racer within its vicinity, preferring one
+ * ahead of the shooter so it reads as an attack rather than a random spin.
+ * Returns a racer index, or null if the vicinity is empty (then the shot just
+ * flies straight).
+ */
+function acquireTarget(racers: ItemRacer[], index: number): number | null {
+  const me = racers[index]!;
+  let best = -1;
+  let bestScore = Infinity;
+  for (let i = 0; i < racers.length; i++) {
+    if (i === index) continue;
+    const t = racers[i]!;
+    if (t.finished) continue;
+    const dist = Math.hypot(t.car.x - me.car.x, t.car.y - me.car.y);
+    if (dist > MISSILE_ACQUIRE_RADIUS) continue;
+    // racers behind the shooter are a worse pick: nudge them down the list
+    const behindPenalty = t.position > me.position ? MISSILE_ACQUIRE_RADIUS : 0;
+    const score = dist + behindPenalty;
+    if (score < bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  }
+  return best >= 0 ? best : null;
+}
+
+/**
  * Use racer `index`'s held item. Returns what was used (null if nothing to
- * use). A missile with no one ahead of the shooter is fired into thin air —
- * consumed for nothing, so leading with a missile in hand is a real mistake.
+ * use). Both shot types fire from the nose in the direction the car faces —
+ * the rocket flies straight, the missile curves toward whatever it locked.
  */
 export function useItem(world: ItemWorld, racers: ItemRacer[], index: number): ItemKind | null {
   const r = racers[index]!;
@@ -211,13 +278,17 @@ export function useItem(world: ItemWorld, racers: ItemRacer[], index: number): I
 
   if (item === "turbo") {
     r.boost = TURBO_SECONDS;
-  } else if (item === "missile") {
-    const target = racers.findIndex(
-      (t, ti) => ti !== index && !t.finished && t.position === r.position - 1
-    );
-    if (target >= 0) {
-      world.missiles.push({ x: r.car.x, y: r.car.y, target, ttl: MISSILE_TTL_SECONDS });
-    }
+  } else if (item === "rocket" || item === "missile") {
+    const homing = item === "missile";
+    world.missiles.push({
+      x: r.car.x + Math.cos(r.car.heading) * SHOT_NOSE_PX,
+      y: r.car.y + Math.sin(r.car.heading) * SHOT_NOSE_PX,
+      heading: r.car.heading,
+      homing,
+      target: homing ? acquireTarget(racers, index) : null,
+      owner: index,
+      ttl: homing ? MISSILE_TTL_SECONDS : ROCKET_TTL_SECONDS,
+    });
   } else {
     world.oils.push({
       x: r.car.x - Math.cos(r.car.heading) * OIL_DROP_BACK_PX,

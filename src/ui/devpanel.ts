@@ -48,7 +48,11 @@ const SLIDERS: SliderSpec[] = [
   { key: "steerRangePx", label: "drag-x steer range", min: 30, max: 160, step: 5 },
 ];
 
-export function createDevPanel(tuning: Tuning, onCalibrate?: () => void): void {
+export function createDevPanel(
+  tuning: Tuning,
+  onCalibrate?: () => void,
+  onResetProgress?: () => void
+): void {
   const toggle = document.getElementById("dev-toggle")!;
   const panel = document.getElementById("dev-panel")!;
   let advancedOpen = false;
@@ -116,6 +120,18 @@ export function createDevPanel(tuning: Tuning, onCalibrate?: () => void): void {
         onCalibrate();
       });
       panel.appendChild(calBtn);
+    }
+
+    if (onResetProgress) {
+      const resetBtn = document.createElement("button");
+      resetBtn.className = "danger-btn";
+      resetBtn.textContent = "🗑️ reset all progress";
+      resetBtn.addEventListener("click", () => {
+        if (confirm("Reset all cup progress and unlocks? This can't be undone.")) {
+          onResetProgress();
+        }
+      });
+      panel.appendChild(resetBtn);
     }
 
     // advanced: the raw physics sliders, collapsed by default

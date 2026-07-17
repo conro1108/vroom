@@ -48,6 +48,7 @@ import {
   loadProgress,
   recordCupResult,
   RACE_LAPS,
+  resetProgress,
   saveProgress,
   speedClassById,
   type SpeedClass,
@@ -89,7 +90,14 @@ const progress = loadProgress();
 const records = loadRecords();
 const input = createInput(canvas, tuning);
 const hud = createHud();
-createDevPanel(tuning, () => startCalibration());
+createDevPanel(
+  tuning,
+  () => startCalibration(),
+  () => {
+    resetProgress();
+    location.reload(); // simplest clean slate: rebuild menu + state from the wiped save
+  }
+);
 
 type Mode = "menu" | "countdown" | "racing" | "finished" | "calibrating";
 let mode: Mode = "menu";

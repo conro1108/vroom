@@ -12,10 +12,12 @@ import {
   buildCarFrames,
   carFrameIndex,
   drawMap,
+  HOMING_MAP,
+  HOMING_PALETTE,
   ITEM_BOX_MAP,
   ITEM_BOX_PALETTE,
-  MISSILE_MAP,
-  MISSILE_PALETTE,
+  ROCKET_MAP,
+  ROCKET_PALETTE,
   MUSHROOM_MAP,
   MUSHROOM_PALETTE,
   OIL_MAP,
@@ -34,6 +36,8 @@ const COLORS = {
   boost: "#fff6df",
   skid: "rgba(58, 43, 32, 0.35)",
   shadow: "rgba(42, 32, 20, 0.2)",
+  marker: "#ffd23f", // "this one's you" chevron
+  markerEdge: "#2a2014",
 };
 
 const TARGET_BUFFER_WIDTH = 210;
@@ -70,6 +74,7 @@ export class Scene {
   private scale = 2;
   private skidFadeTimer = 0;
   private lastCarFrame = -1;
+  private clock = 0; // wall time, for the player marker's idle bob
   private ready = false;
 
   private theme: WorldTheme;
@@ -127,6 +132,7 @@ export class Scene {
   ): void {
     if (!this.ready) this.resize();
     if (!this.ready) return; // still no layout — skip this frame
+    this.clock += dt;
     this.updateCamera(dt, car, tuning);
     this.updateEffects(dt, car, boosting);
     this.draw(car, ghost, racers, items);
@@ -261,7 +267,9 @@ export class Scene {
         drawMap(ctx, ITEM_BOX_MAP, ITEM_BOX_PALETTE, Math.round(box.x - sx) - 4, Math.round(box.y - sy) - 4);
       }
       for (const m of items.missiles) {
-        drawMap(ctx, MISSILE_MAP, MISSILE_PALETTE, Math.round(m.x - sx) - 2, Math.round(m.y - sy) - 2);
+        const map = m.homing ? HOMING_MAP : ROCKET_MAP;
+        const palette = m.homing ? HOMING_PALETTE : ROCKET_PALETTE;
+        drawMap(ctx, map, palette, Math.round(m.x - sx) - 2, Math.round(m.y - sy) - 2);
       }
     }
 
@@ -292,8 +300,28 @@ export class Scene {
     ctx.fillStyle = COLORS.shadow;
     ctx.fillRect(cx - 7, cy + 6, 14, 3);
     ctx.drawImage(frame, cx - Math.floor(frame.width / 2), cy - Math.floor(frame.height / 2));
+    this.drawPlayerMarker(ctx, cx, cy);
 
     this.displayCtx.drawImage(this.buffer, -fracX, -fracY, bw * this.scale, bh * this.scale);
+  }
+
+  // A little chevron that hovers over the player's car (and gently bobs) so
+  // "which one is me" is never a question mid-pack. `cy` is the car's center;
+  // the rotated frame's bounding box is bigger than the art, so anchor to the
+  // center and sit a fixed nudge above the roof instead of to that box.
+  private drawPlayerMarker(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    const bob = Math.round(Math.sin(this.clock * 4) * 1.5);
+    const my = cy - 12 + bob; // float just above the roof, pointing down
+    ctx.fillStyle = COLORS.markerEdge;
+    for (let r = 0; r < 4; r++) {
+      const hw = 3 - r;
+      ctx.fillRect(cx - hw, my + r, hw * 2 + 1, 1);
+    }
+    ctx.fillStyle = COLORS.marker;
+    for (let r = 0; r < 3; r++) {
+      const hw = 2 - r;
+      ctx.fillRect(cx - hw, my + 1 + r, hw * 2 + 1, 1);
+    }
   }
 
   // Hysteresis: hold the current rotation frame until the heading is clearly

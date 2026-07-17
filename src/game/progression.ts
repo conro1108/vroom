@@ -166,3 +166,12 @@ export function saveProgress(progress: Progress): void {
     // storage unavailable — progress just won't persist
   }
 }
+
+/** Wipe every cup placement and unlock — back to a fresh save. */
+export function resetProgress(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // storage unavailable — nothing to clear
+  }
+}
