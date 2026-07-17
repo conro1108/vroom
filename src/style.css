@@ -592,60 +592,94 @@ body {
   background: var(--accent);
 }
 
-.track-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  max-width: 480px;
+/* --- the progression map: cup nodes joined by dashed trails --- */
+
+.map-wrap {
+  position: relative;
+  width: min(440px, 100%);
+  aspect-ratio: 440 / 400;
   margin: 0 auto;
+  background: #f7eed9;
+  border: 3px solid var(--brown);
+  border-radius: 18px;
+  overflow: hidden;
 }
 
-.track-tile {
-  position: relative;
+.map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.cup-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 10px 8px;
+  gap: 2px;
+  width: 104px;
+  padding: 0;
+  background: transparent;
+  border: none;
   font-family: var(--font);
   color: var(--ink);
+}
+
+.cup-icon {
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
   background: var(--cream-light);
   border: 3px solid var(--brown);
-  border-radius: 14px;
+  border-radius: 16px;
+  box-shadow: 0 3px 0 rgba(74, 55, 40, 0.3);
 }
 
-.track-tile:active:not(.locked) {
+.cup-node:active:not(:disabled) .cup-icon {
   transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(74, 55, 40, 0.3);
 }
 
-.track-tile.locked {
+.cup-node.locked .cup-icon {
+  filter: grayscale(0.9);
   opacity: 0.55;
 }
 
-.track-tile.locked .track-map {
-  filter: grayscale(1);
-}
-
-.track-map {
-  width: 132px;
-  height: 84px;
-  image-rendering: auto;
-}
-
-.track-name {
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.track-records {
-  font-size: 10px;
+.cup-node.locked .cup-name {
   color: var(--muted);
 }
 
-.track-lock {
+.cup-name {
+  font-size: 11px;
+  font-weight: 700;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.cup-sub {
+  font-size: 9px;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.cup-lock {
   position: absolute;
-  top: 34px;
-  font-size: 26px;
+  top: -7px;
+  right: 16px;
+  font-size: 16px;
+}
+
+.cup-medal {
+  position: absolute;
+  top: -9px;
+  right: 14px;
+  font-size: 18px;
+  filter: drop-shadow(0 1px 0 rgba(74, 55, 40, 0.4));
 }
 
 /* --- results overlay --- */
@@ -712,6 +746,56 @@ body {
   padding-top: 6px;
   font-weight: 700;
   font-size: 16px;
+}
+
+.results-standings {
+  margin-bottom: 12px;
+  border: 2px solid rgba(90, 70, 50, 0.25);
+  border-radius: 10px;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.standings-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.standings-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+.standings-row.you {
+  background: rgba(224, 83, 47, 0.12);
+  font-weight: 700;
+}
+
+.standings-place {
+  width: 22px;
+  text-align: center;
+}
+
+.standings-name {
+  flex: 1;
+}
+
+.standings-pts {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.standings-row.you .standings-pts {
+  color: var(--accent);
 }
 
 .results-badge {

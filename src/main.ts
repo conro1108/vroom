@@ -22,6 +22,17 @@ import {
   type ItemWorld,
 } from "./game/items";
 import {
+  createCupState,
+  cupById,
+  cupStandings,
+  playerCupPlacement,
+  RACES_PER_CUP,
+  recordCupRace,
+  type CupDef,
+  type CupState,
+} from "./game/cups";
+import {
+  buildRoster,
   createOpponents,
   playerGridSlot,
   playerPlacement,
@@ -34,9 +45,8 @@ import {
 import { createCarState, stepCar } from "./game/physics";
 import {
   applySpeedClass,
-  isTrackUnlocked,
   loadProgress,
-  recordRaceResult,
+  recordCupResult,
   RACE_LAPS,
   saveProgress,
   speedClassById,
@@ -54,10 +64,11 @@ import {
   type Track,
   type TrackQuery,
 } from "./game/track";
-import { TRACKS } from "./game/tracks";
+import { trackDefById, TRACKS } from "./game/tracks";
 import { loadTuning, saveTuning } from "./game/tuning";
-import { CUSTOM_VEHICLE_ID, saveCustomVehicle } from "./game/vehicles";
+import { CUSTOM_VEHICLE_ID, saveCustomVehicle, vehicleById } from "./game/vehicles";
 import { Scene, type RacerPose } from "./render/scene";
+import { themeById } from "./render/themes";
 import { createCalibrateUi } from "./ui/calibrate";
 import { createDevPanel } from "./ui/devpanel";
 import { createHud } from "./ui/hud";
@@ -82,7 +93,8 @@ createDevPanel(tuning, () => startCalibration());
 
 type Mode = "menu" | "countdown" | "racing" | "finished" | "calibrating";
 let mode: Mode = "menu";
-let trackIndex = 0;
+let cup: CupDef = cupById(progress.lastCup);
+let series: CupState | null = null; // the running 4-track cup series
 let cls: SpeedClass = speedClassById(progress.lastClass);
 let track: Track | null = null;
 let query: TrackQuery | null = null;
@@ -108,8 +120,8 @@ let ghostRec: GhostRecorder = createGhostRecorder();
 let cal: Calibration | null = null;
 let calVariant: "a" | "b" = "a";
 
-const menu = createMenu(progress, records, tuning, (index, classId) => {
-  startRace(index, classId);
+const menu = createMenu(progress, tuning, (cupId, classId) => {
+  startCup(cupId, classId);
 });
 
 // --- feel calibration: free-drive A/B taste test on the first track ---
@@ -162,7 +174,7 @@ function afterCalStep(): void {
 /** Drive the calibration course (track 1) with the A/B overlay up. */
 function startCalibration(): void {
   const def = TRACKS[0]!;
-  trackIndex = 0;
+  series = null;
   track = createTrack(def);
   query = createTrackQuery(track);
   scene = new Scene(track, query, canvas, progress.lastVehicle, corridorPx());
@@ -178,16 +190,26 @@ function startCalibration(): void {
   mode = "calibrating";
 }
 
-function startRace(index: number, classId: string): void {
-  trackIndex = index;
+/** Begin a cup: fix the bot roster for the whole series, then race track 1. */
+function startCup(cupId: string, classId: string): void {
+  cup = cupById(cupId);
   cls = speedClassById(classId);
-  const def = TRACKS[index]!;
+  progress.lastClass = classId;
+  progress.lastCup = cupId;
+  saveProgress(progress);
+  const oppCount = progress.raceMode === "group" ? Math.max(1, Math.round(tuning.opponentCount)) : 0;
+  series = createCupState(cupId, oppCount > 0 ? buildRoster(progress.lastVehicle, oppCount) : []);
+  startSeriesRace(0);
+}
+
+/** Load race `raceIndex` of the running series onto the canvas. */
+function startSeriesRace(raceIndex: number): void {
+  if (!series) return;
+  series.raceIndex = raceIndex;
+  const def = trackDefById(cup.trackIds[raceIndex]!);
   track = createTrack(def);
   query = createTrackQuery(track);
-  scene = new Scene(track, query, canvas, progress.lastVehicle, corridorPx());
-  progress.lastClass = classId;
-  progress.lastTrack = def.id;
-  saveProgress(progress);
+  scene = new Scene(track, query, canvas, progress.lastVehicle, corridorPx(), themeById(cup.theme));
   hud.setBest(getRecords(records, def.id, cls.id).bestLapMs);
   menu.hide();
   hideResults();
@@ -197,12 +219,11 @@ function startRace(index: number, classId: string): void {
 /** Put the field back on the grid and arm the countdown. */
 function restartRace(): void {
   if (!track || !query || !scene) return;
-  const oppCount = progress.raceMode === "group" ? Math.max(1, Math.round(tuning.opponentCount)) : 0;
-  const slot = playerGridSlot(track, oppCount);
+  const roster = series?.roster ?? [];
+  const slot = playerGridSlot(track, roster.length);
   car = createCarState(slot.x, slot.y, track.startHeading);
   lapTracker = createLapTracker(query.progressAt(slot.x, slot.y) ?? 0);
-  opponents =
-    oppCount > 0 ? createOpponents(track, query, progress.lastVehicle, tuning, cls, oppCount) : [];
+  opponents = roster.length > 0 ? createOpponents(track, query, roster, tuning, cls) : [];
   race = createRace(RACE_LAPS);
   raceHadBestLap = false;
   finishPending = false;
@@ -270,36 +291,75 @@ function onLapCompleted(now: number): void {
   }
 }
 
+/** Full finish order of this race: index 0 = player, i+1 = opponents[i]. */
+function racePlacements(): number[] {
+  const pp = playerPlacement(opponents);
+  const botOrder = opponents
+    .map((o, i) => ({ i, fin: o.finishOrder ?? Infinity, d: raceDistance(o.tracker) }))
+    .sort((a, b) => a.fin - b.fin || b.d - a.d);
+  const placements = new Array<number>(opponents.length + 1);
+  placements[0] = pp;
+  botOrder.forEach((b, rank) => {
+    placements[b.i + 1] = rank + 1 >= pp ? rank + 2 : rank + 1;
+  });
+  return placements;
+}
+
+/** Series standings rows for the results card, best first. */
+function standingsRows() {
+  if (!series) return [];
+  return cupStandings(series).map(({ index, points }) => ({
+    name: index === 0 ? "you" : vehicleById(series!.roster[index - 1]!.vehicleId).name,
+    total: points,
+    gained: series!.lastRacePoints[index] ?? 0,
+    you: index === 0,
+  }));
+}
+
 function finishRace(): void {
-  if (!track) return;
+  if (!track || !series) return;
   mode = "finished";
   const totalMs = raceTotalMs(race);
   const newBestRace = applyRace(records, track.id, cls.id, totalMs);
   saveRecords(records);
+  const solo = series.roster.length === 0;
   const placement = playerPlacement(opponents);
-  // solo races have no field to place in, so they don't feed placement-gated unlocks
-  const unlocked =
-    progress.raceMode === "group" ? recordRaceResult(progress, cls.id, track.id, placement) : [];
-  saveProgress(progress);
+  if (!solo) recordCupRace(series, racePlacements());
+  const lastRace = series.raceIndex >= RACES_PER_CUP - 1;
 
+  // the cup pays out (and unlocks) only when its final race is done, in group
+  let cupPlacement: number | null = null;
+  let unlockedNames: string[] = [];
+  if (lastRace && !solo) {
+    cupPlacement = playerCupPlacement(series);
+    unlockedNames = recordCupResult(progress, cls.id, cup.id, cupPlacement).map((c) => c.name);
+    saveProgress(progress);
+  }
+
+  const raceIndex = series.raceIndex;
   showResults(
     {
       trackName: track.name,
       classLabel: cls.label,
+      seriesName: cup.name,
+      raceNumber: raceIndex + 1,
+      racesTotal: RACES_PER_CUP,
       placement,
       racerCount: opponents.length + 1,
-      solo: progress.raceMode === "solo",
+      solo,
       splits: race.splits,
       totalMs,
       bestSplitIndex: bestSplitIndex(race),
       newBestLap: raceHadBestLap,
       newBestRace,
-      unlockedNames: unlocked.map((t) => t.name),
-      hasNext: trackIndex + 1 < TRACKS.length && isTrackUnlocked(progress, cls.id, trackIndex + 1),
+      standings: solo ? [] : standingsRows(),
+      cupPlacement,
+      unlockedNames,
+      hasNext: !lastRace,
     },
     {
-      onAgain: () => restartRace(),
-      onNext: () => startRace(trackIndex + 1, cls.id),
+      onAgain: () => (lastRace ? startCup(cup.id, cls.id) : restartRace()),
+      onNext: () => startSeriesRace(raceIndex + 1),
       onMenu: () => goToMenu(),
     }
   );

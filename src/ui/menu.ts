@@ -1,71 +1,101 @@
-// Splash menu: pick a speed class, pick a vehicle, pick a track. Each track
-// tile shows a minimap, its course records for the selected class, and a lock
-// when the previous track's race hasn't been finished in that class.
-import { isTrackUnlocked, saveProgress, SPEED_CLASSES, type Progress } from "../game/progression";
-import { getRecords, type Records } from "../game/records";
-import { createTrack, type TrackDef } from "../game/track";
-import { trackDefById, TRACKS } from "../game/tracks";
+// Splash menu: pick a speed class, pick a vehicle, then pick where to race
+// on the progression map — a hand-drawn graph of cup nodes joined by dashed
+// trails. Paths branch, converge, and skip; a node unlocks when any trail
+// into it is earned (podium or win, per the CUPS catalog).
+import { CUPS, cupById, type CupDef } from "../game/cups";
+import {
+  bestCupPlacement,
+  isCupUnlocked,
+  PODIUM_PLACEMENT,
+  saveProgress,
+  SPEED_CLASSES,
+  type Progress,
+} from "../game/progression";
 import { saveTuning, type Tuning } from "../game/tuning";
 import { applyVehicle, CUSTOM_VEHICLE_ID, loadCustomVehicle, resetCustomVehicle, VEHICLES } from "../game/vehicles";
 import { drawMap, vehicleSprite } from "../render/sprites";
-import { formatTime } from "./hud";
+import { ordinal } from "./hud";
 
-const MINIMAP_W = 132;
-const MINIMAP_H = 84;
+// Logical map size; the canvas and % -positioned nodes scale together.
+const MAP_W = 440;
+const MAP_H = 400;
 
-/** Tiny centerline drawing of a track, letterboxed into a fixed-size canvas. */
-function minimap(def: TrackDef): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.className = "track-map";
+function ruleSatisfied(progress: Progress, classId: string, rule: { cup: string; result: string }): boolean {
+  const best = bestCupPlacement(progress, classId, rule.cup);
+  if (best === null) return false;
+  return rule.result === "win" ? best === 1 : best <= PODIUM_PLACEMENT;
+}
+
+/** Dashed trails between cup nodes; earned trails draw darker. */
+function paintTrails(canvas: HTMLCanvasElement, progress: Progress, classId: string): void {
   const dpr = 2;
-  canvas.width = MINIMAP_W * dpr;
-  canvas.height = MINIMAP_H * dpr;
+  canvas.width = MAP_W * dpr;
+  canvas.height = MAP_H * dpr;
   const ctx = canvas.getContext("2d")!;
+  ctx.scale(dpr, dpr);
 
-  const samples = createTrack(def).samples;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const p of samples) {
-    minX = Math.min(minX, p.x);
-    minY = Math.min(minY, p.y);
-    maxX = Math.max(maxX, p.x);
-    maxY = Math.max(maxY, p.y);
+  // parchment blotches so the map doesn't read as flat fill
+  for (let y = 0; y < MAP_H; y += 12) {
+    for (let x = 0; x < MAP_W; x += 12) {
+      let h = (x * 374761393 + y * 668265263) | 0;
+      h = (h ^ (h >>> 13)) | 0;
+      h = Math.imul(h, 1274126177);
+      if (((h ^ (h >>> 16)) >>> 0) / 4294967296 < 0.16) {
+        ctx.fillStyle = "rgba(90, 70, 50, 0.045)";
+        ctx.fillRect(x, y, 12, 12);
+      }
+    }
   }
-  const pad = 10 * dpr;
-  const scale = Math.min(
-    (canvas.width - pad * 2) / (maxX - minX),
-    (canvas.height - pad * 2) / (maxY - minY)
-  );
-  const ox = (canvas.width - (maxX - minX) * scale) / 2 - minX * scale;
-  const oy = (canvas.height - (maxY - minY) * scale) / 2 - minY * scale;
 
-  ctx.lineJoin = ctx.lineCap = "round";
-  for (const pass of [
-    { width: 9 * dpr, color: "#b5975f" },
-    { width: 6 * dpr, color: "#d9c08f" },
-  ]) {
-    ctx.strokeStyle = pass.color;
-    ctx.lineWidth = pass.width;
-    ctx.beginPath();
-    samples.forEach((p, i) => {
-      const x = p.x * scale + ox;
-      const y = p.y * scale + oy;
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  CUPS.forEach((cup, ci) => {
+    (cup.unlock ?? []).forEach((rule, ri) => {
+      const from = cupById(rule.cup).map;
+      const to = cup.map;
+      const x1 = from.x * MAP_W;
+      const y1 = from.y * MAP_H;
+      const x2 = to.x * MAP_W;
+      const y2 = to.y * MAP_H;
+      // bow each trail out perpendicular a little so parallel routes separate
+      const bulge = ((ci + ri) % 2 === 0 ? 1 : -1) * 26;
+      const nx = -(y2 - y1);
+      const ny = x2 - x1;
+      const nl = Math.hypot(nx, ny) || 1;
+      const mx = (x1 + x2) / 2 + (nx / nl) * bulge;
+      const my = (y1 + y2) / 2 + (ny / nl) * bulge;
+
+      const earned = ruleSatisfied(progress, classId, rule);
+      const sourceOpen = isCupUnlocked(progress, classId, rule.cup);
+      ctx.strokeStyle = earned
+        ? "rgba(138, 90, 51, 0.9)"
+        : sourceOpen
+          ? "rgba(138, 90, 51, 0.38)"
+          : "rgba(138, 90, 51, 0.16)";
+      ctx.lineWidth = earned ? 3 : 2.5;
+      ctx.setLineDash([1, 7]);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo(mx, my, x2, y2);
+      ctx.stroke();
+
+      // a win-gated trail gets a little star at its midpoint
+      if (rule.result === "win") {
+        ctx.setLineDash([]);
+        ctx.fillStyle = earned ? "#e0532f" : "rgba(138, 90, 51, 0.4)";
+        ctx.font = "10px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("★", (x1 + 2 * mx + x2) / 4, (y1 + 2 * my + y2) / 4);
+      }
     });
-    ctx.closePath();
-    ctx.stroke();
-  }
+  });
+}
 
-  // start marker
-  const s = samples[0]!;
-  ctx.fillStyle = "#4a3728";
-  ctx.beginPath();
-  ctx.arc(s.x * scale + ox, s.y * scale + oy, 3 * dpr, 0, Math.PI * 2);
-  ctx.fill();
-
-  return canvas;
+function unlockHint(cup: CupDef): string {
+  const rules = cup.unlock ?? [];
+  return rules
+    .map((r) => `${r.result === "win" ? "win" : "podium"} ${cupById(r.cup).name.replace(" Cup", "")}`)
+    .join(" or ");
 }
 
 /** Pixel-art portrait of a vehicle, drawn 1:1 and scaled up crisply by CSS. */
@@ -86,9 +116,8 @@ export interface Menu {
 
 export function createMenu(
   progress: Progress,
-  records: Records,
   tuning: Tuning,
-  onStart: (trackIndex: number, classId: string) => void
+  onStart: (cupId: string, classId: string) => void
 ): Menu {
   const root = document.getElementById("menu")!;
 
@@ -102,7 +131,7 @@ export function createMenu(
     title.textContent = "vroom";
     const sub = document.createElement("div");
     sub.className = "menu-sub";
-    sub.textContent = "one thumb. three laps. go.";
+    sub.textContent = "one thumb. four tracks. go.";
     root.append(title, sub);
 
     // speed class picker
@@ -206,8 +235,8 @@ export function createMenu(
     vehicleRow.scrollLeft = vehicleScroll;
 
     // solo (ghost) vs group (AI opponents): a binary switch, not two
-    // independent toggles. Only group races count toward placement-gated
-    // track unlocks — solo is practice against your own ghost.
+    // independent toggles. Only group cups count toward placement-gated
+    // unlocks — solo is practice against your own ghosts.
     const modeRow = document.createElement("div");
     modeRow.className = "mode-row";
     const modes: { id: "group" | "solo"; label: string }[] = [
@@ -227,53 +256,59 @@ export function createMenu(
     }
     root.appendChild(modeRow);
 
-    // track grid
-    const grid = document.createElement("div");
-    grid.className = "track-grid";
-    TRACKS.forEach((def, index) => {
-      const unlocked = isTrackUnlocked(progress, progress.lastClass, index);
-      const tile = document.createElement("button");
-      tile.className = "track-tile" + (unlocked ? "" : " locked");
-      tile.disabled = !unlocked;
+    // the progression map
+    const mapWrap = document.createElement("div");
+    mapWrap.className = "map-wrap";
+    const trails = document.createElement("canvas");
+    trails.className = "map-canvas";
+    paintTrails(trails, progress, progress.lastClass);
+    mapWrap.appendChild(trails);
 
-      tile.appendChild(minimap(def));
+    for (const cup of CUPS) {
+      const unlocked = isCupUnlocked(progress, progress.lastClass, cup.id);
+      const node = document.createElement("button");
+      node.className = "cup-node" + (unlocked ? "" : " locked");
+      node.disabled = !unlocked;
+      node.style.left = `${cup.map.x * 100}%`;
+      node.style.top = `${cup.map.y * 100}%`;
 
-      const bonus = def.unlock?.result === "win";
+      const icon = document.createElement("div");
+      icon.className = "cup-icon";
+      icon.textContent = cup.icon;
       const name = document.createElement("div");
-      name.className = "track-name";
-      name.textContent = bonus ? `★ ${def.name}` : `${index + 1}. ${def.name}`;
-      tile.appendChild(name);
-
-      const recs = document.createElement("div");
-      recs.className = "track-records";
+      name.className = "cup-name";
+      name.textContent = cup.name;
+      const subLine = document.createElement("div");
+      subLine.className = "cup-sub";
       if (unlocked) {
-        const r = getRecords(records, def.id, progress.lastClass);
-        recs.textContent =
-          r.bestRaceMs === null && r.bestLapMs === null
-            ? "no records yet"
-            : `race ${r.bestRaceMs === null ? "—" : formatTime(r.bestRaceMs)} · lap ${
-                r.bestLapMs === null ? "—" : formatTime(r.bestLapMs)
-              }`;
+        const best = bestCupPlacement(progress, progress.lastClass, cup.id);
+        subLine.textContent = best === null ? "4 tracks" : `best · ${ordinal(best)}`;
       } else {
-        const rule = def.unlock!;
-        const verb = rule.result === "win" ? "win" : "podium at";
-        recs.textContent = `${verb} ${trackDefById(rule.track).name} to unlock`;
+        subLine.textContent = unlockHint(cup);
       }
-      tile.appendChild(recs);
+      node.append(icon, name, subLine);
 
       if (!unlocked) {
         const lock = document.createElement("div");
-        lock.className = "track-lock";
+        lock.className = "cup-lock";
         lock.textContent = "🔒";
-        tile.appendChild(lock);
+        node.appendChild(lock);
+      } else {
+        const best = bestCupPlacement(progress, progress.lastClass, cup.id);
+        if (best !== null && best <= 3) {
+          const medal = document.createElement("div");
+          medal.className = "cup-medal";
+          medal.textContent = ["🥇", "🥈", "🥉"][best - 1]!;
+          node.appendChild(medal);
+        }
       }
 
-      tile.addEventListener("click", () => {
-        if (unlocked) onStart(index, progress.lastClass);
+      node.addEventListener("click", () => {
+        if (unlocked) onStart(cup.id, progress.lastClass);
       });
-      grid.appendChild(tile);
-    });
-    root.appendChild(grid);
+      mapWrap.appendChild(node);
+    }
+    root.appendChild(mapWrap);
   };
 
   return {

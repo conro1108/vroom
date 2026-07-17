@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildRoster,
   createOpponents,
   gridSlot,
   OPPONENT_COUNT,
@@ -22,7 +23,8 @@ const query = createTrackQuery(track);
 const rng = () => 0.42; // deterministic
 
 function field(count = OPPONENT_COUNT) {
-  return createOpponents(track, query, "classic", { ...DEFAULT_TUNING }, SPEED_CLASSES[0]!, count, rng);
+  const roster = buildRoster("classic", count, rng);
+  return createOpponents(track, query, roster, { ...DEFAULT_TUNING }, SPEED_CLASSES[0]!, rng);
 }
 
 describe("opponent field", () => {
@@ -38,6 +40,14 @@ describe("opponent field", () => {
     const opponents = field(7);
     expect(opponents).toHaveLength(7);
     expect(opponents.map((o) => o.vehicleId)).not.toContain("classic");
+  });
+
+  it("the same roster fields the same seats again (a cup series rematch)", () => {
+    const roster = buildRoster("classic", 3, rng);
+    const a = createOpponents(track, query, roster, { ...DEFAULT_TUNING }, SPEED_CLASSES[0]!, rng);
+    const b = createOpponents(track, query, roster, { ...DEFAULT_TUNING }, SPEED_CLASSES[0]!, rng);
+    expect(a.map((o) => o.vehicleId)).toEqual(b.map((o) => o.vehicleId));
+    expect(a.map((o) => o.tuning.maxSpeed)).toEqual(b.map((o) => o.tuning.maxSpeed));
   });
 
   it("spreads skill evenly across the field", () => {

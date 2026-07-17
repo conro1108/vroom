@@ -1,8 +1,8 @@
-// The track catalog. The main line runs in order — a podium (top 3) on each
-// track opens the next — and bonus tracks branch off it, demanding an
-// outright win somewhere. Layout safety (in-bounds, no self-overlapping
-// road) is enforced by tracks.test.ts, so new layouts can be sketched
-// against the tests.
+// The track catalog. Tracks are grouped into cups by game/cups.ts — the
+// catalog itself is pure geometry. Layout safety (in-bounds, no
+// self-overlapping road) is enforced by tracks.test.ts, so new layouts can
+// be sketched against the tests. `unlock` on a def is legacy (cup unlocking
+// replaced it) and intentionally absent from newer tracks.
 import type { TrackDef } from "./track";
 
 function gear(cx: number, cy: number, outer: number, inner: number, lobes: number) {
@@ -13,6 +13,26 @@ function gear(cx: number, cy: number, outer: number, inner: number, lobes: numbe
     pts.push({ x: Math.round(cx + Math.cos(a) * r), y: Math.round(cy + Math.sin(a) * r) });
   }
   return pts;
+}
+
+/** A wavy ring: ellipse rx/ry with `lobes` radial sine bumps of `amp` (0..~0.2). */
+function ring(
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  pts: number,
+  lobes: number,
+  amp: number,
+  phase = 0
+) {
+  const out = [];
+  for (let k = 0; k < pts; k++) {
+    const a = (k / pts) * Math.PI * 2;
+    const m = 1 + amp * Math.sin(lobes * a + phase);
+    out.push({ x: Math.round(cx + Math.cos(a) * rx * m), y: Math.round(cy + Math.sin(a) * ry * m) });
+  }
+  return out;
 }
 
 export const TRACKS: TrackDef[] = [
@@ -199,6 +219,141 @@ export const TRACKS: TrackDef[] = [
       { x: 220, y: 620 },
       { x: 150, y: 420 },
     ],
+  },
+
+  // --- Sprout Cup extras ---
+  {
+    // Gentle five-petal flower: wide, forgiving, teaches flowing lines.
+    id: "daisy",
+    name: "Daisy Ring",
+    roadWidth: 60,
+    worldWidth: 1400,
+    worldHeight: 1000,
+    points: ring(700, 490, 470, 330, 15, 5, 0.12),
+  },
+
+  // --- Dune Cup ---
+  {
+    // A shimmering near-oval with a lazy lean — flat out almost everywhere.
+    id: "mirage",
+    name: "Mirage Oval",
+    roadWidth: 70,
+    worldWidth: 1600,
+    worldHeight: 900,
+    points: ring(800, 445, 590, 290, 14, 2, 0.06, 0.9),
+  },
+  {
+    // Seven quick flicks strung around the ring, like a snake's track in sand.
+    id: "sidewinder",
+    name: "Sidewinder",
+    roadWidth: 54,
+    worldWidth: 1450,
+    worldHeight: 920,
+    points: ring(725, 460, 500, 300, 21, 7, 0.13),
+  },
+  {
+    // Four hard lobes of scorched hardpan — a blunter, faster clover.
+    id: "scorch",
+    name: "Scorch Flats",
+    roadWidth: 58,
+    worldWidth: 1250,
+    worldHeight: 1250,
+    points: gear(625, 625, 480, 330, 4),
+  },
+
+  // --- Tide Cup ---
+  {
+    // Three soft bays around a headland — rhythm track by the sea.
+    id: "cove",
+    name: "Sandy Cove",
+    roadWidth: 62,
+    worldWidth: 1400,
+    worldHeight: 1050,
+    points: ring(700, 520, 460, 335, 12, 3, 0.16, 0.5),
+  },
+  {
+    // Two long plank straights joined by round piers — pure speed.
+    id: "boardwalk",
+    name: "Boardwalk Sprint",
+    roadWidth: 66,
+    worldWidth: 1700,
+    worldHeight: 820,
+    points: [
+      { x: 420, y: 220 },
+      { x: 650, y: 220 },
+      { x: 880, y: 220 },
+      { x: 1110, y: 220 },
+      { x: 1340, y: 240 },
+      { x: 1500, y: 330 },
+      { x: 1550, y: 450 },
+      { x: 1480, y: 560 },
+      { x: 1300, y: 610 },
+      { x: 1060, y: 610 },
+      { x: 820, y: 610 },
+      { x: 580, y: 610 },
+      { x: 360, y: 590 },
+      { x: 210, y: 500 },
+      { x: 160, y: 400 },
+      { x: 240, y: 290 },
+    ],
+  },
+  {
+    // Six ripples over the reef shelf — busy but shallow angles.
+    id: "reef",
+    name: "Reef Loop",
+    roadWidth: 56,
+    worldWidth: 1440,
+    worldHeight: 1000,
+    points: ring(720, 500, 480, 330, 18, 6, 0.1),
+  },
+  {
+    // A pinched peanut around the point break — two bowls, one waist.
+    id: "breaker",
+    name: "Breaker Bay",
+    roadWidth: 60,
+    worldWidth: 1550,
+    worldHeight: 900,
+    points: ring(775, 450, 530, 300, 14, 2, 0.17, Math.PI / 2),
+  },
+
+  // --- Frost Cup extras ---
+  {
+    // Four sweeping bends carved by old ice — long, committed corners.
+    id: "glacier",
+    name: "Glacier Run",
+    roadWidth: 58,
+    worldWidth: 1450,
+    worldHeight: 1000,
+    points: ring(725, 500, 490, 325, 16, 4, 0.13, 0.6),
+  },
+  {
+    // A five-point star of frozen spears — the knot's colder cousin.
+    id: "icicle",
+    name: "Icicle Knot",
+    roadWidth: 50,
+    worldWidth: 1150,
+    worldHeight: 1150,
+    points: gear(575, 575, 430, 290, 5),
+  },
+  {
+    // Three long drops with heavy compressions between them.
+    id: "avalanche",
+    name: "Avalanche Drop",
+    roadWidth: 54,
+    worldWidth: 1400,
+    worldHeight: 1020,
+    points: ring(700, 510, 470, 335, 12, 3, 0.19, Math.PI / 3),
+  },
+
+  // --- Dusk Cup extras ---
+  {
+    // Eight shallow kinks under the stars — high speed, never straight.
+    id: "starlight",
+    name: "Starlight Circuit",
+    roadWidth: 52,
+    worldWidth: 1500,
+    worldHeight: 1000,
+    points: ring(750, 500, 520, 340, 24, 8, 0.09),
   },
 ];
 

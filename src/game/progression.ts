@@ -1,8 +1,8 @@
-// Speed classes and track unlocking. Each class is its own progression:
-// race placements are recorded per track per class, and each track's
-// UnlockRule (in the TRACKS catalog) decides what result opens it — a podium
-// on the previous main-line track, or an outright win for bonus branches.
-import { TRACKS } from "./tracks";
+// Speed classes and cup unlocking. Each class is its own progression: cup
+// placements are recorded per cup per class, and each cup's unlock rules (in
+// the CUPS catalog) decide what result opens it — any one satisfied rule is
+// enough, so the progression is a graph, not a line.
+import { CUPS, cupById, type CupDef } from "./cups";
 import type { Tuning } from "./tuning";
 import { VEHICLES } from "./vehicles";
 
@@ -39,90 +39,111 @@ export function applySpeedClass(tuning: Tuning, cls: SpeedClass): Tuning {
 /** Placing this or better counts as a podium. */
 export const PODIUM_PLACEMENT = 3;
 
-// Solo vs group is a binary switch, not two independent toggles: solo races
-// alone against your ghost (no AI opponents, no placement), group races the
-// full field and is what placement-gated unlocks require.
+// Solo vs group is a binary switch, not two independent toggles: solo runs
+// the cup's tracks alone against your ghosts (no AI, no placement), group
+// races the full field and is what placement-gated unlocks require.
 export type RaceMode = "solo" | "group";
 
 export interface Progress {
-  /** classId -> trackId -> best race placement (1 = win) in that class */
-  placements: Record<string, Record<string, number>>;
+  /** classId -> cupId -> best cup placement (1 = win) in that class */
+  cups: Record<string, Record<string, number>>;
   lastClass: string;
-  lastTrack: string;
+  lastCup: string;
   lastVehicle: string;
   raceMode: RaceMode;
 }
 
 export function createProgress(): Progress {
   return {
-    placements: {},
+    cups: {},
     lastClass: SPEED_CLASSES[0]!.id,
-    lastTrack: TRACKS[0]!.id,
+    lastCup: CUPS[0]!.id,
     lastVehicle: VEHICLES[0]!.id,
     raceMode: "group",
   };
 }
 
-export function bestPlacement(progress: Progress, classId: string, trackId: string): number | null {
-  return progress.placements[classId]?.[trackId] ?? null;
+export function bestCupPlacement(progress: Progress, classId: string, cupId: string): number | null {
+  return progress.cups[classId]?.[cupId] ?? null;
 }
 
-export function isTrackUnlocked(progress: Progress, classId: string, trackIndex: number): boolean {
-  const rule = TRACKS[trackIndex]?.unlock;
-  if (!rule) return true;
-  const best = bestPlacement(progress, classId, rule.track);
+function ruleSatisfied(progress: Progress, classId: string, rule: { cup: string; result: string }): boolean {
+  const best = bestCupPlacement(progress, classId, rule.cup);
   if (best === null) return false;
   return rule.result === "win" ? best === 1 : best <= PODIUM_PLACEMENT;
 }
 
+export function isCupUnlocked(progress: Progress, classId: string, cupId: string): boolean {
+  const rules = cupById(cupId).unlock;
+  if (!rules || rules.length === 0) return true;
+  return rules.some((rule) => ruleSatisfied(progress, classId, rule));
+}
+
 /**
- * Record a race placement. Returns the track defs newly unlocked by this
- * result (a win can open a main-line track and a bonus branch at once).
+ * Record a finished cup. Returns the cup defs newly unlocked by this result
+ * (a win can satisfy several rules at once).
  */
-export function recordRaceResult(
+export function recordCupResult(
   progress: Progress,
   classId: string,
-  trackId: string,
+  cupId: string,
   placement: number
-) {
-  const lockedBefore = TRACKS.filter((_, i) => !isTrackUnlocked(progress, classId, i));
-  const byTrack = (progress.placements[classId] ??= {});
-  byTrack[trackId] = Math.min(byTrack[trackId] ?? Infinity, placement);
-  return lockedBefore.filter((def) =>
-    isTrackUnlocked(
-      progress,
-      classId,
-      TRACKS.findIndex((t) => t.id === def.id)
-    )
-  );
+): CupDef[] {
+  const lockedBefore = CUPS.filter((c) => !isCupUnlocked(progress, classId, c.id));
+  const byCup = (progress.cups[classId] ??= {});
+  byCup[cupId] = Math.min(byCup[cupId] ?? Infinity, placement);
+  return lockedBefore.filter((c) => isCupUnlocked(progress, classId, c.id));
 }
 
 const STORAGE_KEY = "vroom.progress.v1";
 
-/** Parse a saved blob, migrating the old finished-track-list shape (every
- * finish back then counted, so it maps to a podium under the new rules). */
+/**
+ * Parse a saved blob. Older shapes stored per-track placements (and before
+ * that a finished-track list); both migrate onto the cup containing the
+ * track, keeping the best placement earned on any of its tracks.
+ */
 export function parseProgress(raw: string): Progress {
   const progress = createProgress();
   const saved = JSON.parse(raw) as Partial<Progress> & {
+    placements?: Record<string, Record<string, number>>;
     completed?: Record<string, string[]>;
+    lastTrack?: string;
   };
-  if (saved.placements && typeof saved.placements === "object") {
+
+  const cupOfTrack = (trackId: string): string | null =>
+    CUPS.find((c) => c.trackIds.includes(trackId))?.id ?? null;
+  const migrate = (classId: string, trackId: string, placement: number) => {
+    const cupId = cupOfTrack(trackId);
+    if (!cupId) return;
+    const byCup = (progress.cups[classId] ??= {});
+    byCup[cupId] = Math.min(byCup[cupId] ?? Infinity, placement);
+  };
+
+  if (saved.cups && typeof saved.cups === "object") {
+    for (const [cls, byCup] of Object.entries(saved.cups)) {
+      if (!byCup || typeof byCup !== "object") continue;
+      for (const [cupId, placement] of Object.entries(byCup)) {
+        if (typeof placement === "number") (progress.cups[cls] ??= {})[cupId] = placement;
+      }
+    }
+  } else if (saved.placements && typeof saved.placements === "object") {
     for (const [cls, byTrack] of Object.entries(saved.placements)) {
       if (!byTrack || typeof byTrack !== "object") continue;
       for (const [trackId, placement] of Object.entries(byTrack)) {
-        if (typeof placement === "number") (progress.placements[cls] ??= {})[trackId] = placement;
+        if (typeof placement === "number") migrate(cls, trackId, placement);
       }
     }
   } else if (saved.completed && typeof saved.completed === "object") {
     for (const [cls, ids] of Object.entries(saved.completed)) {
       if (!Array.isArray(ids)) continue;
       for (const id of ids) {
-        if (typeof id === "string") (progress.placements[cls] ??= {})[id] = PODIUM_PLACEMENT;
+        if (typeof id === "string") migrate(cls, id, PODIUM_PLACEMENT);
       }
     }
   }
+
   if (typeof saved.lastClass === "string") progress.lastClass = saved.lastClass;
-  if (typeof saved.lastTrack === "string") progress.lastTrack = saved.lastTrack;
+  if (typeof saved.lastCup === "string") progress.lastCup = saved.lastCup;
   if (typeof saved.lastVehicle === "string") progress.lastVehicle = saved.lastVehicle;
   if (saved.raceMode === "solo" || saved.raceMode === "group") progress.raceMode = saved.raceMode;
   return progress;

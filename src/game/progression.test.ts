@@ -1,18 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { CUPS } from "./cups";
 import {
   applySpeedClass,
   createProgress,
-  isTrackUnlocked,
+  isCupUnlocked,
   parseProgress,
   PODIUM_PLACEMENT,
-  recordRaceResult,
+  recordCupResult,
   SPEED_CLASSES,
   speedClassById,
 } from "./progression";
-import { TRACKS } from "./tracks";
 import { DEFAULT_TUNING } from "./tuning";
-
-const trackIndex = (id: string) => TRACKS.findIndex((t) => t.id === id);
 
 describe("speed classes", () => {
   it("baseline class leaves tuning untouched", () => {
@@ -36,72 +34,75 @@ describe("speed classes", () => {
   });
 });
 
-describe("track unlocking", () => {
-  it("only the first track starts unlocked", () => {
+describe("cup unlocking", () => {
+  it("only the Sprout Cup starts unlocked", () => {
     const p = createProgress();
-    expect(isTrackUnlocked(p, "100", 0)).toBe(true);
-    for (let i = 1; i < TRACKS.length; i++) {
-      expect(isTrackUnlocked(p, "100", i)).toBe(false);
+    expect(isCupUnlocked(p, "100", "sprout")).toBe(true);
+    for (const cup of CUPS.slice(1)) {
+      expect(isCupUnlocked(p, "100", cup.id)).toBe(false);
     }
   });
 
-  it("a podium unlocks the next main-line track in that class only", () => {
+  it("a Sprout podium opens Dune in that class only, not the win-gated Tide", () => {
     const p = createProgress();
-    const unlocked = recordRaceResult(p, "100", "meadow", PODIUM_PLACEMENT);
-    expect(unlocked.map((t) => t.id)).toEqual(["speedway"]);
-    expect(isTrackUnlocked(p, "100", trackIndex("speedway"))).toBe(true);
-    expect(isTrackUnlocked(p, "100", trackIndex("serpent"))).toBe(false);
-    expect(isTrackUnlocked(p, "150", trackIndex("speedway"))).toBe(false); // other class untouched
+    const unlocked = recordCupResult(p, "100", "sprout", PODIUM_PLACEMENT);
+    expect(unlocked.map((c) => c.id)).toEqual(["dune"]);
+    expect(isCupUnlocked(p, "100", "tide")).toBe(false);
+    expect(isCupUnlocked(p, "150", "dune")).toBe(false); // other class untouched
+  });
+
+  it("a Sprout win opens both branches at once", () => {
+    const p = createProgress();
+    const unlocked = recordCupResult(p, "100", "sprout", 1);
+    expect(unlocked.map((c) => c.id).sort()).toEqual(["dune", "tide"]);
   });
 
   it("finishing off the podium unlocks nothing", () => {
     const p = createProgress();
-    expect(recordRaceResult(p, "100", "meadow", PODIUM_PLACEMENT + 1)).toEqual([]);
-    expect(isTrackUnlocked(p, "100", trackIndex("speedway"))).toBe(false);
+    expect(recordCupResult(p, "100", "sprout", PODIUM_PLACEMENT + 1)).toEqual([]);
+    expect(isCupUnlocked(p, "100", "dune")).toBe(false);
   });
 
-  it("a win on speedway opens both the main line and the Lost Lagoon branch", () => {
-    const p = createProgress();
-    recordRaceResult(p, "100", "meadow", 1);
-    const unlocked = recordRaceResult(p, "100", "speedway", 1);
-    expect(unlocked.map((t) => t.id).sort()).toEqual(["lagoon", "serpent"]);
+  it("Frost opens from either converging branch", () => {
+    const viaDune = createProgress();
+    recordCupResult(viaDune, "100", "sprout", 1);
+    recordCupResult(viaDune, "100", "dune", 3);
+    expect(isCupUnlocked(viaDune, "100", "frost")).toBe(true);
+
+    const viaTide = createProgress();
+    recordCupResult(viaTide, "100", "sprout", 1);
+    recordCupResult(viaTide, "100", "tide", 2);
+    expect(isCupUnlocked(viaTide, "100", "frost")).toBe(true);
   });
 
-  it("a podium on speedway opens serpent but not the win-gated lagoon", () => {
+  it("a Dune win skips straight to Dusk without Frost", () => {
     const p = createProgress();
-    recordRaceResult(p, "100", "meadow", 2);
-    const unlocked = recordRaceResult(p, "100", "speedway", 3);
-    expect(unlocked.map((t) => t.id)).toEqual(["serpent"]);
-    expect(isTrackUnlocked(p, "100", trackIndex("lagoon"))).toBe(false);
+    recordCupResult(p, "100", "sprout", 2);
+    const unlocked = recordCupResult(p, "100", "dune", 1);
+    expect(unlocked.map((c) => c.id).sort()).toEqual(["dusk", "frost"]);
   });
 
   it("a better placement later still counts (best placement is kept)", () => {
     const p = createProgress();
-    recordRaceResult(p, "100", "speedway", 4);
-    recordRaceResult(p, "100", "speedway", 1);
-    expect(recordRaceResult(p, "100", "speedway", 3)).toEqual([]); // worse result can't relock
-    expect(isTrackUnlocked(p, "100", trackIndex("lagoon"))).toBe(true);
+    recordCupResult(p, "100", "sprout", 4);
+    recordCupResult(p, "100", "sprout", 1);
+    expect(recordCupResult(p, "100", "sprout", 3)).toEqual([]); // worse result can't relock
+    expect(isCupUnlocked(p, "100", "tide")).toBe(true);
   });
 
-  it("repeating a result unlocks nothing new", () => {
+  it("winning everything unlocks every cup", () => {
     const p = createProgress();
-    recordRaceResult(p, "100", "meadow", 1);
-    expect(recordRaceResult(p, "100", "meadow", 1)).toEqual([]);
-  });
-
-  it("winning everything unlocks every track", () => {
-    const p = createProgress();
-    for (const track of TRACKS) recordRaceResult(p, "150", track.id, 1);
-    for (let i = 0; i < TRACKS.length; i++) {
-      expect(isTrackUnlocked(p, "150", i)).toBe(true);
+    for (const cup of CUPS) recordCupResult(p, "150", cup.id, 1);
+    for (const cup of CUPS) {
+      expect(isCupUnlocked(p, "150", cup.id)).toBe(true);
     }
   });
 });
 
 describe("saved progress", () => {
-  it("parses the current shape", () => {
+  it("round-trips the current shape", () => {
     const p = createProgress();
-    recordRaceResult(p, "100", "meadow", 2);
+    recordCupResult(p, "100", "sprout", 2);
     p.lastVehicle = "muscle";
     const parsed = parseProgress(JSON.stringify(p));
     expect(parsed).toEqual(p);
@@ -118,12 +119,24 @@ describe("saved progress", () => {
     expect(parsed.raceMode).toBe("group");
   });
 
-  it("migrates the old finished-track lists as podiums", () => {
+  it("migrates old per-track placements onto their cups, keeping the best", () => {
     const parsed = parseProgress(
-      JSON.stringify({ completed: { "100": ["meadow", "speedway"] }, lastClass: "100" })
+      JSON.stringify({
+        placements: { "100": { meadow: 4, speedway: 1, serpent: 2 } },
+        lastClass: "100",
+      })
     );
-    expect(isTrackUnlocked(parsed, "100", trackIndex("serpent"))).toBe(true);
-    expect(isTrackUnlocked(parsed, "100", trackIndex("lagoon"))).toBe(false); // podium ≠ win
+    // meadow/speedway live in Sprout: best of (4, 1) = a win
+    expect(isCupUnlocked(parsed, "100", "dune")).toBe(true);
+    expect(isCupUnlocked(parsed, "100", "tide")).toBe(true);
+    // serpent now lives in Dune: podium there opens Frost
+    expect(isCupUnlocked(parsed, "100", "frost")).toBe(true);
     expect(parsed.lastClass).toBe("100");
+  });
+
+  it("migrates the oldest finished-track lists as podiums", () => {
+    const parsed = parseProgress(JSON.stringify({ completed: { "100": ["meadow"] } }));
+    expect(isCupUnlocked(parsed, "100", "dune")).toBe(true);
+    expect(isCupUnlocked(parsed, "100", "tide")).toBe(false); // podium ≠ win
   });
 });

@@ -3,6 +3,7 @@
 // Pure logic — main.ts steps them alongside the player and the scene draws
 // them by vehicle id.
 import { createBot, type BotPersonality } from "./botdriver";
+import type { RosterEntry } from "./cups";
 import { createDraft, inSlipstream, stepDraft, type DraftState } from "./draft";
 import { SPIN_INPUT, spinCar, type ItemRacer } from "./items";
 import { createCarState, stepCar, type CarInput, type CarState } from "./physics";
@@ -16,7 +17,7 @@ import {
   type TrackQuery,
 } from "./track";
 import type { Tuning } from "./tuning";
-import { VEHICLES } from "./vehicles";
+import { vehicleById, VEHICLES } from "./vehicles";
 
 export const OPPONENT_COUNT = 3; // default field; tuning.opponentCount overrides
 
@@ -75,24 +76,32 @@ export function playerGridSlot(track: Track, opponentCount = OPPONENT_COUNT): { 
 }
 
 /**
- * Build the opposing field: distinct vehicles the player isn't driving,
- * shuffled onto the front grid slots with shuffled skill factors.
+ * Draw a bot lineup: distinct vehicles the player isn't driving, with
+ * shuffled skill factors. A roster persists across a cup series so the same
+ * rivals accumulate points race after race.
  */
-export function createOpponents(
-  track: Track,
-  query: TrackQuery,
+export function buildRoster(
   playerVehicleId: string,
-  baseTuning: Tuning,
-  cls: SpeedClass,
   count = OPPONENT_COUNT,
   rng: () => number = Math.random
-): Opponent[] {
+): RosterEntry[] {
   const pool = VEHICLES.filter((v) => v.id !== playerVehicleId);
   shuffle(pool, rng);
   const skills = shuffle(skillSpread(count), rng);
+  return skills.map((skill, i) => ({ vehicleId: pool[i % pool.length]!.id, skill }));
+}
 
-  return skills.map((skill, i) => {
-    const vehicle = pool[i % pool.length]!;
+/** Put a roster on the grid: fresh cars and trackers, same seats. */
+export function createOpponents(
+  track: Track,
+  query: TrackQuery,
+  roster: RosterEntry[],
+  baseTuning: Tuning,
+  cls: SpeedClass,
+  rng: () => number = Math.random
+): Opponent[] {
+  return roster.map(({ vehicleId, skill }, i) => {
+    const vehicle = vehicleById(vehicleId);
     const tuning = applySpeedClass({ ...baseTuning, ...vehicle.values }, cls);
     tuning.maxSpeed *= skill;
     tuning.accel *= skill;

@@ -1,11 +1,23 @@
-// Post-race results card: placement, lap splits, race total, record
-// callouts, and unlock notices, with the "what next" buttons.
+// Post-race results card: this race's placement and splits, the running cup
+// standings, record callouts, and — after the last race — the cup verdict
+// with any unlock notices. Mid-series there is no retry (points are already
+// on the board); solo runs and finished cups can restart freely.
 import { formatTime, ordinal } from "./hud";
+
+export interface StandingRow {
+  name: string;
+  total: number;
+  gained: number; // points earned in the race just finished
+  you: boolean;
+}
 
 export interface ResultsData {
   trackName: string;
   classLabel: string;
-  placement: number; // 1-based finish position
+  seriesName: string;
+  raceNumber: number; // 1-based within the cup
+  racesTotal: number;
+  placement: number; // 1-based finish position this race
   racerCount: number;
   solo: boolean; // no field to place against — skip placement language
   splits: number[];
@@ -13,8 +25,10 @@ export interface ResultsData {
   bestSplitIndex: number;
   newBestLap: boolean;
   newBestRace: boolean;
+  standings: StandingRow[];
+  cupPlacement: number | null; // set only after the final race of a group cup
   unlockedNames: string[];
-  hasNext: boolean; // a next track exists and is unlocked
+  hasNext: boolean; // more races left in this cup
 }
 
 export interface ResultsHandlers {
@@ -30,18 +44,37 @@ export function showResults(data: ResultsData, handlers: ResultsHandlers): void 
   const card = document.createElement("div");
   card.className = "results-card";
 
+  const final = data.cupPlacement !== null;
   const flag = document.createElement("div");
   flag.className = "results-flag";
-  flag.textContent = data.solo ? "🏁" : data.placement === 1 ? "🏆" : data.placement <= 3 ? "🏁" : "💨";
+  flag.textContent = data.solo
+    ? "🏁"
+    : final
+      ? data.cupPlacement === 1
+        ? "🏆"
+        : data.cupPlacement! <= 3
+          ? "🎖️"
+          : "💨"
+      : data.placement === 1
+        ? "🥇"
+        : data.placement <= 3
+          ? "🏁"
+          : "💨";
   const title = document.createElement("h2");
   title.textContent = data.solo
-    ? "lap complete"
-    : data.placement === 1
-      ? "you win!"
-      : `${ordinal(data.placement)} of ${data.racerCount}`;
+    ? final || !data.hasNext
+      ? "course complete"
+      : "run complete"
+    : final
+      ? data.cupPlacement === 1
+        ? `you win the ${data.seriesName}!`
+        : `${ordinal(data.cupPlacement!)} in the ${data.seriesName}`
+      : data.placement === 1
+        ? "you win the race!"
+        : `${ordinal(data.placement)} this race`;
   const sub = document.createElement("div");
   sub.className = "results-sub";
-  sub.textContent = `${data.trackName} · ${data.classLabel}`;
+  sub.textContent = `${data.trackName} · race ${data.raceNumber}/${data.racesTotal} · ${data.seriesName} · ${data.classLabel}`;
   card.append(flag, title, sub);
 
   const table = document.createElement("div");
@@ -66,6 +99,31 @@ export function showResults(data: ResultsData, handlers: ResultsHandlers): void 
   table.appendChild(totalRow);
   card.appendChild(table);
 
+  if (data.standings.length > 0) {
+    const standings = document.createElement("div");
+    standings.className = "results-standings";
+    const header = document.createElement("div");
+    header.className = "standings-title";
+    header.textContent = final ? "final standings" : "cup standings";
+    standings.appendChild(header);
+    data.standings.forEach((row, i) => {
+      const el = document.createElement("div");
+      el.className = "standings-row" + (row.you ? " you" : "");
+      const place = document.createElement("span");
+      place.className = "standings-place";
+      place.textContent = final && i < 3 ? ["🥇", "🥈", "🥉"][i]! : `${i + 1}.`;
+      const name = document.createElement("span");
+      name.className = "standings-name";
+      name.textContent = row.name;
+      const pts = document.createElement("span");
+      pts.className = "standings-pts";
+      pts.textContent = final ? `${row.total} pts` : `+${row.gained} · ${row.total} pts`;
+      el.append(place, name, pts);
+      standings.appendChild(el);
+    });
+    card.appendChild(standings);
+  }
+
   const badges: string[] = [];
   if (data.newBestRace) badges.push("★ new course record");
   if (data.newBestLap) badges.push("★ new best lap");
@@ -86,8 +144,9 @@ export function showResults(data: ResultsData, handlers: ResultsHandlers): void 
     btn.addEventListener("click", cb);
     buttons.appendChild(btn);
   };
-  add("again", handlers.onAgain);
-  if (data.hasNext) add("next track", handlers.onNext, true);
+  // mid-series group races can't be re-run — their points are already scored
+  if (data.solo || !data.hasNext) add(data.hasNext ? "again" : "run it back", handlers.onAgain);
+  if (data.hasNext) add("next race", handlers.onNext, true);
   add("menu", handlers.onMenu);
   card.appendChild(buttons);
 

@@ -7,6 +7,7 @@ import type { ItemWorld } from "../game/items";
 import type { CarState } from "../game/physics";
 import type { Track, TrackQuery } from "../game/track";
 import type { Tuning } from "../game/tuning";
+import { themeById, type WorldTheme } from "./themes";
 import {
   buildCarFrames,
   carFrameIndex,
@@ -24,24 +25,17 @@ import {
   vehicleSprite,
 } from "./sprites";
 
+// Theme-independent colors; everything the ground is made of lives in the
+// WorldTheme (render/themes.ts) so each cup reads as its own place.
 const COLORS = {
-  grass: "#7fbf4d",
-  grassPatch: "#77b747",
-  tuft: "#639e39",
-  roadEdge: "#b5975f",
-  road: "#d9c08f",
-  speckle: "#cbb283",
   checkerDark: "#4a3728",
   checkerLight: "#f6efdc",
-  fencePost: "#8a5a33",
-  fenceRail: "#7a5233",
   dust: "#e3d3ae",
   boost: "#fff6df",
   skid: "rgba(58, 43, 32, 0.35)",
   shadow: "rgba(42, 32, 20, 0.2)",
 };
 
-const FLOWER_COLORS = ["#e88bb8", "#f2d066", "#f6efdc"];
 const TARGET_BUFFER_WIDTH = 210;
 
 interface Particle {
@@ -78,16 +72,21 @@ export class Scene {
   private lastCarFrame = -1;
   private ready = false;
 
+  private theme: WorldTheme;
+
   constructor(
     private track: Track,
     query: TrackQuery,
     display: HTMLCanvasElement,
     vehicleId = "classic",
-    corridorPx: number | null = null
+    corridorPx: number | null = null,
+    theme: WorldTheme = themeById("meadow")
   ) {
+    this.theme = theme;
     this.display = display;
     this.displayCtx = display.getContext("2d")!;
-    this.world = paintWorld(track, query, corridorPx);
+    display.style.background = theme.grass; // letterbox slack matches the world
+    this.world = paintWorld(track, query, corridorPx, theme);
     this.skid = document.createElement("canvas");
     this.skid.width = track.worldWidth;
     this.skid.height = track.worldHeight;
@@ -240,7 +239,7 @@ export class Scene {
     const fracX = Math.round((originX - sx) * this.scale);
     const fracY = Math.round((originY - sy) * this.scale);
 
-    ctx.fillStyle = COLORS.grass;
+    ctx.fillStyle = this.theme.grass;
     ctx.fillRect(0, 0, bw, bh);
     ctx.drawImage(this.world, sx, sy, bw, bh, 0, 0, bw, bh);
     ctx.drawImage(this.skid, sx, sy, bw, bh, 0, 0, bw, bh);
@@ -319,7 +318,8 @@ function paintTrackFence(
   ctx: CanvasRenderingContext2D,
   track: Track,
   query: TrackQuery,
-  corridor: number
+  corridor: number,
+  theme: WorldTheme
 ): void {
   const n = track.samples.length;
   const spacing = 20;
@@ -343,34 +343,39 @@ function paintTrackFence(
         continue;
       }
       if (prev && Math.hypot(px - prev.x, py - prev.y) < spacing * 1.9) {
-        ctx.strokeStyle = COLORS.fenceRail;
+        ctx.strokeStyle = theme.fenceRail;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(prev.x, prev.y - 3);
         ctx.lineTo(px, py - 3);
         ctx.stroke();
       }
-      ctx.fillStyle = COLORS.fencePost;
+      ctx.fillStyle = theme.fencePost;
       ctx.fillRect(Math.round(px) - 1, Math.round(py) - 5, 2, 6);
       prev = { x: px, y: py };
     }
   }
 }
 
-function paintWorld(track: Track, query: TrackQuery, corridorPx: number | null = null): HTMLCanvasElement {
+function paintWorld(
+  track: Track,
+  query: TrackQuery,
+  corridorPx: number | null = null,
+  theme: WorldTheme = themeById("meadow")
+): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = track.worldWidth;
   canvas.height = track.worldHeight;
   const ctx = canvas.getContext("2d")!;
 
-  ctx.fillStyle = COLORS.grass;
+  ctx.fillStyle = theme.grass;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // mottled grass patches
+  // mottled ground patches
   for (let y = 0; y < canvas.height; y += 8) {
     for (let x = 0; x < canvas.width; x += 8) {
       if (hash(x, y) < 0.22) {
-        ctx.fillStyle = COLORS.grassPatch;
+        ctx.fillStyle = theme.grassPatch;
         ctx.fillRect(x, y, 8, 8);
       }
     }
@@ -379,8 +384,8 @@ function paintWorld(track: Track, query: TrackQuery, corridorPx: number | null =
   // road: dark edge pass, then fill pass
   const w = track.roadWidth;
   for (const pass of [
-    { radius: w / 2 + 3, color: COLORS.roadEdge },
-    { radius: w / 2, color: COLORS.road },
+    { radius: w / 2 + 3, color: theme.roadEdge },
+    { radius: w / 2, color: theme.road },
   ]) {
     ctx.fillStyle = pass.color;
     for (const p of track.samples) {
@@ -391,7 +396,7 @@ function paintWorld(track: Track, query: TrackQuery, corridorPx: number | null =
   }
 
   // road speckle
-  ctx.fillStyle = COLORS.speckle;
+  ctx.fillStyle = theme.speckle;
   for (let i = 0; i < track.samples.length; i += 2) {
     const p = track.samples[i]!;
     const a = hash(i, 1) * Math.PI * 2;
@@ -406,12 +411,12 @@ function paintWorld(track: Track, query: TrackQuery, corridorPx: number | null =
       if (dist < w / 2 + 8) continue;
       const r = hash(x, y + 3);
       if (r < 0.05) {
-        ctx.fillStyle = COLORS.tuft;
+        ctx.fillStyle = theme.tuft;
         ctx.fillRect(x, y, 2, 1);
         ctx.fillRect(x + 3, y + 2, 2, 1);
       } else if (r < 0.09) {
-        const color = FLOWER_COLORS[Math.floor(hash(x, y + 7) * FLOWER_COLORS.length)]!;
-        ctx.fillStyle = COLORS.tuft;
+        const color = theme.flowers[Math.floor(hash(x, y + 7) * theme.flowers.length)]!;
+        ctx.fillStyle = theme.tuft;
         ctx.fillRect(x, y + 1, 1, 2);
         ctx.fillStyle = color;
         ctx.fillRect(x, y, 2, 2);
@@ -423,7 +428,7 @@ function paintWorld(track: Track, query: TrackQuery, corridorPx: number | null =
     }
   }
 
-  if (corridorPx !== null) paintTrackFence(ctx, track, query, corridorPx);
+  if (corridorPx !== null) paintTrackFence(ctx, track, query, corridorPx, theme);
 
   // checkered start line, two rows deep across the road
   const start = track.start;
@@ -440,12 +445,12 @@ function paintWorld(track: Track, query: TrackQuery, corridorPx: number | null =
   }
 
   // fence around the world edge
-  ctx.fillStyle = COLORS.fenceRail;
+  ctx.fillStyle = theme.fenceRail;
   ctx.fillRect(4, 6, canvas.width - 8, 2);
   ctx.fillRect(4, canvas.height - 10, canvas.width - 8, 2);
   ctx.fillRect(4, 6, 2, canvas.height - 14);
   ctx.fillRect(canvas.width - 8, 6, 2, canvas.height - 14);
-  ctx.fillStyle = COLORS.fencePost;
+  ctx.fillStyle = theme.fencePost;
   for (let x = 4; x < canvas.width - 6; x += 22) {
     ctx.fillRect(x, 3, 3, 9);
     ctx.fillRect(x, canvas.height - 13, 3, 9);
