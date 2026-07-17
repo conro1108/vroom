@@ -14,9 +14,9 @@ export interface SpeedClass {
 }
 
 export const SPEED_CLASSES: SpeedClass[] = [
-  { id: "100", label: "100cc", mult: 1 },
-  { id: "150", label: "150cc", mult: 1.22 },
-  { id: "200", label: "200cc", mult: 1.45 },
+  { id: "50", label: "50cc", mult: 1 },
+  { id: "100", label: "100cc", mult: 1.4 },
+  { id: "150", label: "150cc", mult: 1.75 },
 ];
 
 export function speedClassById(id: string): SpeedClass {

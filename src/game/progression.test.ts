@@ -17,7 +17,7 @@ describe("speed classes", () => {
   });
 
   it("higher classes scale speed but not control preferences", () => {
-    const cls = speedClassById("200");
+    const cls = speedClassById("150");
     const t = applySpeedClass({ ...DEFAULT_TUNING }, cls);
     expect(t.maxSpeed).toBeCloseTo(DEFAULT_TUNING.maxSpeed * cls.mult);
     expect(t.accel).toBeCloseTo(DEFAULT_TUNING.accel * cls.mult);
