@@ -6,6 +6,7 @@
 // values so a good feel found on-device can be pasted back into
 // DEFAULT_TUNING or a vehicle definition.
 import { DEFAULT_TUNING, saveTuning, type Tuning } from "../game/tuning";
+import { iconEl } from "./icons";
 
 type NumericTuningKey = {
   [K in keyof Tuning]: Tuning[K] extends number ? K : never;
@@ -62,6 +63,7 @@ export function createDevPanel(
   onResetProgress?: () => void
 ): void {
   const toggle = document.getElementById("dev-toggle")!;
+  toggle.replaceChildren(iconEl("gear", "p15"));
   const panel = document.getElementById("dev-panel")!;
   let advancedOpen = false;
 
@@ -151,7 +153,7 @@ export function createDevPanel(
     if (onCalibrate) {
       const calBtn = document.createElement("button");
       calBtn.className = "calibrate-btn";
-      calBtn.textContent = "🧪 calibrate feel (A/B driving test)";
+      calBtn.append(iconEl("flask"), " calibrate feel (A/B driving test)");
       calBtn.addEventListener("click", () => {
         panel.hidden = true;
         onCalibrate();
@@ -162,7 +164,7 @@ export function createDevPanel(
     if (onResetProgress) {
       const resetBtn = document.createElement("button");
       resetBtn.className = "danger-btn";
-      resetBtn.textContent = "🗑️ reset all progress";
+      resetBtn.append(iconEl("trash"), " reset all progress");
       resetBtn.addEventListener("click", () => {
         if (confirm("Reset all cup progress and unlocks? This can't be undone.")) {
           onResetProgress();

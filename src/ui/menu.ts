@@ -16,6 +16,9 @@ import { saveTuning, type Tuning } from "../game/tuning";
 import { applyVehicle, CUSTOM_VEHICLE_ID, loadCustomVehicle, resetCustomVehicle, VEHICLES } from "../game/vehicles";
 import { drawMap, vehicleSprite } from "../render/sprites";
 import { ordinal } from "./hud";
+import { iconEl, STAR_5, type IconName } from "./icons";
+
+const PLACE_MEDALS: IconName[] = ["medal1", "medal2", "medal3"];
 
 // Logical map size; the canvas and % -positioned nodes scale together.
 const MAP_W = 440;
@@ -79,14 +82,19 @@ function paintTrails(canvas: HTMLCanvasElement, progress: Progress, classId: str
       ctx.quadraticCurveTo(mx, my, x2, y2);
       ctx.stroke();
 
-      // a win-gated trail gets a little star at its midpoint
+      // a win-gated trail gets a little star at its midpoint — drawn as a
+      // pixel map (2px cells), never fillText: glyphs anti-alias off the grid
       if (rule.result === "win") {
         ctx.setLineDash([]);
         ctx.fillStyle = earned ? "#e0532f" : "rgba(138, 90, 51, 0.4)";
-        ctx.font = "10px monospace";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("★", (x1 + 2 * mx + x2) / 4, (y1 + 2 * my + y2) / 4);
+        const cell = 2;
+        const sx = Math.round((x1 + 2 * mx + x2) / 4 - (STAR_5[0]!.length * cell) / 2);
+        const sy = Math.round((y1 + 2 * my + y2) / 4 - (STAR_5.length * cell) / 2);
+        for (let py = 0; py < STAR_5.length; py++) {
+          for (let px = 0; px < STAR_5[py]!.length; px++) {
+            if (STAR_5[py]![px] !== ".") ctx.fillRect(sx + px * cell, sy + py * cell, cell, cell);
+          }
+        }
       }
     });
   });
@@ -131,7 +139,7 @@ export function createMenu(
 
     const heading = document.createElement("div");
     heading.className = "track-picker-title";
-    heading.textContent = `${cup.icon} ${cup.name}`;
+    heading.append(iconEl(cup.icon as IconName), ` ${cup.name}`);
     const hint = document.createElement("div");
     hint.className = "track-picker-sub";
     hint.textContent = "pick a track";
@@ -275,14 +283,14 @@ export function createMenu(
     // unlocks — solo is practice against your own ghosts.
     const modeRow = document.createElement("div");
     modeRow.className = "mode-row";
-    const modes: { id: "group" | "solo"; label: string }[] = [
-      { id: "group", label: "🏁 group" },
-      { id: "solo", label: "👻 solo" },
+    const modes: { id: "group" | "solo"; icon: IconName; label: string }[] = [
+      { id: "group", icon: "flag", label: "group" },
+      { id: "solo", icon: "ghost", label: "solo" },
     ];
     for (const m of modes) {
       const btn = document.createElement("button");
       btn.className = "mode-btn" + (progress.raceMode === m.id ? " active" : "");
-      btn.textContent = m.label;
+      btn.append(iconEl(m.icon), ` ${m.label}`);
       btn.addEventListener("click", () => {
         progress.raceMode = m.id;
         saveProgress(progress);
@@ -310,7 +318,7 @@ export function createMenu(
 
       const icon = document.createElement("div");
       icon.className = "cup-icon";
-      icon.textContent = cup.icon;
+      icon.appendChild(iconEl(cup.icon as IconName, "p3"));
       const name = document.createElement("div");
       name.className = "cup-name";
       name.textContent = cup.name;
@@ -327,14 +335,14 @@ export function createMenu(
       if (!unlocked) {
         const lock = document.createElement("div");
         lock.className = "cup-lock";
-        lock.textContent = "🔒";
+        lock.appendChild(iconEl("lock"));
         node.appendChild(lock);
       } else {
         const best = bestCupPlacement(progress, progress.lastClass, cup.id);
         if (best !== null && best <= 3) {
           const medal = document.createElement("div");
           medal.className = "cup-medal";
-          medal.textContent = ["🥇", "🥈", "🥉"][best - 1]!;
+          medal.appendChild(iconEl(PLACE_MEDALS[best - 1]!, "p15"));
           node.appendChild(medal);
         }
       }

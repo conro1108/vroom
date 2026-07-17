@@ -2,14 +2,31 @@
 // countdown, item bubble, and toast. Pure display — record keeping lives in
 // game/records, item logic in game/items.
 import type { ItemKind } from "../game/items";
+import {
+  CROWN_MAP,
+  CROWN_PALETTE,
+  HOMING_MAP,
+  HOMING_PALETTE,
+  OIL_MAP,
+  OIL_PALETTE,
+  ROCKET_MAP,
+  ROCKET_PALETTE,
+  type Palette,
+  type PixelMap,
+} from "../render/sprites";
+import { ICONS, mapIconEl } from "./icons";
 
-const ITEM_ICONS: Record<ItemKind, string> = {
-  turbo: "⚡",
-  rocket: "🚀",
-  missile: "💘", // the cute homing seeker
-  crown: "👑", // the rare one — hunts down 1st place
-  oil: "🛢️",
+// the bubble shows the same pixel art the item is drawn with in-world
+// (turbo has no world sprite, so it borrows the UI bolt icon)
+const ITEM_ICONS: Record<ItemKind, { map: PixelMap; palette: Palette }> = {
+  turbo: ICONS.bolt,
+  rocket: { map: ROCKET_MAP, palette: ROCKET_PALETTE },
+  missile: { map: HOMING_MAP, palette: HOMING_PALETTE }, // the cute homing seeker
+  crown: { map: CROWN_MAP, palette: CROWN_PALETTE }, // the rare one — hunts down 1st place
+  oil: { map: OIL_MAP, palette: OIL_PALETTE },
 };
+
+const ITEM_ICON_BOX = 40; // px of bubble the art may fill, at integer scale
 
 export interface Hud {
   setLapTime(ms: number): void;
@@ -50,7 +67,8 @@ export function createHud(): Hud {
         itemEl.hidden = true;
         return;
       }
-      itemEl.textContent = ITEM_ICONS[item];
+      const art = ITEM_ICONS[item];
+      itemEl.replaceChildren(mapIconEl(`item-${item}`, art.map, art.palette, ITEM_ICON_BOX));
       itemEl.hidden = false;
       // restart the pop animation on every new pickup
       itemEl.style.animation = "none";

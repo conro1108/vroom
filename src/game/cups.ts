@@ -13,7 +13,7 @@ export interface CupUnlock {
 export interface CupDef {
   id: string;
   name: string;
-  icon: string; // map badge
+  icon: string; // pixel icon name (ui/icons.ts) for the map badge
   theme: string; // WorldTheme id in render/themes.ts
   trackIds: string[];
   /** Absent = open from the start; otherwise ANY satisfied rule opens it. */
@@ -26,7 +26,7 @@ export const CUPS: CupDef[] = [
   {
     id: "sprout",
     name: "Sprout Cup",
-    icon: "🌱",
+    icon: "sprout",
     theme: "meadow",
     trackIds: ["meadow", "speedway", "daisy", "lagoon"],
     map: { x: 0.18, y: 0.82 },
@@ -34,7 +34,7 @@ export const CUPS: CupDef[] = [
   {
     id: "dune",
     name: "Dune Cup",
-    icon: "🌵",
+    icon: "cactus",
     theme: "desert",
     trackIds: ["mirage", "serpent", "sidewinder", "scorch"],
     unlock: [{ cup: "sprout", result: "podium" }],
@@ -43,7 +43,7 @@ export const CUPS: CupDef[] = [
   {
     id: "tide",
     name: "Tide Cup",
-    icon: "🌊",
+    icon: "wave",
     theme: "tide",
     trackIds: ["cove", "boardwalk", "reef", "breaker"],
     unlock: [{ cup: "sprout", result: "win" }],
@@ -52,7 +52,7 @@ export const CUPS: CupDef[] = [
   {
     id: "frost",
     name: "Frost Cup",
-    icon: "❄️",
+    icon: "snowflake",
     theme: "frost",
     trackIds: ["switchback", "glacier", "icicle", "avalanche"],
     // converging paths: either branch gets you into the mountains
@@ -65,7 +65,7 @@ export const CUPS: CupDef[] = [
   {
     id: "dusk",
     name: "Dusk Cup",
-    icon: "🌙",
+    icon: "moon",
     theme: "dusk",
     trackIds: ["knot", "gauntlet", "rally", "starlight"],
     // the long road in — or the shortcut for dominating the dunes

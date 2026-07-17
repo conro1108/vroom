@@ -39,6 +39,29 @@ button {
   touch-action: manipulation;
 }
 
+/* pixel-art UI icons (ui/icons.ts): 12px base, sized up by class */
+.picon {
+  width: 12px;
+  height: 12px;
+  image-rendering: pixelated;
+  vertical-align: -1px;
+}
+.picon.p15 { width: 18px; height: 18px; vertical-align: -3px; }
+.picon.p2 { width: 24px; height: 24px; vertical-align: -5px; }
+.picon.p3 { width: 36px; height: 36px; }
+
+/* pre-scaled sprite art (item bubble): natural size, just center it */
+.map-icon {
+  display: block;
+  margin: 0 auto;
+  image-rendering: pixelated;
+}
+
+#dev-toggle .picon {
+  display: block;
+  margin: 0 auto;
+}
+
 button:focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
@@ -273,7 +296,7 @@ body {
   border-top: 3px solid var(--brown);
   border-radius: 24px 24px 0 0;
   padding: 16px 20px calc(env(safe-area-inset-bottom) + 16px);
-  box-shadow: 0 -8px 28px rgba(74, 55, 40, 0.22);
+  box-shadow: 0 -4px 0 rgba(74, 55, 40, 0.25);
   z-index: 8;
   font-family: var(--font);
   animation: sheet-up 0.22s cubic-bezier(0.22, 1, 0.36, 1);
@@ -506,9 +529,7 @@ body {
   font-size: 52px;
   letter-spacing: 4px;
   color: var(--accent);
-  text-shadow:
-    0 4px 0 rgba(74, 55, 40, 0.25),
-    0 10px 28px rgba(74, 55, 40, 0.18);
+  text-shadow: 0 4px 0 rgba(74, 55, 40, 0.25);
 }
 
 .menu-sub {
@@ -672,7 +693,7 @@ body {
   border-radius: 18px;
   overflow: hidden;
   box-shadow:
-    inset 0 2px 10px rgba(90, 70, 50, 0.12),
+    inset 0 3px 0 rgba(90, 70, 50, 0.12),
     0 3px 0 rgba(74, 55, 40, 0.25);
 }
 
@@ -830,9 +851,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* flat scrim — frosted-glass blur is smooth-app language, not pixel art */
   background: rgba(74, 55, 40, 0.45);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
   padding: 20px;
   animation: overlay-in 0.18s ease-out;
 }

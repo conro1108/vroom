@@ -3,6 +3,9 @@
 // with any unlock notices. Mid-series there is no retry (points are already
 // on the board); solo runs and finished cups can restart freely.
 import { formatTime, ordinal } from "./hud";
+import { iconEl, type IconName } from "./icons";
+
+const PLACE_MEDALS: IconName[] = ["medal1", "medal2", "medal3"];
 
 export interface StandingRow {
   name: string;
@@ -47,19 +50,20 @@ export function showResults(data: ResultsData, handlers: ResultsHandlers): void 
   const final = data.cupPlacement !== null;
   const flag = document.createElement("div");
   flag.className = "results-flag";
-  flag.textContent = data.solo
-    ? "🏁"
+  const flagIcon: IconName = data.solo
+    ? "flag"
     : final
       ? data.cupPlacement === 1
-        ? "🏆"
+        ? "trophy"
         : data.cupPlacement! <= 3
-          ? "🎖️"
-          : "💨"
+          ? "rosette"
+          : "dust"
       : data.placement === 1
-        ? "🥇"
+        ? "medal1"
         : data.placement <= 3
-          ? "🏁"
-          : "💨";
+          ? "flag"
+          : "dust";
+  flag.appendChild(iconEl(flagIcon, "p3"));
   const title = document.createElement("h2");
   title.textContent = data.solo
     ? final || !data.hasNext
@@ -111,7 +115,8 @@ export function showResults(data: ResultsData, handlers: ResultsHandlers): void 
       el.className = "standings-row" + (row.you ? " you" : "");
       const place = document.createElement("span");
       place.className = "standings-place";
-      place.textContent = final && i < 3 ? ["🥇", "🥈", "🥉"][i]! : `${i + 1}.`;
+      if (final && i < 3) place.appendChild(iconEl(PLACE_MEDALS[i]!));
+      else place.textContent = `${i + 1}.`;
       const name = document.createElement("span");
       name.className = "standings-name";
       name.textContent = row.name;
@@ -124,14 +129,14 @@ export function showResults(data: ResultsData, handlers: ResultsHandlers): void 
     card.appendChild(standings);
   }
 
-  const badges: string[] = [];
-  if (data.newBestRace) badges.push("★ new course record");
-  if (data.newBestLap) badges.push("★ new best lap");
-  for (const name of data.unlockedNames) badges.push(`🔓 ${name} unlocked`);
-  for (const text of badges) {
+  const badges: { icon: IconName; text: string }[] = [];
+  if (data.newBestRace) badges.push({ icon: "star", text: "new course record" });
+  if (data.newBestLap) badges.push({ icon: "star", text: "new best lap" });
+  for (const name of data.unlockedNames) badges.push({ icon: "unlock", text: `${name} unlocked` });
+  for (const { icon, text } of badges) {
     const badge = document.createElement("div");
     badge.className = "results-badge";
-    badge.textContent = text;
+    badge.append(iconEl(icon), ` ${text}`);
     card.appendChild(badge);
   }
 
