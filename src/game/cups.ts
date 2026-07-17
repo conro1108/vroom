@@ -83,11 +83,14 @@ export function cupById(id: string): CupDef {
 
 export const RACES_PER_CUP = 4;
 
-// Points per race placement (1st, 2nd, ...); everyone past the table gets 1.
-const PLACEMENT_POINTS = [10, 7, 4, 2];
-
-export function cupPoints(placement: number): number {
-  return PLACEMENT_POINTS[placement - 1] ?? 1;
+/**
+ * Points for finishing `placement` out of `fieldSize`. Linear in the field:
+ * last place scores 1 and every place up is worth one more, so first scores
+ * `fieldSize`. This scales the spread with the pool and keeps it flat — a win
+ * is worth a little more than 2nd, not a landslide over it.
+ */
+export function cupPoints(placement: number, fieldSize: number): number {
+  return Math.max(1, fieldSize - placement + 1);
 }
 
 /** A bot seat that persists across the whole series. */
@@ -117,7 +120,8 @@ export function createCupState(cupId: string, roster: RosterEntry[]): CupState {
 
 /** Fold one race's placements (index 0 = player) into the series totals. */
 export function recordCupRace(state: CupState, placements: number[]): void {
-  state.lastRacePoints = placements.map(cupPoints);
+  const fieldSize = placements.length;
+  state.lastRacePoints = placements.map((p) => cupPoints(p, fieldSize));
   state.lastRacePoints.forEach((p, i) => (state.points[i]! += p));
 }
 
@@ -132,4 +136,25 @@ export function cupStandings(state: CupState): { index: number; points: number }
 /** The player's current (or final) placement in the series. */
 export function playerCupPlacement(state: CupState): number {
   return cupStandings(state).findIndex((s) => s.index === 0) + 1;
+}
+
+/**
+ * Grid slot (0 = pole) for each racer in the upcoming race — index 0 is the
+ * player, i+1 is opponent i. The opening race has no prior result, so the
+ * player starts at the back and hunts the bots down the field. Every race
+ * after grids by *reverse* series standings: whoever leads the cup starts
+ * furthest back, so a runaway series keeps getting reeled in.
+ */
+export function startingGrid(state: CupState): number[] {
+  const fieldSize = state.roster.length + 1;
+  if (state.raceIndex === 0) {
+    return [fieldSize - 1, ...state.roster.map((_, i) => i)];
+  }
+  const grid = new Array<number>(fieldSize);
+  // cupStandings is best-first; reversed, the series leader lands on slot 0's
+  // opposite end and the backmarkers get the front rows.
+  cupStandings(state)
+    .reverse()
+    .forEach((s, gridIndex) => (grid[s.index] = gridIndex));
+  return grid;
 }

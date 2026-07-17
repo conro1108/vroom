@@ -36,12 +36,18 @@ export function skillSpread(count: number): number[] {
   );
 }
 
-// Grid layout in world px behind the start line: two columns, rows every
-// ROW_GAP. The player takes the slot after all opponents — front rows are
-// the bots you have to hunt.
+// Grid layout in world px behind the start line: cars fill a row of `columns`
+// slots, then step back a row. A wider squad gets a wider grid so it doesn't
+// string out into an absurdly long single-file queue behind the line.
 const GRID_FIRST_ROW = 16;
 const GRID_ROW_GAP = 18;
-const GRID_SIDE = 11;
+const GRID_LANE_FRAC = 0.28; // outermost column sits at this fraction of the road out from center
+
+/** How many columns the grid uses for a field this size: 2 for a small pack,
+ * up to 4 once the squad gets big. */
+export function gridColumns(fieldSize: number): number {
+  return Math.max(2, Math.min(4, Math.ceil(fieldSize / 3)));
+}
 
 /** Opponents satisfy ItemRacer, so the item system treats bots and the
  * player uniformly — `position`/`held`/`spin`/`boost`/`finished` are the
@@ -61,9 +67,12 @@ export interface Opponent extends ItemRacer {
   finishOrder: number | null;
 }
 
-export function gridSlot(track: Track, index: number): { x: number; y: number } {
-  const back = GRID_FIRST_ROW + Math.floor(index / 2) * GRID_ROW_GAP;
-  const side = (index % 2 === 0 ? -1 : 1) * GRID_SIDE;
+export function gridSlot(track: Track, index: number, columns = 2): { x: number; y: number } {
+  const col = index % columns;
+  const back = GRID_FIRST_ROW + Math.floor(index / columns) * GRID_ROW_GAP;
+  // spread columns evenly across the road, centered on the line
+  const spread = track.roadWidth * GRID_LANE_FRAC;
+  const side = columns <= 1 ? 0 : (col / (columns - 1) - 0.5) * 2 * spread;
   const dir = { x: Math.cos(track.startHeading), y: Math.sin(track.startHeading) };
   return {
     x: track.start.x - dir.x * back - dir.y * side,
@@ -71,8 +80,12 @@ export function gridSlot(track: Track, index: number): { x: number; y: number } 
   };
 }
 
-export function playerGridSlot(track: Track, opponentCount = OPPONENT_COUNT): { x: number; y: number } {
-  return gridSlot(track, opponentCount);
+export function playerGridSlot(
+  track: Track,
+  opponentCount = OPPONENT_COUNT,
+  columns = 2
+): { x: number; y: number } {
+  return gridSlot(track, opponentCount, columns);
 }
 
 /**
@@ -98,7 +111,9 @@ export function createOpponents(
   roster: RosterEntry[],
   baseTuning: Tuning,
   cls: SpeedClass,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  gridIndices?: number[], // grid slot (0 = pole) per opponent; defaults to roster order
+  columns = 2
 ): Opponent[] {
   return roster.map(({ vehicleId, skill }, i) => {
     const vehicle = vehicleById(vehicleId);
@@ -114,7 +129,7 @@ export function createOpponents(
       mistakeRate: sloppy * (1.3 - skill) * 8,
       seed: rng() * 1000,
     };
-    const pos = gridSlot(track, i);
+    const pos = gridSlot(track, gridIndices?.[i] ?? i, columns);
     const startProgress = query.progressAt(pos.x, pos.y) ?? 0;
     return {
       vehicleId: vehicle.id,
@@ -126,6 +141,7 @@ export function createOpponents(
       boostTimer: 0,
       itemUseDelay: 0,
       position: i + 1,
+      deficit: 0,
       held: null,
       spin: 0,
       boost: 0,

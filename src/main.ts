@@ -14,6 +14,7 @@ import { createDraft, inSlipstream, stepDraft } from "./game/draft";
 import {
   createItemRacer,
   createItemWorld,
+  ITEM_GAP_WINDOW,
   SPIN_INPUT,
   spinCar,
   stepItems,
@@ -28,13 +29,15 @@ import {
   playerCupPlacement,
   RACES_PER_CUP,
   recordCupRace,
+  startingGrid,
   type CupDef,
   type CupState,
 } from "./game/cups";
 import {
   buildRoster,
   createOpponents,
-  playerGridSlot,
+  gridColumns,
+  gridSlot,
   playerPlacement,
   playerPosition,
   raceDistance,
@@ -232,10 +235,17 @@ function startSeriesRace(raceIndex: number): void {
 function restartRace(): void {
   if (!track || !query || !scene) return;
   const roster = series?.roster ?? [];
-  const slot = playerGridSlot(track, roster.length);
+  const columns = gridColumns(roster.length + 1);
+  // grid[i] is racer i's slot (0 = pole): index 0 is the player, i+1 is
+  // opponent i. Solo (no roster) just parks the player on pole.
+  const grid = series && roster.length > 0 ? startingGrid(series) : [0];
+  const slot = gridSlot(track, grid[0]!, columns);
   car = createCarState(slot.x, slot.y, track.startHeading);
   lapTracker = createLapTracker(query.progressAt(slot.x, slot.y) ?? 0);
-  opponents = roster.length > 0 ? createOpponents(track, query, roster, tuning, cls) : [];
+  opponents =
+    roster.length > 0
+      ? createOpponents(track, query, roster, tuning, cls, Math.random, grid.slice(1), columns)
+      : [];
   race = createRace(RACE_LAPS);
   raceHadBestLap = false;
   finishPending = false;
@@ -244,7 +254,7 @@ function restartRace(): void {
   playerDraft = createDraft();
   playerRacer = createItemRacer(car);
   if (opponents.length > 0) {
-    itemWorld = createItemWorld(track);
+    itemWorld = createItemWorld(track, opponents.length + 1);
     itemRacers = [playerRacer, ...opponents];
   } else {
     itemWorld = null; // solo runs stay pure time trials
@@ -518,18 +528,24 @@ function loop(now: number): void {
   requestAnimationFrame(loop);
 }
 
-/** Live standings for the item system: better items land further back. */
+/** Live standings for the item system: rank sets order, and each racer's gap
+ * behind the leader (in laps) sets how mean its next pickup rolls. */
 function updatePositions(): void {
   const list = [
-    { r: playerRacer as ItemRacer, key: raceDistance(lapTracker) },
+    { r: playerRacer as ItemRacer, key: raceDistance(lapTracker), laps: raceDistance(lapTracker) },
     ...opponents.map((o) => ({
       r: o as ItemRacer,
       // finished racers rank by finish order, above everyone still driving
       key: o.finishOrder !== null ? 200 - o.finishOrder : raceDistance(o.tracker),
+      laps: raceDistance(o.tracker),
     })),
   ];
   list.sort((a, b) => b.key - a.key);
-  list.forEach((e, i) => (e.r.position = i + 1));
+  const leaderLaps = Math.max(...list.map((e) => e.laps));
+  list.forEach((e, i) => {
+    e.r.position = i + 1;
+    e.r.deficit = Math.max(0, Math.min(1, (leaderLaps - e.laps) / ITEM_GAP_WINDOW));
+  });
 }
 
 /** One physics step of items: pickups, hits, and bots deciding to fire. */

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildRoster,
   createOpponents,
+  gridColumns,
   gridSlot,
   OPPONENT_COUNT,
   playerGridSlot,
@@ -69,6 +70,43 @@ describe("opponent field", () => {
     const player = playerGridSlot(track);
     const bot = gridSlot(track, 0);
     expect(Math.hypot(player.x - bot.x, player.y - bot.y)).toBeGreaterThan(10);
+  });
+
+  it("widens the grid for a bigger squad but never past 4 columns", () => {
+    expect(gridColumns(4)).toBe(2);
+    expect(gridColumns(6)).toBe(2);
+    expect(gridColumns(9)).toBe(3);
+    expect(gridColumns(12)).toBe(4);
+    expect(gridColumns(40)).toBe(4);
+  });
+
+  it("keeps a wide grid on the road, all slots distinct", () => {
+    const columns = gridColumns(12);
+    const seen: { x: number; y: number }[] = [];
+    for (let i = 0; i < 12; i++) {
+      const pos = gridSlot(track, i, columns);
+      // front rows sit on the road; assert distinctness for the whole grid
+      if (i < 2 * columns) expect(query.surfaceAt(pos.x, pos.y)).toBe("road");
+      for (const s of seen) expect(Math.hypot(pos.x - s.x, pos.y - s.y)).toBeGreaterThan(5);
+      seen.push(pos);
+    }
+  });
+
+  it("seats opponents at the grid slots it is handed", () => {
+    const roster = buildRoster("classic", 3, rng);
+    // reverse-order grid: opponent 0 on pole, opponent 2 furthest back
+    const opponents = createOpponents(
+      track,
+      query,
+      roster,
+      { ...DEFAULT_TUNING },
+      SPEED_CLASSES[0]!,
+      rng,
+      [0, 1, 2],
+      2
+    );
+    const pole = gridSlot(track, 0, 2);
+    expect(Math.hypot(opponents[0]!.car.x - pole.x, opponents[0]!.car.y - pole.y)).toBeLessThan(0.001);
   });
 
   it("bots hold still before the green light and race after it", () => {

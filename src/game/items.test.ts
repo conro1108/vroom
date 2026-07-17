@@ -29,8 +29,18 @@ describe("item world", () => {
     }
   });
 
+  it("spreads more box rows for a bigger field, clamped 4..12 rows", () => {
+    const small = createItemWorld(track, 2); // tiny pack still gets the floor
+    const big = createItemWorld(track, 12);
+    const huge = createItemWorld(track, 40); // clamps at the ceiling
+    expect(small.boxes.length).toBe(4 * 3);
+    expect(big.boxes.length).toBe(12 * 3);
+    expect(huge.boxes.length).toBe(12 * 3);
+    expect(big.boxes.length).toBeGreaterThan(small.boxes.length);
+  });
+
   it("hands a racer an item and respawns the box later", () => {
-    const world = createItemWorld(track, 2);
+    const world = createItemWorld(track, 4, 2);
     const box = world.boxes[0]!;
     const racer = createItemRacer(createCarState(box.x, box.y, 0));
     const events = stepItems(world, [racer], 1 / 120, () => 0.5);
@@ -48,7 +58,7 @@ describe("item world", () => {
   });
 
   it("doesn't hand an item to a racer already holding one", () => {
-    const world = createItemWorld(track, 2);
+    const world = createItemWorld(track, 4, 2);
     const box = world.boxes[0]!;
     const racer = createItemRacer(createCarState(box.x + PICKUP_RADIUS - 1, box.y, 0));
     racer.held = "oil";
@@ -58,10 +68,14 @@ describe("item world", () => {
 });
 
 describe("rollItem", () => {
+  // exercise rollItem the way the game does: a rank maps to a gap deficit
+  // (0 = on the leader, 1 = a field back) and a leading flag.
   const rolls = (position: number, fieldSize: number) => {
+    const deficit = fieldSize <= 1 ? 0 : (position - 1) / (fieldSize - 1);
+    const leading = position === 1;
     const counts = { turbo: 0, rocket: 0, missile: 0, crown: 0, oil: 0 };
     for (let i = 0; i < 400; i++) {
-      counts[rollItem(position, fieldSize, () => (i + 0.5) / 400)]++;
+      counts[rollItem(deficit, leading, () => (i + 0.5) / 400)]++;
     }
     return counts;
   };

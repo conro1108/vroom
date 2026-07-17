@@ -18,6 +18,7 @@ export type ItemKind = "turbo" | "rocket" | "missile" | "crown" | "oil";
 export interface ItemRacer {
   car: CarState;
   position: number; // live 1-based standing, updated by the caller
+  deficit: number; // 0 = on the leader, 1 = a full ITEM_GAP_WINDOW back; updated by the caller
   held: ItemKind | null;
   spin: number; // seconds of spin-out remaining
   boost: number; // seconds of item speed-boost remaining
@@ -25,8 +26,11 @@ export interface ItemRacer {
 }
 
 export function createItemRacer(car: CarState): ItemRacer {
-  return { car, position: 1, held: null, spin: 0, boost: 0, finished: false };
+  return { car, position: 1, deficit: 0, held: null, spin: 0, boost: 0, finished: false };
 }
+
+/** Being this many laps behind the leader maxes out the comeback-item roll. */
+export const ITEM_GAP_WINDOW = 0.5;
 
 export interface ItemBox {
   x: number;
@@ -89,18 +93,14 @@ export function spinCar(car: CarState, dt: number): void {
 }
 
 /**
- * Rows of three boxes across the road at even progress fractions, offset so
- * no row sits on the start line. Row count scales with lap length unless given.
+ * Rows of three boxes across the road at even progress fractions, offset so no
+ * row sits on the start line. Row count scales with the size of the field so a
+ * bigger pack has enough pickups to go around — from 4 rows up to 12. Pass
+ * `rowsOverride` to pin an exact count (tests).
  */
-export function createItemWorld(track: Track, rowsPerLap?: number): ItemWorld {
+export function createItemWorld(track: Track, fieldSize = 4, rowsOverride?: number): ItemWorld {
   const n = track.samples.length;
-  let totalLen = 0;
-  for (let i = 0; i < n; i++) {
-    const a = track.samples[i]!;
-    const b = track.samples[(i + 1) % n]!;
-    totalLen += Math.hypot(b.x - a.x, b.y - a.y);
-  }
-  const rows = rowsPerLap ?? Math.max(2, Math.min(4, Math.round(totalLen / 1000)));
+  const rows = rowsOverride ?? Math.max(4, Math.min(12, fieldSize));
 
   const boxes: ItemBox[] = [];
   for (let r = 0; r < rows; r++) {
@@ -126,20 +126,21 @@ export function createItemWorld(track: Track, rowsPerLap?: number): ItemWorld {
 }
 
 /**
- * Position-weighted roll: leaders mostly get oil to defend with, backmarkers
- * mostly get turbos and shots to close with. The plain straight rocket is the
- * common attack; the homing missile is the rare treat and the leader-chasing
- * crown is rarer still — both weighted hard to the back so they're comeback
- * tools, not snipers everyone gets. Not full parity — a nudge toward it.
+ * Gap-weighted roll: how mean the roll is scales with how far behind the
+ * leader you actually are (`deficit`, 0 = on the leader's tail, 1 = a full
+ * gap window back), not your discrete rank — so a tight pack of chasers all
+ * roll gently and only a car that's truly dropped off gets the big comeback
+ * tools. Leaders mostly get oil to defend with; the plain straight rocket is
+ * the common attack, the homing missile a rarer treat, the leader-chasing
+ * crown rarer still. Not full parity — a nudge toward it.
  */
 export function rollItem(
-  position: number,
-  fieldSize: number,
+  deficit: number,
+  leading: boolean, // true = running 1st, nothing ahead to shoot at
   rng: () => number = Math.random
 ): ItemKind {
-  const p = fieldSize <= 1 ? 1 : (position - 1) / (fieldSize - 1); // 0 = leader, 1 = last
+  const p = Math.max(0, Math.min(1, deficit));
   const turbo = 0.2 + 0.7 * p;
-  const leading = position === 1; // nothing ahead of the leader to shoot at
   const rocket = leading ? 0 : 0.35 + 0.2 * p;
   const missile = leading ? 0 : 0.5 * p * p; // rare, and only really shows up near the back
   const crown = leading ? 0 : 0.16 * p * p * p; // rarest: a near-last comeback treat
@@ -170,7 +171,7 @@ export function stepItems(
       const r = racers[i]!;
       if (r.held !== null || r.finished) continue;
       if (Math.hypot(r.car.x - box.x, r.car.y - box.y) > PICKUP_RADIUS) continue;
-      r.held = rollItem(r.position, racers.length, rng);
+      r.held = rollItem(r.deficit, r.position === 1, rng);
       box.respawnIn = BOX_RESPAWN_SECONDS;
       events.push({ type: "pickup", racer: i, item: r.held });
       break;
