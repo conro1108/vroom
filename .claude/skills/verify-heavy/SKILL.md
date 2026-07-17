@@ -1,9 +1,13 @@
 ---
-name: verify
-description: Launch vroom headless and drive it end-to-end (menu → race → results) to verify changes at the real surface.
+name: verify-heavy
+description: Launch vroom headless and drive it end-to-end (menu → race → results) to verify changes at the real surface. Only for large UI changes — expensive (screenshots burn a lot of tokens), do not invoke for routine work; `npm test` covers game logic.
 ---
 
-# Verifying vroom
+# Verifying vroom (heavy, browser-driven)
+
+Only invoke this for large UI changes — rendering/visuals, layout, or feel
+changes where unit tests genuinely can't catch what's wrong. For routine
+game-logic changes, `npm test` (Vitest) is enough.
 
 1. `npx vite --port 5199 --strictPort` (background).
 2. Playwright isn't a repo dep: `npm init -y && npm i playwright` in a temp
