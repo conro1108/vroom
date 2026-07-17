@@ -15,6 +15,7 @@ import {
   playerGridSlot,
   playerPlacement,
   playerPosition,
+  raceDistance,
   separateCars,
   stepOpponents,
   type Opponent,
@@ -170,11 +171,12 @@ function startRace(index: number, classId: string): void {
 /** Put the field back on the grid and arm the countdown. */
 function restartRace(): void {
   if (!track || !query || !scene) return;
-  const slot = playerGridSlot(track);
+  const oppCount = progress.raceMode === "group" ? Math.max(1, Math.round(tuning.opponentCount)) : 0;
+  const slot = playerGridSlot(track, oppCount);
   car = createCarState(slot.x, slot.y, track.startHeading);
   lapTracker = createLapTracker(query.progressAt(slot.x, slot.y) ?? 0);
   opponents =
-    progress.raceMode === "group" ? createOpponents(track, query, progress.lastVehicle, tuning, cls) : [];
+    oppCount > 0 ? createOpponents(track, query, progress.lastVehicle, tuning, cls, oppCount) : [];
   race = createRace(RACE_LAPS);
   raceHadBestLap = false;
   finishPending = false;
@@ -320,7 +322,7 @@ function loop(now: number): void {
       accumulator -= PHYSICS_DT;
       car = stepCar(car, carInput, raceTuning, query.surfaceAt(car.x, car.y), PHYSICS_DT);
       if (racing) {
-        stepOpponents(opponents, query, PHYSICS_DT, true);
+        stepOpponents(opponents, query, PHYSICS_DT, true, raceDistance(lapTracker));
         separateCars([car, ...opponents.map((o) => o.car)]);
       }
       applyWalls();

@@ -2,29 +2,36 @@
 // the player didn't pick, with a small skill spread so the field strings out.
 // Pure logic — main.ts steps them alongside the player and the scene draws
 // them by vehicle id.
-import { createBot } from "./botdriver";
+import { createBot, type BotPersonality } from "./botdriver";
 import { createCarState, stepCar, type CarInput, type CarState } from "./physics";
 import { applySpeedClass, RACE_LAPS, type SpeedClass } from "./progression";
 import { createLapTracker, updateLap, type LapTracker, type Track, type TrackQuery } from "./track";
 import type { Tuning } from "./tuning";
 import { VEHICLES } from "./vehicles";
 
-export const RACER_COUNT = 4; // player + OPPONENT_COUNT
-export const OPPONENT_COUNT = 3;
+export const OPPONENT_COUNT = 3; // default field; tuning.opponentCount overrides
 
-// Multiplies maxSpeed/accel per opponent so finishes spread out: the podium
-// (needed for main-line unlocks) means beating the slowest bot, while an
-// outright win (bonus branches) means out-driving one that never errs.
-const SKILLS = [0.85, 0.93, 1.01];
+// Skill multiplies maxSpeed/accel per opponent so finishes spread out: the
+// podium (needed for main-line unlocks) means beating the slowest bot, while
+// an outright win (bonus branches) means out-driving the fastest one.
+const SKILL_MIN = 0.85;
+const SKILL_MAX = 1.01;
 
-/** Grid slots in world px: (back, side) offsets from the start line. The
- * player takes the last slot — front rows are the bots you have to hunt. */
-const GRID = [
-  { back: 16, side: -11 },
-  { back: 16, side: 11 },
-  { back: 34, side: -11 },
-  { back: 34, side: 11 }, // player
-];
+/** Evenly spread skill factors across the field, one per opponent. */
+export function skillSpread(count: number): number[] {
+  if (count <= 1) return [(SKILL_MIN + SKILL_MAX) / 2];
+  return Array.from(
+    { length: count },
+    (_, i) => SKILL_MIN + ((SKILL_MAX - SKILL_MIN) * i) / (count - 1)
+  );
+}
+
+// Grid layout in world px behind the start line: two columns, rows every
+// ROW_GAP. The player takes the slot after all opponents — front rows are
+// the bots you have to hunt.
+const GRID_FIRST_ROW = 16;
+const GRID_ROW_GAP = 18;
+const GRID_SIDE = 11;
 
 export interface Opponent {
   vehicleId: string;
@@ -37,16 +44,17 @@ export interface Opponent {
 }
 
 export function gridSlot(track: Track, index: number): { x: number; y: number } {
-  const slot = GRID[index] ?? GRID[GRID.length - 1]!;
+  const back = GRID_FIRST_ROW + Math.floor(index / 2) * GRID_ROW_GAP;
+  const side = (index % 2 === 0 ? -1 : 1) * GRID_SIDE;
   const dir = { x: Math.cos(track.startHeading), y: Math.sin(track.startHeading) };
   return {
-    x: track.start.x - dir.x * slot.back - dir.y * slot.side,
-    y: track.start.y - dir.y * slot.back + dir.x * slot.side,
+    x: track.start.x - dir.x * back - dir.y * side,
+    y: track.start.y - dir.y * back + dir.x * side,
   };
 }
 
-export function playerGridSlot(track: Track): { x: number; y: number } {
-  return gridSlot(track, RACER_COUNT - 1);
+export function playerGridSlot(track: Track, opponentCount = OPPONENT_COUNT): { x: number; y: number } {
+  return gridSlot(track, opponentCount);
 }
 
 /**
@@ -59,17 +67,27 @@ export function createOpponents(
   playerVehicleId: string,
   baseTuning: Tuning,
   cls: SpeedClass,
+  count = OPPONENT_COUNT,
   rng: () => number = Math.random
 ): Opponent[] {
   const pool = VEHICLES.filter((v) => v.id !== playerVehicleId);
   shuffle(pool, rng);
-  const skills = shuffle([...SKILLS], rng);
+  const skills = shuffle(skillSpread(count), rng);
 
-  return pool.slice(0, OPPONENT_COUNT).map((vehicle, i) => {
-    const skill = skills[i]!;
+  return skills.map((skill, i) => {
+    const vehicle = pool[i % pool.length]!;
     const tuning = applySpeedClass({ ...baseTuning, ...vehicle.values }, cls);
     tuning.maxSpeed *= skill;
     tuning.accel *= skill;
+    // Slower bots are also sloppier drivers, so the back of the field looks
+    // human rather than just detuned.
+    const sloppy = baseTuning.botSloppiness;
+    const personality: BotPersonality = {
+      line: (rng() - 0.5) * track.roadWidth * 0.4,
+      wobble: sloppy * (1.25 - skill),
+      mistakeRate: sloppy * (1.3 - skill) * 8,
+      seed: rng() * 1000,
+    };
     const pos = gridSlot(track, i);
     const startProgress = query.progressAt(pos.x, pos.y) ?? 0;
     return {
@@ -77,23 +95,39 @@ export function createOpponents(
       car: createCarState(pos.x, pos.y, track.startHeading),
       tracker: createLapTracker(startProgress),
       tuning,
-      bot: createBot(track, query, tuning),
+      bot: createBot(track, query, tuning, personality),
       finishOrder: null,
     };
   });
 }
 
-/** One physics step for every bot (throttle only once the race is `live`). */
+// Rubber banding saturates at this many laps of gap to the player.
+const RUBBER_WINDOW = 0.3;
+
+/** Speed/accel multiplier for a bot `gapLaps` ahead (+) or behind (−) the player. */
+export function rubberMult(gapLaps: number, strength: number): number {
+  const catchup = Math.max(-1, Math.min(1, -gapLaps / RUBBER_WINDOW));
+  return 1 + catchup * strength;
+}
+
+/** One physics step for every bot (throttle only once the race is `live`).
+ * With `playerDistance` (laps), the field rubber-bands toward the player. */
 export function stepOpponents(
   opponents: Opponent[],
   query: TrackQuery,
   dt: number,
-  live: boolean
+  live: boolean,
+  playerDistance: number | null = null
 ): void {
   let finished = opponents.filter((o) => o.finishOrder !== null).length;
   for (const o of opponents) {
     const input = live ? o.bot(o.car) : { steer: 0, throttle: 0, brake: 0 };
-    o.car = stepCar(o.car, input, o.tuning, query.surfaceAt(o.car.x, o.car.y), dt);
+    let tuning = o.tuning;
+    if (live && playerDistance !== null && o.tuning.rubberBand > 0 && o.finishOrder === null) {
+      const mult = rubberMult(raceDistance(o.tracker) - playerDistance, o.tuning.rubberBand);
+      tuning = { ...o.tuning, maxSpeed: o.tuning.maxSpeed * mult, accel: o.tuning.accel * mult };
+    }
+    o.car = stepCar(o.car, input, tuning, query.surfaceAt(o.car.x, o.car.y), dt);
     const p = query.progressAt(o.car.x, o.car.y);
     if (p !== null && updateLap(o.tracker, p).completed) {
       if (o.tracker.lap > RACE_LAPS && o.finishOrder === null) {

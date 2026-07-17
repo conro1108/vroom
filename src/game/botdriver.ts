@@ -24,8 +24,26 @@ export interface LapResult {
 const DT = 1 / 120; // match the game's fixed step
 const MAX_LAP_SECONDS = 120;
 
-/** Point on the centerline `aheadPx` of arc length past progress fraction `p`. */
-function pointAhead(track: Track, totalLen: number, p: number, aheadPx: number) {
+/** What separates one bot from another: none of this exists for the clean
+ * reference driver that balance tests use — a personality only makes a bot
+ * slower and messier, never faster. */
+export interface BotPersonality {
+  /** Lateral bias off the centerline in world px, so bots take different lines. */
+  line: number;
+  /** Steering noise amplitude, as a fraction of full lock. */
+  wobble: number;
+  /** Driving mistakes per minute: a blown braking point that runs the corner wide. */
+  mistakeRate: number;
+  /** Phase seed so bots don't wobble or err in unison. */
+  seed: number;
+}
+
+export const CLEAN_DRIVER: BotPersonality = { line: 0, wobble: 0, mistakeRate: 0, seed: 0 };
+
+const MISTAKE_SECONDS = 0.7;
+
+/** Point `aheadPx` of arc length past progress `p`, shifted `lateral` px off the centerline. */
+function pointAhead(track: Track, totalLen: number, p: number, aheadPx: number, lateral: number) {
   const f = (p + aheadPx / totalLen) % 1;
   // progress[] is sorted ascending; find the sample at fraction f
   let lo = 0;
@@ -35,7 +53,17 @@ function pointAhead(track: Track, totalLen: number, p: number, aheadPx: number) 
     if (track.progress[mid]! <= f) lo = mid;
     else hi = mid - 1;
   }
-  return track.samples[lo]!;
+  const a = track.samples[lo]!;
+  if (!lateral) return a;
+  const b = track.samples[(lo + 1) % track.samples.length]!;
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  return { x: a.x - ((b.y - a.y) / len) * lateral, y: a.y + ((b.x - a.x) / len) * lateral };
+}
+
+/** Deterministic pseudo-random in [0,1) — keeps bot mistakes replayable in tests. */
+function hash01(x: number): number {
+  const s = Math.sin(x * 127.1) * 43758.5453;
+  return s - Math.floor(s);
 }
 
 function normalizeAngle(a: number): number {
@@ -48,14 +76,55 @@ function normalizeAngle(a: number): number {
  * A steering brain bound to one track + tuning: call it with the current car
  * state each physics step to get that step's inputs.
  */
-export function createBot(track: Track, query: TrackQuery, tuning: Tuning): (car: CarState) => CarInput {
+export function createBot(
+  track: Track,
+  query: TrackQuery,
+  tuning: Tuning,
+  personality: BotPersonality = CLEAN_DRIVER
+): (car: CarState) => CarInput {
   let totalLen = 0;
   for (let i = 0; i < track.samples.length; i++) {
     const a = track.samples[i]!;
     const b = track.samples[(i + 1) % track.samples.length]!;
     totalLen += Math.hypot(b.x - a.x, b.y - a.y);
   }
-  return (car) => botInput(car, track, query, tuning, totalLen);
+
+  // Each call is one fixed physics step, so internal time advances by DT.
+  let t = 0;
+  let lastSec = -1;
+  let mistakeUntil = 0;
+  let mistakeBias = 0;
+
+  return (car) => {
+    t += DT;
+    if (personality.mistakeRate > 0) {
+      const sec = Math.floor(t);
+      if (sec !== lastSec) {
+        lastSec = sec;
+        if (hash01(personality.seed + sec * 7.13) < personality.mistakeRate / 60) {
+          mistakeUntil = t + MISTAKE_SECONDS;
+          mistakeBias = (hash01(personality.seed + sec * 3.77) - 0.5) * 1.6;
+        }
+      }
+    }
+
+    const input = botInput(car, track, query, tuning, totalLen, personality.line);
+    if (personality.wobble > 0) {
+      input.steer +=
+        personality.wobble *
+        0.6 *
+        Math.sin(t * 2.3 + personality.seed) *
+        Math.sin(t * 0.91 + personality.seed * 1.7);
+    }
+    if (t < mistakeUntil) {
+      // blew the braking point: foot stays down and the corner runs wide
+      input.steer += mistakeBias;
+      input.throttle = 1;
+      input.brake = 0;
+    }
+    input.steer = Math.max(-1, Math.min(1, input.steer));
+    return input;
+  };
 }
 
 /**
@@ -95,13 +164,20 @@ export function simulateLap(def: TrackDef, tuning: Tuning, laps = 2): LapResult 
   return { lapMs: null, offroadFrac: offroadSteps / steps };
 }
 
-function botInput(car: CarState, track: Track, query: TrackQuery, tuning: Tuning, totalLen: number) {
+function botInput(
+  car: CarState,
+  track: Track,
+  query: TrackQuery,
+  tuning: Tuning,
+  totalLen: number,
+  line = 0
+) {
   const p = query.progressAt(car.x, car.y) ?? 0;
   const speed = Math.hypot(car.vx, car.vy);
 
   // Look further ahead the faster we go, so corners are anticipated.
-  const near = pointAhead(track, totalLen, p, Math.max(30, speed * 0.35));
-  const far = pointAhead(track, totalLen, p, Math.max(70, speed * 0.85));
+  const near = pointAhead(track, totalLen, p, Math.max(30, speed * 0.35), line);
+  const far = pointAhead(track, totalLen, p, Math.max(70, speed * 0.85), line);
 
   const aimError = normalizeAngle(Math.atan2(near.y - car.y, near.x - car.x) - car.heading);
   const farError = normalizeAngle(Math.atan2(far.y - car.y, far.x - car.x) - car.heading);

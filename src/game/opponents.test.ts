@@ -6,7 +6,9 @@ import {
   playerGridSlot,
   playerPlacement,
   playerPosition,
+  rubberMult,
   separateCars,
+  skillSpread,
   stepOpponents,
 } from "./opponents";
 import { createCarState } from "./physics";
@@ -19,8 +21,8 @@ const track = createTrack(TRACKS[0]!);
 const query = createTrackQuery(track);
 const rng = () => 0.42; // deterministic
 
-function field() {
-  return createOpponents(track, query, "classic", { ...DEFAULT_TUNING }, SPEED_CLASSES[0]!, rng);
+function field(count = OPPONENT_COUNT) {
+  return createOpponents(track, query, "classic", { ...DEFAULT_TUNING }, SPEED_CLASSES[0]!, count, rng);
 }
 
 describe("opponent field", () => {
@@ -30,6 +32,21 @@ describe("opponent field", () => {
     const ids = opponents.map((o) => o.vehicleId);
     expect(new Set(ids).size).toBe(OPPONENT_COUNT);
     expect(ids).not.toContain("classic");
+  });
+
+  it("fields any requested count, reusing vehicles but never the player's", () => {
+    const opponents = field(7);
+    expect(opponents).toHaveLength(7);
+    expect(opponents.map((o) => o.vehicleId)).not.toContain("classic");
+  });
+
+  it("spreads skill evenly across the field", () => {
+    const three = skillSpread(3);
+    [0.85, 0.93, 1.01].forEach((v, i) => expect(three[i]).toBeCloseTo(v));
+    const seven = skillSpread(7);
+    expect(seven).toHaveLength(7);
+    expect(Math.min(...seven)).toBeCloseTo(0.85);
+    expect(Math.max(...seven)).toBeCloseTo(1.01);
   });
 
   it("grid slots sit on the road just behind the start line", () => {
@@ -92,6 +109,33 @@ describe("standings", () => {
     opponents[0]!.tracker.lap = RACE_LAPS + 1;
     opponents[0]!.tracker.accum = 0.9; // still driving around
     expect(playerPosition(player, opponents)).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("rubber banding", () => {
+  it("slows bots ahead of the player and hurries bots behind", () => {
+    expect(rubberMult(0.2, 0.2)).toBeLessThan(1);
+    expect(rubberMult(-0.2, 0.2)).toBeGreaterThan(1);
+    expect(rubberMult(0, 0.2)).toBe(1);
+  });
+
+  it("saturates instead of growing without bound", () => {
+    expect(rubberMult(5, 0.2)).toBeCloseTo(0.8);
+    expect(rubberMult(-5, 0.2)).toBeCloseTo(1.2);
+  });
+
+  it("a bot far ahead of the player covers less ground than one far behind", () => {
+    const ahead = field(1);
+    const behind = field(1);
+    ahead[0]!.tracker.lap = 3; // ~2 laps covered, a full lap up on the player
+    behind[0]!.tracker.lap = 1; // still on the opening lap, a lap down
+    const playerDistance = 1.0;
+    for (let i = 0; i < 600; i++) {
+      stepOpponents(ahead, query, 1 / 120, true, playerDistance);
+      stepOpponents(behind, query, 1 / 120, true, playerDistance);
+    }
+    const speed = (o: { car: { vx: number; vy: number } }) => Math.hypot(o.car.vx, o.car.vy);
+    expect(speed(ahead[0]!)).toBeLessThan(speed(behind[0]!));
   });
 });
 

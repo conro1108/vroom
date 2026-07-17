@@ -14,6 +14,9 @@ export interface Tuning {
   driftThreshold: number; // px/s of sideways velocity where drift begins
   offroadMaxSpeed: number; // fraction of maxSpeed on grass
   offroadFriction: number; // drag multiplier on grass
+  opponentCount: number; // AI cars in a group race
+  rubberBand: number; // 0..0.4, how hard the field converges on the player
+  botSloppiness: number; // 0..1, how human (wobbly, mistake-prone) bots drive
   cameraLerp: number; // 1/s camera chase
   lookAhead: number; // seconds of velocity the camera leads by
   steerMode: "joystick" | "dragx"; // joystick: thumb vector = screen direction to drive
@@ -37,6 +40,9 @@ export const DEFAULT_TUNING: Tuning = {
   driftThreshold: 55,
   offroadMaxSpeed: 0.55,
   offroadFriction: 1.6,
+  opponentCount: 3,
+  rubberBand: 0.12,
+  botSloppiness: 0.6,
   cameraLerp: 5,
   lookAhead: 0.35,
   steerMode: "joystick",
