@@ -75,11 +75,12 @@ export class Scene {
     private track: Track,
     query: TrackQuery,
     display: HTMLCanvasElement,
-    vehicleId = "classic"
+    vehicleId = "classic",
+    corridorPx: number | null = null
   ) {
     this.display = display;
     this.displayCtx = display.getContext("2d")!;
-    this.world = paintWorld(track, query);
+    this.world = paintWorld(track, query, corridorPx);
     this.skid = document.createElement("canvas");
     this.skid.width = track.worldWidth;
     this.skid.height = track.worldHeight;
@@ -281,7 +282,55 @@ export class Scene {
   }
 }
 
-function paintWorld(track: Track, query: TrackQuery): HTMLCanvasElement {
+/**
+ * Fence posts along both corridor edges, so the physical boundary the cars
+ * bounce off reads on screen. Posts that fall inside another road section's
+ * corridor are skipped, which naturally merges the fencing where two parts
+ * of the track run close together.
+ */
+function paintTrackFence(
+  ctx: CanvasRenderingContext2D,
+  track: Track,
+  query: TrackQuery,
+  corridor: number
+): void {
+  const n = track.samples.length;
+  const spacing = 20;
+  for (const side of [-1, 1]) {
+    let acc = spacing;
+    let prev: { x: number; y: number } | null = null;
+    for (let i = 0; i < n; i++) {
+      const a = track.samples[i]!;
+      const b = track.samples[(i + 1) % n]!;
+      const segLen = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      acc += segLen;
+      if (acc < spacing) continue;
+      acc = 0;
+      const nx = -(b.y - a.y) / segLen;
+      const ny = (b.x - a.x) / segLen;
+      const px = a.x + nx * corridor * side;
+      const py = a.y + ny * corridor * side;
+      const offMap = px < 8 || py < 10 || px > track.worldWidth - 8 || py > track.worldHeight - 8;
+      if (offMap || query.distanceToRoad(px, py) < corridor - 2) {
+        prev = null;
+        continue;
+      }
+      if (prev && Math.hypot(px - prev.x, py - prev.y) < spacing * 1.9) {
+        ctx.strokeStyle = COLORS.fenceRail;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y - 3);
+        ctx.lineTo(px, py - 3);
+        ctx.stroke();
+      }
+      ctx.fillStyle = COLORS.fencePost;
+      ctx.fillRect(Math.round(px) - 1, Math.round(py) - 5, 2, 6);
+      prev = { x: px, y: py };
+    }
+  }
+}
+
+function paintWorld(track: Track, query: TrackQuery, corridorPx: number | null = null): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = track.worldWidth;
   canvas.height = track.worldHeight;
@@ -346,6 +395,8 @@ function paintWorld(track: Track, query: TrackQuery): HTMLCanvasElement {
       }
     }
   }
+
+  if (corridorPx !== null) paintTrackFence(ctx, track, query, corridorPx);
 
   // checkered start line, two rows deep across the road
   const start = track.start;

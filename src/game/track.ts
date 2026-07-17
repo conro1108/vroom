@@ -90,6 +90,8 @@ export interface TrackQuery {
   surfaceAt(x: number, y: number): "road" | "offroad";
   /** Arc-length fraction 0..1 of the nearest centerline point, or null when far off track. */
   progressAt(x: number, y: number): number | null;
+  /** Closest centerline point and its distance, or null when far off track. */
+  nearestOnRoad(x: number, y: number): { x: number; y: number; dist: number } | null;
 }
 
 export function createTrackQuery(track: Track): TrackQuery {
@@ -146,7 +148,43 @@ export function createTrackQuery(track: Track): TrackQuery {
       const p1 = hit.index + 1 < n ? track.progress[hit.index + 1]! : 1;
       return (p0 + (p1 - p0) * hit.t) % 1;
     },
+    nearestOnRoad(x, y) {
+      const hit = nearest(x, y);
+      if (!hit) return null;
+      const a = track.samples[hit.index]!;
+      const b = track.samples[(hit.index + 1) % n]!;
+      return {
+        x: a.x + (b.x - a.x) * hit.t,
+        y: a.y + (b.y - a.y) * hit.t,
+        dist: hit.dist,
+      };
+    },
   };
+}
+
+/**
+ * Keep a car inside the fenced corridor around the road: past `corridor` px
+ * from the centerline it's placed back on the fence line and the outward
+ * velocity component is bounced. This is what makes lap boundaries physical —
+ * you can run wide onto the grass, but not cut across the middle of the map.
+ */
+export function fenceCar(
+  car: { x: number; y: number; vx: number; vy: number },
+  query: TrackQuery,
+  corridor: number,
+  restitution = 0.3
+): void {
+  const hit = query.nearestOnRoad(car.x, car.y);
+  if (!hit || hit.dist <= corridor) return;
+  const nx = (car.x - hit.x) / hit.dist;
+  const ny = (car.y - hit.y) / hit.dist;
+  car.x = hit.x + nx * corridor;
+  car.y = hit.y + ny * corridor;
+  const outward = car.vx * nx + car.vy * ny;
+  if (outward > 0) {
+    car.vx -= outward * (1 + restitution) * nx;
+    car.vy -= outward * (1 + restitution) * ny;
+  }
 }
 
 // Lap detection: accumulate signed progress deltas; a full +1.0 of net travel

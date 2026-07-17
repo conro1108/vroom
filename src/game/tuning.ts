@@ -23,6 +23,7 @@ export interface Tuning {
   draftRangePx: number; // how close behind a car the slipstream reaches
   draftChargeSeconds: number; // continuous drafting needed to earn a boost
   draftBoostSeconds: number; // how long a slipstream boost lasts
+  fenceMarginPx: number; // grass runoff between road edge and the fence
   cameraLerp: number; // 1/s camera chase
   lookAhead: number; // seconds of velocity the camera leads by
   steerMode: "joystick" | "dragx"; // joystick: thumb vector = screen direction to drive
@@ -55,6 +56,7 @@ export const DEFAULT_TUNING: Tuning = {
   draftRangePx: 55,
   draftChargeSeconds: 1.0,
   draftBoostSeconds: 0.8,
+  fenceMarginPx: 26,
   cameraLerp: 5,
   lookAhead: 0.35,
   steerMode: "joystick",

@@ -6,7 +6,14 @@ import { createBot, type BotPersonality } from "./botdriver";
 import { createDraft, inSlipstream, stepDraft, type DraftState } from "./draft";
 import { createCarState, stepCar, type CarInput, type CarState } from "./physics";
 import { applySpeedClass, RACE_LAPS, type SpeedClass } from "./progression";
-import { createLapTracker, updateLap, type LapTracker, type Track, type TrackQuery } from "./track";
+import {
+  createLapTracker,
+  fenceCar,
+  updateLap,
+  type LapTracker,
+  type Track,
+  type TrackQuery,
+} from "./track";
 import type { Tuning } from "./tuning";
 import { VEHICLES } from "./vehicles";
 
@@ -130,7 +137,8 @@ export function stepOpponents(
   query: TrackQuery,
   dt: number,
   live: boolean,
-  player: PlayerContext | null = null
+  player: PlayerContext | null = null,
+  corridorPx: number | null = null
 ): void {
   let finished = opponents.filter((o) => o.finishOrder !== null).length;
   for (const o of opponents) {
@@ -159,6 +167,7 @@ export function stepOpponents(
         ? o.tuning
         : { ...o.tuning, maxSpeed: o.tuning.maxSpeed * mult, accel: o.tuning.accel * mult };
     o.car = stepCar(o.car, input, tuning, query.surfaceAt(o.car.x, o.car.y), dt);
+    if (corridorPx !== null) fenceCar(o.car, query, corridorPx);
     const p = query.progressAt(o.car.x, o.car.y);
     if (p !== null && updateLap(o.tracker, p).completed) {
       if (o.tracker.lap > RACE_LAPS && o.finishOrder === null) {

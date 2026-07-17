@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createLapTracker, createTrack, createTrackQuery, updateLap } from "./track";
+import { createLapTracker, createTrack, createTrackQuery, fenceCar, updateLap } from "./track";
 import { TRACKS } from "./tracks";
 
 const track = createTrack(TRACKS[0]!);
@@ -22,6 +22,43 @@ describe("surface queries", () => {
     const a = query.progressAt(track.samples[10]!.x, track.samples[10]!.y)!;
     const b = query.progressAt(track.samples[60]!.x, track.samples[60]!.y)!;
     expect(b).toBeGreaterThan(a);
+  });
+});
+
+describe("fencing", () => {
+  const corridor = track.roadWidth / 2 + 26;
+
+  it("leaves a car inside the corridor alone", () => {
+    const p = track.samples[40]!;
+    const car = { x: p.x, y: p.y, vx: 50, vy: 0 };
+    fenceCar(car, query, corridor);
+    expect(car).toEqual({ x: p.x, y: p.y, vx: 50, vy: 0 });
+  });
+
+  it("pushes an escaped car back to the fence line and bounces outward velocity", () => {
+    // walk outward from a centerline point until past the fence
+    const p = track.samples[40]!;
+    const hit = query.nearestOnRoad(p.x + 1, p.y + 1)!;
+    const nx = (p.x + 1 - hit.x) / hit.dist;
+    const ny = (p.y + 1 - hit.y) / hit.dist;
+    const car = {
+      x: hit.x + nx * (corridor + 15),
+      y: hit.y + ny * (corridor + 15),
+      vx: nx * 100,
+      vy: ny * 100,
+    };
+    fenceCar(car, query, corridor);
+    const after = query.nearestOnRoad(car.x, car.y)!;
+    expect(after.dist).toBeLessThanOrEqual(corridor + 0.01);
+    // outward velocity component is now inward (bounced)
+    const outward = car.vx * nx + car.vy * ny;
+    expect(outward).toBeLessThan(0);
+  });
+
+  it("nearestOnRoad reports a point at the reported distance", () => {
+    const p = track.samples[10]!;
+    const hit = query.nearestOnRoad(p.x + 30, p.y)!;
+    expect(Math.hypot(p.x + 30 - hit.x, p.y - hit.y)).toBeCloseTo(hit.dist, 5);
   });
 });
 

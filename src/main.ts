@@ -34,7 +34,16 @@ import {
 } from "./game/progression";
 import { bestSplitIndex, completeLap, createRace, raceTotalMs, rocketStart, type RaceState } from "./game/race";
 import { applyLap, applyRace, getRecords, loadRecords, recordKey, saveRecords } from "./game/records";
-import { createLapTracker, createTrack, createTrackQuery, updateLap, type LapTracker, type Track, type TrackQuery } from "./game/track";
+import {
+  createLapTracker,
+  createTrack,
+  createTrackQuery,
+  fenceCar,
+  updateLap,
+  type LapTracker,
+  type Track,
+  type TrackQuery,
+} from "./game/track";
 import { TRACKS } from "./game/tracks";
 import { loadTuning, saveTuning } from "./game/tuning";
 import { CUSTOM_VEHICLE_ID, saveCustomVehicle } from "./game/vehicles";
@@ -143,7 +152,7 @@ function startCalibration(): void {
   trackIndex = 0;
   track = createTrack(def);
   query = createTrackQuery(track);
-  scene = new Scene(track, query, canvas, progress.lastVehicle);
+  scene = new Scene(track, query, canvas, progress.lastVehicle, corridorPx());
   car = createCarState(track.start.x, track.start.y, track.startHeading);
   opponents = [];
   cal = createCalibration(tuning);
@@ -162,7 +171,7 @@ function startRace(index: number, classId: string): void {
   const def = TRACKS[index]!;
   track = createTrack(def);
   query = createTrackQuery(track);
-  scene = new Scene(track, query, canvas, progress.lastVehicle);
+  scene = new Scene(track, query, canvas, progress.lastVehicle, corridorPx());
   progress.lastClass = classId;
   progress.lastTrack = def.id;
   saveProgress(progress);
@@ -346,10 +355,14 @@ function loop(now: number): void {
       }
       car = stepCar(car, carInput, stepTuning, query.surfaceAt(car.x, car.y), PHYSICS_DT);
       if (racing) {
-        stepOpponents(opponents, query, PHYSICS_DT, true, {
-          distance: raceDistance(lapTracker),
-          car,
-        });
+        stepOpponents(
+          opponents,
+          query,
+          PHYSICS_DT,
+          true,
+          { distance: raceDistance(lapTracker), car },
+          corridorPx()
+        );
         separateCars([car, ...opponents.map((o) => o.car)]);
         const drafting = opponents.some((o) =>
           inSlipstream(car, o.car, raceTuning.draftRangePx, raceTuning.maxSpeed * 0.5)
@@ -360,6 +373,7 @@ function loop(now: number): void {
         }
       }
       applyWalls();
+      fenceCar(car, query, corridorPx());
       if (!racing) continue;
       recordGhostSample(ghostRec, now - lapStart, car);
 
@@ -388,6 +402,11 @@ function loop(now: number): void {
       : [];
   scene.frame(frameDt, car, raceTuning, ghostPose, racerPoses, boostTimer > 0);
   requestAnimationFrame(loop);
+}
+
+/** How far from the centerline the fence sits on the current track. */
+function corridorPx(): number {
+  return (track ? track.roadWidth / 2 : 0) + tuning.fenceMarginPx;
 }
 
 function applyWalls(): void {

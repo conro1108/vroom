@@ -37,6 +37,7 @@ const SLIDERS: SliderSpec[] = [
   { key: "startBoostWindowMs", label: "rocket-start window ms", min: 100, max: 800, step: 25 },
   { key: "boostPower", label: "boost power ×", min: 1.05, max: 1.8, step: 0.05 },
   { key: "boostSeconds", label: "boost seconds", min: 0.3, max: 3, step: 0.1 },
+  { key: "fenceMarginPx", label: "fence runoff px", min: 12, max: 60, step: 2 },
   { key: "draftRangePx", label: "slipstream range px", min: 25, max: 120, step: 5 },
   { key: "draftChargeSeconds", label: "slipstream charge s", min: 0.3, max: 3, step: 0.1 },
   { key: "draftBoostSeconds", label: "slipstream boost s", min: 0.2, max: 2, step: 0.1 },
