@@ -1,8 +1,8 @@
 // A deterministic pure-pursuit lap driver over the real physics. It stands in
 // for a mid-skill player: chase a point ahead on the centerline, lift/brake
-// when pointed badly wrong. Used by balance tests to keep every vehicle
-// competitive, and reusable for calibration/tuning experiments.
-import { createCarState, stepCar, type CarState } from "./physics";
+// when pointed badly wrong. Balance tests use it to keep every vehicle
+// competitive, and live races use it as the opponent AI.
+import { createCarState, stepCar, type CarInput, type CarState } from "./physics";
 import {
   createLapTracker,
   createTrack,
@@ -45,18 +45,27 @@ function normalizeAngle(a: number): number {
 }
 
 /**
- * Drive `laps` full laps from a standing start; the first lap is a warmup so
- * the reported time reflects a flying lap (like a player's later laps).
+ * A steering brain bound to one track + tuning: call it with the current car
+ * state each physics step to get that step's inputs.
  */
-export function simulateLap(def: TrackDef, tuning: Tuning, laps = 2): LapResult {
-  const track = createTrack(def);
-  const query = createTrackQuery(track);
+export function createBot(track: Track, query: TrackQuery, tuning: Tuning): (car: CarState) => CarInput {
   let totalLen = 0;
   for (let i = 0; i < track.samples.length; i++) {
     const a = track.samples[i]!;
     const b = track.samples[(i + 1) % track.samples.length]!;
     totalLen += Math.hypot(b.x - a.x, b.y - a.y);
   }
+  return (car) => botInput(car, track, query, tuning, totalLen);
+}
+
+/**
+ * Drive `laps` full laps from a standing start; the first lap is a warmup so
+ * the reported time reflects a flying lap (like a player's later laps).
+ */
+export function simulateLap(def: TrackDef, tuning: Tuning, laps = 2): LapResult {
+  const track = createTrack(def);
+  const query = createTrackQuery(track);
+  const bot = createBot(track, query, tuning);
 
   let car = createCarState(track.start.x, track.start.y, track.startHeading);
   const lapTracker = createLapTracker(0);
@@ -67,7 +76,7 @@ export function simulateLap(def: TrackDef, tuning: Tuning, laps = 2): LapResult 
   let offroadSteps = 0;
 
   while (t < MAX_LAP_SECONDS * laps) {
-    const input = botInput(car, track, query, tuning, totalLen);
+    const input = bot(car);
     const surface = query.surfaceAt(car.x, car.y);
     car = stepCar(car, input, tuning, surface, DT);
     t += DT;

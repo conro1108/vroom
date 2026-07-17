@@ -1,6 +1,8 @@
-// The track catalog, in progression order: each entry unlocks the next.
-// Layout safety (in-bounds, no self-overlapping road) is enforced by
-// tracks.test.ts, so new layouts can be sketched against the tests.
+// The track catalog. The main line runs in order — a podium (top 3) on each
+// track opens the next — and bonus tracks branch off it, demanding an
+// outright win somewhere. Layout safety (in-bounds, no self-overlapping
+// road) is enforced by tracks.test.ts, so new layouts can be sketched
+// against the tests.
 import type { TrackDef } from "./track";
 
 function gear(cx: number, cy: number, outer: number, inner: number, lobes: number) {
@@ -38,6 +40,7 @@ export const TRACKS: TrackDef[] = [
     // A true oval: two long straights joined by wide sweeping ends, no
     // inward pinch — distinct from meadow's looping shape, built for speed.
     id: "speedway",
+    unlock: { track: "meadow", result: "podium" },
     name: "Sunny Speedway",
     roadWidth: 74,
     worldWidth: 1600,
@@ -63,6 +66,7 @@ export const TRACKS: TrackDef[] = [
   },
   {
     id: "serpent",
+    unlock: { track: "speedway", result: "podium" },
     name: "Serpent Run",
     roadWidth: 58,
     worldWidth: 1550,
@@ -86,6 +90,7 @@ export const TRACKS: TrackDef[] = [
   },
   {
     id: "switchback",
+    unlock: { track: "serpent", result: "podium" },
     name: "Switchback Pass",
     roadWidth: 56,
     worldWidth: 1420,
@@ -113,6 +118,7 @@ export const TRACKS: TrackDef[] = [
   },
   {
     id: "knot",
+    unlock: { track: "switchback", result: "podium" },
     name: "Clover Knot",
     roadWidth: 50,
     worldWidth: 1120,
@@ -121,6 +127,7 @@ export const TRACKS: TrackDef[] = [
   },
   {
     id: "gauntlet",
+    unlock: { track: "knot", result: "podium" },
     name: "The Gauntlet",
     roadWidth: 60,
     worldWidth: 1800,
@@ -141,6 +148,56 @@ export const TRACKS: TrackDef[] = [
       { x: 150, y: 780 },
       { x: 220, y: 560 },
       { x: 140, y: 340 },
+    ],
+  },
+  {
+    // Bonus branch: a wide kidney-bean lagoon with one soft inward bay —
+    // flowing and fast, the reward for a first win on the oval.
+    id: "lagoon",
+    unlock: { track: "speedway", result: "win" },
+    name: "Lost Lagoon",
+    roadWidth: 64,
+    worldWidth: 1300,
+    worldHeight: 1000,
+    points: [
+      { x: 200, y: 500 },
+      { x: 280, y: 300 },
+      { x: 450, y: 190 },
+      { x: 650, y: 280 },
+      { x: 850, y: 190 },
+      { x: 1020, y: 300 },
+      { x: 1100, y: 500 },
+      { x: 1010, y: 700 },
+      { x: 830, y: 800 },
+      { x: 650, y: 830 },
+      { x: 470, y: 800 },
+      { x: 290, y: 700 },
+    ],
+  },
+  {
+    // Bonus branch: chicane wiggles across the top, one flat-out straight
+    // home — the victory lap for conquering The Gauntlet.
+    id: "rally",
+    unlock: { track: "gauntlet", result: "win" },
+    name: "Rally Ridge",
+    roadWidth: 54,
+    worldWidth: 1700,
+    worldHeight: 900,
+    points: [
+      { x: 250, y: 220 },
+      { x: 450, y: 160 },
+      { x: 650, y: 260 },
+      { x: 850, y: 160 },
+      { x: 1050, y: 260 },
+      { x: 1250, y: 160 },
+      { x: 1450, y: 240 },
+      { x: 1550, y: 420 },
+      { x: 1480, y: 620 },
+      { x: 1250, y: 700 },
+      { x: 850, y: 720 },
+      { x: 450, y: 700 },
+      { x: 220, y: 620 },
+      { x: 150, y: 420 },
     ],
   },
 ];

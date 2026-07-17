@@ -3,12 +3,16 @@ import {
   applySpeedClass,
   createProgress,
   isTrackUnlocked,
-  markRaceCompleted,
+  parseProgress,
+  PODIUM_PLACEMENT,
+  recordRaceResult,
   SPEED_CLASSES,
   speedClassById,
 } from "./progression";
 import { TRACKS } from "./tracks";
 import { DEFAULT_TUNING } from "./tuning";
+
+const trackIndex = (id: string) => TRACKS.findIndex((t) => t.id === id);
 
 describe("speed classes", () => {
   it("baseline class leaves tuning untouched", () => {
@@ -41,31 +45,74 @@ describe("track unlocking", () => {
     }
   });
 
-  it("finishing a race unlocks the next track in that class only", () => {
+  it("a podium unlocks the next main-line track in that class only", () => {
     const p = createProgress();
-    const unlocked = markRaceCompleted(p, "100", TRACKS[0]!.id);
-    expect(unlocked?.id).toBe(TRACKS[1]!.id);
-    expect(isTrackUnlocked(p, "100", 1)).toBe(true);
-    expect(isTrackUnlocked(p, "100", 2)).toBe(false);
-    expect(isTrackUnlocked(p, "150", 1)).toBe(false); // other class untouched
+    const unlocked = recordRaceResult(p, "100", "meadow", PODIUM_PLACEMENT);
+    expect(unlocked.map((t) => t.id)).toEqual(["speedway"]);
+    expect(isTrackUnlocked(p, "100", trackIndex("speedway"))).toBe(true);
+    expect(isTrackUnlocked(p, "100", trackIndex("serpent"))).toBe(false);
+    expect(isTrackUnlocked(p, "150", trackIndex("speedway"))).toBe(false); // other class untouched
   });
 
-  it("re-finishing a track unlocks nothing new", () => {
+  it("finishing off the podium unlocks nothing", () => {
     const p = createProgress();
-    markRaceCompleted(p, "100", TRACKS[0]!.id);
-    expect(markRaceCompleted(p, "100", TRACKS[0]!.id)).toBeNull();
+    expect(recordRaceResult(p, "100", "meadow", PODIUM_PLACEMENT + 1)).toEqual([]);
+    expect(isTrackUnlocked(p, "100", trackIndex("speedway"))).toBe(false);
   });
 
-  it("finishing the final track unlocks nothing and does not throw", () => {
+  it("a win on speedway opens both the main line and the Lost Lagoon branch", () => {
     const p = createProgress();
-    expect(markRaceCompleted(p, "100", TRACKS[TRACKS.length - 1]!.id)).toBeNull();
+    recordRaceResult(p, "100", "meadow", 1);
+    const unlocked = recordRaceResult(p, "100", "speedway", 1);
+    expect(unlocked.map((t) => t.id).sort()).toEqual(["lagoon", "serpent"]);
   });
 
-  it("full chain unlocks every track", () => {
+  it("a podium on speedway opens serpent but not the win-gated lagoon", () => {
     const p = createProgress();
-    for (const track of TRACKS) markRaceCompleted(p, "150", track.id);
+    recordRaceResult(p, "100", "meadow", 2);
+    const unlocked = recordRaceResult(p, "100", "speedway", 3);
+    expect(unlocked.map((t) => t.id)).toEqual(["serpent"]);
+    expect(isTrackUnlocked(p, "100", trackIndex("lagoon"))).toBe(false);
+  });
+
+  it("a better placement later still counts (best placement is kept)", () => {
+    const p = createProgress();
+    recordRaceResult(p, "100", "speedway", 4);
+    recordRaceResult(p, "100", "speedway", 1);
+    expect(recordRaceResult(p, "100", "speedway", 3)).toEqual([]); // worse result can't relock
+    expect(isTrackUnlocked(p, "100", trackIndex("lagoon"))).toBe(true);
+  });
+
+  it("repeating a result unlocks nothing new", () => {
+    const p = createProgress();
+    recordRaceResult(p, "100", "meadow", 1);
+    expect(recordRaceResult(p, "100", "meadow", 1)).toEqual([]);
+  });
+
+  it("winning everything unlocks every track", () => {
+    const p = createProgress();
+    for (const track of TRACKS) recordRaceResult(p, "150", track.id, 1);
     for (let i = 0; i < TRACKS.length; i++) {
       expect(isTrackUnlocked(p, "150", i)).toBe(true);
     }
+  });
+});
+
+describe("saved progress", () => {
+  it("parses the current shape", () => {
+    const p = createProgress();
+    recordRaceResult(p, "100", "meadow", 2);
+    p.lastVehicle = "muscle";
+    const parsed = parseProgress(JSON.stringify(p));
+    expect(parsed).toEqual(p);
+  });
+
+  it("migrates the old finished-track lists as podiums", () => {
+    const parsed = parseProgress(
+      JSON.stringify({ completed: { "100": ["meadow", "speedway"] }, lastClass: "100" })
+    );
+    expect(isTrackUnlocked(parsed, "100", trackIndex("serpent"))).toBe(true);
+    expect(isTrackUnlocked(parsed, "100", trackIndex("lagoon"))).toBe(false); // podium ≠ win
+    expect(parsed.lastClass).toBe("100");
   });
 });

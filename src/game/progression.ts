@@ -1,6 +1,7 @@
 // Speed classes and track unlocking. Each class is its own progression:
-// finishing a track's full race in a class unlocks the next track in that
-// class. Track order comes from the TRACKS catalog.
+// race placements are recorded per track per class, and each track's
+// UnlockRule (in the TRACKS catalog) decides what result opens it — a podium
+// on the previous main-line track, or an outright win for bonus branches.
 import { TRACKS } from "./tracks";
 import type { Tuning } from "./tuning";
 import { VEHICLES } from "./vehicles";
@@ -35,9 +36,12 @@ export function applySpeedClass(tuning: Tuning, cls: SpeedClass): Tuning {
   };
 }
 
+/** Placing this or better counts as a podium. */
+export const PODIUM_PLACEMENT = 3;
+
 export interface Progress {
-  /** classId -> trackIds whose full race has been finished in that class */
-  completed: Record<string, string[]>;
+  /** classId -> trackId -> best race placement (1 = win) in that class */
+  placements: Record<string, Record<string, number>>;
   lastClass: string;
   lastTrack: string;
   lastVehicle: string;
@@ -45,54 +49,85 @@ export interface Progress {
 
 export function createProgress(): Progress {
   return {
-    completed: {},
+    placements: {},
     lastClass: SPEED_CLASSES[0]!.id,
     lastTrack: TRACKS[0]!.id,
     lastVehicle: VEHICLES[0]!.id,
   };
 }
 
+export function bestPlacement(progress: Progress, classId: string, trackId: string): number | null {
+  return progress.placements[classId]?.[trackId] ?? null;
+}
+
 export function isTrackUnlocked(progress: Progress, classId: string, trackIndex: number): boolean {
-  if (trackIndex <= 0) return true;
-  const prev = TRACKS[trackIndex - 1];
-  if (!prev) return false;
-  return (progress.completed[classId] ?? []).includes(prev.id);
+  const rule = TRACKS[trackIndex]?.unlock;
+  if (!rule) return true;
+  const best = bestPlacement(progress, classId, rule.track);
+  if (best === null) return false;
+  return rule.result === "win" ? best === 1 : best <= PODIUM_PLACEMENT;
 }
 
 /**
- * Record a finished race. Returns the track def newly unlocked by this
- * completion, or null if it unlocked nothing new.
+ * Record a race placement. Returns the track defs newly unlocked by this
+ * result (a win can open a main-line track and a bonus branch at once).
  */
-export function markRaceCompleted(progress: Progress, classId: string, trackId: string) {
-  const index = TRACKS.findIndex((t) => t.id === trackId);
-  const next = TRACKS[index + 1] ?? null;
-  const wasNextUnlocked = next ? isTrackUnlocked(progress, classId, index + 1) : true;
-  const list = (progress.completed[classId] ??= []);
-  if (!list.includes(trackId)) list.push(trackId);
-  return wasNextUnlocked ? null : next;
+export function recordRaceResult(
+  progress: Progress,
+  classId: string,
+  trackId: string,
+  placement: number
+) {
+  const lockedBefore = TRACKS.filter((_, i) => !isTrackUnlocked(progress, classId, i));
+  const byTrack = (progress.placements[classId] ??= {});
+  byTrack[trackId] = Math.min(byTrack[trackId] ?? Infinity, placement);
+  return lockedBefore.filter((def) =>
+    isTrackUnlocked(
+      progress,
+      classId,
+      TRACKS.findIndex((t) => t.id === def.id)
+    )
+  );
 }
 
 const STORAGE_KEY = "vroom.progress.v1";
 
-export function loadProgress(): Progress {
+/** Parse a saved blob, migrating the old finished-track-list shape (every
+ * finish back then counted, so it maps to a podium under the new rules). */
+export function parseProgress(raw: string): Progress {
   const progress = createProgress();
+  const saved = JSON.parse(raw) as Partial<Progress> & {
+    completed?: Record<string, string[]>;
+  };
+  if (saved.placements && typeof saved.placements === "object") {
+    for (const [cls, byTrack] of Object.entries(saved.placements)) {
+      if (!byTrack || typeof byTrack !== "object") continue;
+      for (const [trackId, placement] of Object.entries(byTrack)) {
+        if (typeof placement === "number") (progress.placements[cls] ??= {})[trackId] = placement;
+      }
+    }
+  } else if (saved.completed && typeof saved.completed === "object") {
+    for (const [cls, ids] of Object.entries(saved.completed)) {
+      if (!Array.isArray(ids)) continue;
+      for (const id of ids) {
+        if (typeof id === "string") (progress.placements[cls] ??= {})[id] = PODIUM_PLACEMENT;
+      }
+    }
+  }
+  if (typeof saved.lastClass === "string") progress.lastClass = saved.lastClass;
+  if (typeof saved.lastTrack === "string") progress.lastTrack = saved.lastTrack;
+  if (typeof saved.lastVehicle === "string") progress.lastVehicle = saved.lastVehicle;
+  return progress;
+}
+
+export function loadProgress(): Progress {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const saved = JSON.parse(raw) as Partial<Progress>;
-      if (saved.completed && typeof saved.completed === "object") {
-        for (const [cls, ids] of Object.entries(saved.completed)) {
-          if (Array.isArray(ids)) progress.completed[cls] = ids.filter((v) => typeof v === "string");
-        }
-      }
-      if (typeof saved.lastClass === "string") progress.lastClass = saved.lastClass;
-      if (typeof saved.lastTrack === "string") progress.lastTrack = saved.lastTrack;
-      if (typeof saved.lastVehicle === "string") progress.lastVehicle = saved.lastVehicle;
-    }
+    if (raw) return parseProgress(raw);
   } catch {
     // corrupt or unavailable storage: start fresh
   }
-  return progress;
+  return createProgress();
 }
 
 export function saveProgress(progress: Progress): void {

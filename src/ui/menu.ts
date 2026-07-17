@@ -4,7 +4,7 @@
 import { isTrackUnlocked, saveProgress, SPEED_CLASSES, type Progress } from "../game/progression";
 import { getRecords, type Records } from "../game/records";
 import { createTrack, type TrackDef } from "../game/track";
-import { TRACKS } from "../game/tracks";
+import { trackDefById, TRACKS } from "../game/tracks";
 import { saveTuning, type Tuning } from "../game/tuning";
 import { applyVehicle, VEHICLES } from "../game/vehicles";
 import { drawMap, vehicleSprite } from "../render/sprites";
@@ -169,9 +169,10 @@ export function createMenu(
 
       tile.appendChild(minimap(def));
 
+      const bonus = def.unlock?.result === "win";
       const name = document.createElement("div");
       name.className = "track-name";
-      name.textContent = `${index + 1}. ${def.name}`;
+      name.textContent = bonus ? `★ ${def.name}` : `${index + 1}. ${def.name}`;
       tile.appendChild(name);
 
       const recs = document.createElement("div");
@@ -185,7 +186,9 @@ export function createMenu(
                 r.bestLapMs === null ? "—" : formatTime(r.bestLapMs)
               }`;
       } else {
-        recs.textContent = `finish ${TRACKS[index - 1]!.name} to unlock`;
+        const rule = def.unlock!;
+        const verb = rule.result === "win" ? "win" : "podium at";
+        recs.textContent = `${verb} ${trackDefById(rule.track).name} to unlock`;
       }
       tile.appendChild(recs);
 

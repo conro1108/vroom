@@ -67,6 +67,36 @@ body {
   color: var(--muted);
 }
 
+#race-pos {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+#countdown {
+  position: fixed;
+  top: 26%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 84px;
+  font-weight: 700;
+  font-family: var(--font);
+  color: var(--cream-light);
+  text-shadow:
+    0 5px 0 rgba(74, 55, 40, 0.9),
+    0 0 24px rgba(74, 55, 40, 0.35);
+  z-index: 4;
+  pointer-events: none;
+  animation: countdown-beat 0.8s ease forwards;
+}
+
+@keyframes countdown-beat {
+  0% { transform: translateX(-50%) scale(1.35); opacity: 0; }
+  20% { transform: translateX(-50%) scale(1); opacity: 1; }
+  85% { opacity: 1; }
+  100% { opacity: 0.65; }
+}
+
 #game {
   flex: 1;
   width: 100%;
@@ -268,6 +298,88 @@ body {
   color: var(--ink);
   font-size: 16px;
   font-family: var(--font);
+}
+
+#dev-panel .calibrate-btn {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--cream-light);
+  border: 3px dashed var(--brown);
+  border-radius: 12px;
+}
+
+/* --- calibration overlay: floats over the game while free-driving --- */
+
+#calibrate {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 74px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(320px, 88vw);
+  background: var(--cream);
+  border: 3px solid var(--brown);
+  border-radius: 14px;
+  padding: 10px 12px;
+  z-index: 4;
+  font-family: var(--font);
+  text-align: center;
+}
+
+#calibrate .cal-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+#calibrate .cal-ab {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+#calibrate .cal-ab button {
+  flex: 1;
+  padding: 10px 6px;
+  font-family: var(--font);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--cream-light);
+  border: 3px solid var(--brown);
+  border-radius: 10px;
+}
+
+#calibrate .cal-ab button.active {
+  background: var(--accent);
+  color: var(--cream-light);
+}
+
+#calibrate .cal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+#calibrate .cal-actions button {
+  padding: 8px 10px;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--cream-light);
+  border: 3px solid var(--brown);
+  border-radius: 10px;
+}
+
+#calibrate .cal-actions .cal-pick {
+  flex: 1;
+  background: var(--accent);
+  color: var(--cream-light);
 }
 
 /* --- advanced section in the settings panel --- */

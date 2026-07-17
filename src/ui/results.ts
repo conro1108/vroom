@@ -1,16 +1,18 @@
-// Post-race results card: lap splits, race total, record callouts, and the
-// unlock notice, with the "what next" buttons.
-import { formatTime } from "./hud";
+// Post-race results card: placement, lap splits, race total, record
+// callouts, and unlock notices, with the "what next" buttons.
+import { formatTime, ordinal } from "./hud";
 
 export interface ResultsData {
   trackName: string;
   classLabel: string;
+  placement: number; // 1-based finish position
+  racerCount: number;
   splits: number[];
   totalMs: number;
   bestSplitIndex: number;
   newBestLap: boolean;
   newBestRace: boolean;
-  unlockedName: string | null;
+  unlockedNames: string[];
   hasNext: boolean; // a next track exists and is unlocked
 }
 
@@ -29,9 +31,10 @@ export function showResults(data: ResultsData, handlers: ResultsHandlers): void 
 
   const flag = document.createElement("div");
   flag.className = "results-flag";
-  flag.textContent = "🏁";
+  flag.textContent = data.placement === 1 ? "🏆" : data.placement <= 3 ? "🏁" : "💨";
   const title = document.createElement("h2");
-  title.textContent = "finish!";
+  title.textContent =
+    data.placement === 1 ? "you win!" : `${ordinal(data.placement)} of ${data.racerCount}`;
   const sub = document.createElement("div");
   sub.className = "results-sub";
   sub.textContent = `${data.trackName} · ${data.classLabel}`;
@@ -62,7 +65,7 @@ export function showResults(data: ResultsData, handlers: ResultsHandlers): void 
   const badges: string[] = [];
   if (data.newBestRace) badges.push("★ new course record");
   if (data.newBestLap) badges.push("★ new best lap");
-  if (data.unlockedName) badges.push(`🔓 ${data.unlockedName} unlocked`);
+  for (const name of data.unlockedNames) badges.push(`🔓 ${name} unlocked`);
   for (const text of badges) {
     const badge = document.createElement("div");
     badge.className = "results-badge";

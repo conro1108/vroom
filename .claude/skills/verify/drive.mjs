@@ -1,5 +1,6 @@
-// End-to-end drive of vroom: menu → settings → race 3 laps (keyboard
-// autopilot) → results → next track → persistence checks → all-track worlds.
+// End-to-end drive of vroom: menu (vehicles/classes) → settings → calibration
+// overlay → race vs bots through the countdown (keyboard autopilot) →
+// placement results → progression gating → persistence → all-track worlds.
 import { chromium } from "playwright";
 
 const BASE = process.env.BASE ?? "http://localhost:5199/";
@@ -29,48 +30,57 @@ await page.waitForTimeout(200);
 await shot("02-menu-150cc");
 await page.click(".class-btn:has-text('100cc')");
 
+// vehicle picker on the splash
+await page.click(".vehicle-tile:has-text('Slot Car')");
+await page.waitForTimeout(200);
+const activeVehicle = await page.$eval(".vehicle-tile.active .vehicle-name", (el) => el.textContent);
+console.log("active vehicle:", activeVehicle);
+await shot("03-menu-vehicle");
+
 // locked tile is a no-op
 const lockedDisabled = await page.$eval(".track-tile.locked", (el) => el.disabled);
 console.log("locked tile disabled:", lockedDisabled);
 
-// settings from splash: styles + advanced
+// settings: advanced sliders + calibration overlay round-trip
 await page.click("#dev-toggle");
 await page.waitForTimeout(200);
-await shot("03-settings-styles");
-await page.click(".style-btn:has-text('Slot Car')");
-await page.waitForTimeout(200);
-const activeStyle = await page.$eval(".style-btn.active .style-name", (el) => el.textContent);
-console.log("active style:", activeStyle);
 await page.click("details.advanced summary");
 await page.waitForTimeout(200);
 await shot("04-settings-advanced");
-// slider tweak deactivates the style
-await page.$eval("details.advanced input[type=range]", (el) => {
-  el.value = String(Number(el.value) + Number(el.step));
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-});
-const stillActive = await page.$(".style-btn.active");
-console.log("style active after manual tweak (expect null):", stillActive && "yes");
-await page.click(".style-btn:has-text('Slot Car')"); // reselect for the drive
-await page.click("#dev-panel .panel-close");
-
-// start race on track 1
-await page.click(".track-tile:not(.locked)");
+await page.click(".calibrate-btn");
 await page.waitForTimeout(400);
-await shot("05-race-start");
+await shot("05-calibrate");
+const calTitle = await page.textContent("#calibrate .cal-title");
+console.log("calibrate axis:", calTitle);
+await page.click("#calibrate .cal-ab button:nth-child(2)"); // feel variant B
+await page.waitForTimeout(300);
+await page.click("#calibrate .cal-pick"); // keep it
+await page.waitForTimeout(200);
+const calTitle2 = await page.textContent("#calibrate .cal-title");
+console.log("calibrate after pick:", calTitle2);
+await page.click("#calibrate .cal-actions button[aria-label='quit calibration']");
+await page.waitForTimeout(300);
+
+// start race on track 1: countdown holds the field, then racing begins
+await page.click(".track-tile:not(.locked)");
+await page.waitForTimeout(300);
+await shot("06-race-countdown");
+const modeAtStart = await page.evaluate(() => window.__vroom?.mode);
+console.log("mode during countdown:", modeAtStart);
 
 // keyboard autopilot: hold W, bang-bang steer toward a point ahead on the
 // centerline. Sloppy but honest — everything goes through real key events.
 await page.keyboard.down("w");
 let steering = null; // 'a' | 'd' | null
 const deadline = Date.now() + 300 * 1000;
-let lastMode = "racing";
+let lastMode = "countdown";
+let shotMidRace = false;
 while (Date.now() < deadline) {
   const s = await page.evaluate(() => {
     const v = window.__vroom;
     if (!v || !v.track) return null;
     const { car, track, mode } = v;
-    if (mode !== "racing") return { mode };
+    if (mode !== "racing" && mode !== "countdown") return { mode };
     const n = track.samples.length;
     let bi = 0;
     let bd = Infinity;
@@ -87,7 +97,12 @@ while (Date.now() < deadline) {
   });
   if (!s) break;
   lastMode = s.mode;
-  if (s.mode !== "racing") break;
+  if (s.mode !== "racing" && s.mode !== "countdown") break;
+  if (s.mode === "racing" && !shotMidRace) {
+    shotMidRace = true;
+    await page.waitForTimeout(2500);
+    await shot("07-race-vs-bots");
+  }
   let diff = Math.atan2(s.ty - s.y, s.tx - s.x) - s.heading;
   while (diff > Math.PI) diff -= 2 * Math.PI;
   while (diff < -Math.PI) diff += 2 * Math.PI;
@@ -104,56 +119,68 @@ if (steering) await page.keyboard.up(steering);
 console.log("race ended with mode:", lastMode);
 
 await page.waitForTimeout(400);
-await shot("06-results");
+await shot("08-results");
+const title = await page.textContent(".results-card h2");
+console.log("results title:", title);
 const badges = await page.$$eval(".results-badge", (els) => els.map((e) => e.textContent));
 console.log("result badges:", badges);
 const splits = await page.$$eval(".split-row", (els) => els.map((e) => e.textContent));
 console.log("splits:", splits);
 
-// next track button starts speedway
-await page.click(".results-buttons button.primary");
-await page.waitForTimeout(500);
-await shot("07-next-track-speedway");
-
-// mid-race reset puts us back on lap 1
+// mid-race reset puts us back on lap 1 (after the fresh countdown)
+await page.click(".results-buttons button:has-text('again')");
+await page.waitForTimeout(3200);
 await page.keyboard.down("w");
 await page.waitForTimeout(1500);
 await page.keyboard.up("w");
 await page.click("#reset-btn");
+await page.waitForTimeout(2600);
 const lapAfterReset = await page.textContent("#lap-count");
 console.log("lap after reset:", lapAfterReset);
 
-// home button back to menu; records + unlock visible
+// home button back to menu; lock labels show the podium/win requirements
 await page.click("#home-btn");
 await page.waitForTimeout(300);
-await shot("08-menu-after-race");
+await shot("09-menu-after-race");
+const lockLabels = await page.$$eval(".track-tile.locked .track-records", (els) =>
+  els.map((e) => e.textContent)
+);
+console.log("lock labels:", JSON.stringify(lockLabels, null, 1));
 
 // persistence across reload
 await page.reload();
 await page.waitForTimeout(600);
-await shot("09-menu-reloaded");
-const tiles = await page.$$eval(".track-tile", (els) =>
-  els.map((e) => ({ locked: e.classList.contains("locked"), text: e.textContent }))
-);
-console.log("tiles after reload:", JSON.stringify(tiles, null, 1));
+await shot("10-menu-reloaded");
 
-// unlock everything (as if all races finished) and screenshot each track world
+// grant podiums everywhere + the wins that open the bonus branches, then
+// screenshot every track world
 await page.evaluate(() => {
-  const ids = ["meadow", "speedway", "serpent", "switchback", "knot", "gauntlet"];
+  const placements = {
+    meadow: 1,
+    speedway: 1,
+    serpent: 2,
+    switchback: 2,
+    knot: 2,
+    gauntlet: 1,
+    lagoon: 3,
+    rally: 3,
+  };
   localStorage.setItem(
     "vroom.progress.v1",
-    JSON.stringify({ completed: { 100: ids }, lastClass: "100", lastTrack: "meadow" })
+    JSON.stringify({ placements: { 100: placements }, lastClass: "100", lastTrack: "meadow" })
   );
 });
 await page.reload();
 await page.waitForTimeout(600);
-await shot("10-menu-all-unlocked");
-for (let i = 0; i < 6; i++) {
+await shot("11-menu-all-unlocked");
+const tileCount = (await page.$$(".track-tile:not(.locked)")).length;
+console.log("unlocked tiles (expect 8):", tileCount);
+for (let i = 0; i < tileCount; i++) {
   const tiles2 = await page.$$(".track-tile");
   await tiles2[i].click();
   await page.waitForTimeout(500);
   await page.keyboard.down("w");
-  await page.waitForTimeout(1200);
+  await page.waitForTimeout(3600); // countdown + a moment of driving
   await page.keyboard.up("w");
   await shot(`track-${i + 1}`);
   await page.click("#home-btn");

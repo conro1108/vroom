@@ -7,6 +7,12 @@ export interface TrackPoint {
   y: number;
 }
 
+/** How a track opens up: place top-3 (podium) or take 1st (win) somewhere. */
+export interface UnlockRule {
+  track: string; // trackId the result must come from
+  result: "podium" | "win";
+}
+
 export interface TrackDef {
   id: string;
   name: string;
@@ -14,6 +20,7 @@ export interface TrackDef {
   roadWidth: number;
   worldWidth: number;
   worldHeight: number;
+  unlock?: UnlockRule; // absent = open from the start
 }
 
 export interface Track {

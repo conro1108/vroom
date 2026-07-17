@@ -44,6 +44,14 @@ interface Particle {
   life: number;
 }
 
+/** A drawable racer that isn't the player: position + which sprite set. */
+export interface RacerPose {
+  x: number;
+  y: number;
+  heading: number;
+  vehicleId: string;
+}
+
 export class Scene {
   private world: HTMLCanvasElement;
   private skid: HTMLCanvasElement;
@@ -53,6 +61,7 @@ export class Scene {
   private display: HTMLCanvasElement;
   private displayCtx: CanvasRenderingContext2D;
   private carFrames: HTMLCanvasElement[];
+  private framesByVehicle = new Map<string, HTMLCanvasElement[]>();
   private particles: Particle[] = [];
   private cam: { x: number; y: number };
   private scale = 2;
@@ -98,12 +107,18 @@ export class Scene {
     this.ready = true;
   }
 
-  frame(dt: number, car: CarState, tuning: Tuning, ghost: GhostPose | null = null): void {
+  frame(
+    dt: number,
+    car: CarState,
+    tuning: Tuning,
+    ghost: GhostPose | null = null,
+    racers: RacerPose[] = []
+  ): void {
     if (!this.ready) this.resize();
     if (!this.ready) return; // still no layout — skip this frame
     this.updateCamera(dt, car, tuning);
     this.updateEffects(dt, car);
-    this.draw(car, ghost);
+    this.draw(car, ghost, racers);
   }
 
   /** Snap the camera onto the car with no easing (used after a reset). */
@@ -172,7 +187,16 @@ export class Scene {
     }
   }
 
-  private draw(car: CarState, ghost: GhostPose | null): void {
+  private framesFor(vehicleId: string): HTMLCanvasElement[] {
+    let frames = this.framesByVehicle.get(vehicleId);
+    if (!frames) {
+      frames = buildCarFrames(vehicleSprite(vehicleId));
+      this.framesByVehicle.set(vehicleId, frames);
+    }
+    return frames;
+  }
+
+  private draw(car: CarState, ghost: GhostPose | null, racers: RacerPose[]): void {
     const ctx = this.bufferCtx;
     const bw = this.buffer.width;
     const bh = this.buffer.height;
@@ -197,6 +221,17 @@ export class Scene {
       ctx.fillRect(Math.round(p.x - sx) - 1, Math.round(p.y - sy) - 1, 2, 2);
     }
     ctx.globalAlpha = 1;
+
+    // opponents under the player so the player's car always reads on top
+    for (const racer of racers) {
+      const frames = this.framesFor(racer.vehicleId);
+      const frame = frames[carFrameIndex(racer.heading)]!;
+      const rx = Math.round(racer.x - sx);
+      const ry = Math.round(racer.y - sy);
+      ctx.fillStyle = COLORS.shadow;
+      ctx.fillRect(rx - 6, ry + 5, 12, 3);
+      ctx.drawImage(frame, rx - Math.floor(frame.width / 2), ry - Math.floor(frame.height / 2));
+    }
 
     // ghost under the real car: same pre-rendered frames, just translucent
     if (ghost) {

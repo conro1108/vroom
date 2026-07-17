@@ -38,7 +38,7 @@ const SLIDERS: SliderSpec[] = [
   { key: "steerRangePx", label: "drag-x steer range", min: 30, max: 160, step: 5 },
 ];
 
-export function createDevPanel(tuning: Tuning): void {
+export function createDevPanel(tuning: Tuning, onCalibrate?: () => void): void {
   const toggle = document.getElementById("dev-toggle")!;
   const panel = document.getElementById("dev-panel")!;
   let advancedOpen = false;
@@ -96,6 +96,17 @@ export function createDevPanel(tuning: Tuning): void {
       () => tuning.holdToGo,
       (v) => (tuning.holdToGo = v)
     );
+
+    if (onCalibrate) {
+      const calBtn = document.createElement("button");
+      calBtn.className = "calibrate-btn";
+      calBtn.textContent = "🧪 calibrate feel (A/B driving test)";
+      calBtn.addEventListener("click", () => {
+        panel.hidden = true;
+        onCalibrate();
+      });
+      panel.appendChild(calBtn);
+    }
 
     // advanced: the raw physics sliders, collapsed by default
     const advanced = document.createElement("details");

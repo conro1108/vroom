@@ -9,12 +9,23 @@ import {
   type GhostLap,
   type GhostRecorder,
 } from "./game/ghost";
+import { choose, createCalibration, skipAxis, variantTuning, type Calibration } from "./game/calibrate";
+import {
+  createOpponents,
+  playerGridSlot,
+  playerPlacement,
+  playerPosition,
+  RACER_COUNT,
+  separateCars,
+  stepOpponents,
+  type Opponent,
+} from "./game/opponents";
 import { createCarState, stepCar } from "./game/physics";
 import {
   applySpeedClass,
   isTrackUnlocked,
   loadProgress,
-  markRaceCompleted,
+  recordRaceResult,
   RACE_LAPS,
   saveProgress,
   speedClassById,
@@ -24,8 +35,9 @@ import { bestSplitIndex, completeLap, createRace, raceTotalMs, type RaceState } 
 import { applyLap, applyRace, getRecords, loadRecords, recordKey, saveRecords } from "./game/records";
 import { createLapTracker, createTrack, createTrackQuery, updateLap, type LapTracker, type Track, type TrackQuery } from "./game/track";
 import { TRACKS } from "./game/tracks";
-import { loadTuning } from "./game/tuning";
-import { Scene } from "./render/scene";
+import { loadTuning, saveTuning } from "./game/tuning";
+import { Scene, type RacerPose } from "./render/scene";
+import { createCalibrateUi } from "./ui/calibrate";
 import { createDevPanel } from "./ui/devpanel";
 import { createHud } from "./ui/hud";
 import { createInput } from "./ui/input";
@@ -35,6 +47,8 @@ import { hideResults, showResults } from "./ui/results";
 const PHYSICS_DT = 1 / 120; // fixed step so feel doesn't vary with frame rate
 const WALL_MARGIN = 14;
 const WALL_BOUNCE = -0.3;
+const COUNTDOWN_BEAT_MS = 800; // 3 · 2 · 1 · go
+const GO_FLASH_MS = 650;
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const tuning = loadTuning();
@@ -42,9 +56,9 @@ const progress = loadProgress();
 const records = loadRecords();
 const input = createInput(canvas, tuning);
 const hud = createHud();
-createDevPanel(tuning);
+createDevPanel(tuning, () => startCalibration());
 
-type Mode = "menu" | "racing" | "finished";
+type Mode = "menu" | "countdown" | "racing" | "finished" | "calibrating";
 let mode: Mode = "menu";
 let trackIndex = 0;
 let cls: SpeedClass = speedClassById(progress.lastClass);
@@ -56,13 +70,72 @@ let lapTracker: LapTracker = createLapTracker(0);
 let race: RaceState = createRace(RACE_LAPS);
 let raceHadBestLap = false;
 let lapStart = performance.now();
+let opponents: Opponent[] = [];
+let countdownEnd = 0;
 const ghosts = loadGhosts();
 let ghost: GhostLap | null = null; // best lap being replayed
 let ghostRec: GhostRecorder = createGhostRecorder();
+let cal: Calibration | null = null;
+let calVariant: "a" | "b" = "a";
 
 const menu = createMenu(progress, records, tuning, (index, classId) => {
   startRace(index, classId);
 });
+
+// --- feel calibration: free-drive A/B taste test on the first track ---
+
+const calUi = createCalibrateUi({
+  onVariant(which) {
+    calVariant = which;
+    if (cal) calUi.update(cal, calVariant);
+  },
+  onPick() {
+    if (!cal) return;
+    choose(cal, calVariant);
+    afterCalStep();
+  },
+  onSkip() {
+    if (!cal) return;
+    skipAxis(cal);
+    afterCalStep();
+  },
+  onQuit() {
+    hud.toast("calibration discarded");
+    goToMenu();
+  },
+});
+
+function afterCalStep(): void {
+  if (!cal) return;
+  if (cal.done) {
+    Object.assign(tuning, cal.values);
+    saveTuning(tuning);
+    hud.toast("calibrated! copy json in settings");
+    goToMenu();
+    return;
+  }
+  calVariant = "a";
+  calUi.update(cal, calVariant);
+}
+
+/** Drive the calibration course (track 1) with the A/B overlay up. */
+function startCalibration(): void {
+  const def = TRACKS[0]!;
+  trackIndex = 0;
+  track = createTrack(def);
+  query = createTrackQuery(track);
+  scene = new Scene(track, query, canvas, progress.lastVehicle);
+  car = createCarState(track.start.x, track.start.y, track.startHeading);
+  opponents = [];
+  cal = createCalibration(tuning);
+  calVariant = "a";
+  scene.centerOn(car);
+  scene.clearMarks();
+  menu.hide();
+  hideResults();
+  calUi.show(cal, calVariant);
+  mode = "calibrating";
+}
 
 function startRace(index: number, classId: string): void {
   trackIndex = index;
@@ -80,26 +153,33 @@ function startRace(index: number, classId: string): void {
   restartRace();
 }
 
-/** Put the car back on the line and start the race clock fresh. */
+/** Put the field back on the grid and arm the countdown. */
 function restartRace(): void {
-  if (!track || !scene) return;
-  car = createCarState(track.start.x, track.start.y, track.startHeading);
-  lapTracker = createLapTracker(0);
+  if (!track || !query || !scene) return;
+  const slot = playerGridSlot(track);
+  car = createCarState(slot.x, slot.y, track.startHeading);
+  lapTracker = createLapTracker(query.progressAt(slot.x, slot.y) ?? 0);
+  opponents = createOpponents(track, query, progress.lastVehicle, tuning, cls);
   race = createRace(RACE_LAPS);
   raceHadBestLap = false;
-  lapStart = performance.now();
+  countdownEnd = performance.now() + 3 * COUNTDOWN_BEAT_MS;
+  lapStart = countdownEnd;
   ghost = ghosts[recordKey(track.id, cls.id)] ?? null;
   ghostRec = createGhostRecorder();
   scene.centerOn(car);
   scene.clearMarks();
   hud.setLap(1, RACE_LAPS);
   hud.setLapTime(0);
+  hud.setPosition(RACER_COUNT, RACER_COUNT);
   hideResults();
-  mode = "racing";
+  mode = "countdown";
 }
 
 function goToMenu(): void {
   mode = "menu";
+  cal = null;
+  calUi.hide();
+  hud.countdown(null);
   hideResults();
   menu.show();
 }
@@ -134,19 +214,22 @@ function finishRace(): void {
   const totalMs = raceTotalMs(race);
   const newBestRace = applyRace(records, track.id, cls.id, totalMs);
   saveRecords(records);
-  const unlocked = markRaceCompleted(progress, cls.id, track.id);
+  const placement = playerPlacement(opponents);
+  const unlocked = recordRaceResult(progress, cls.id, track.id, placement);
   saveProgress(progress);
 
   showResults(
     {
       trackName: track.name,
       classLabel: cls.label,
+      placement,
+      racerCount: RACER_COUNT,
       splits: race.splits,
       totalMs,
       bestSplitIndex: bestSplitIndex(race),
       newBestLap: raceHadBestLap,
       newBestRace,
-      unlockedName: unlocked?.name ?? null,
+      unlockedNames: unlocked.map((t) => t.name),
       hasNext: trackIndex + 1 < TRACKS.length && isTrackUnlocked(progress, cls.id, trackIndex + 1),
     },
     {
@@ -158,7 +241,12 @@ function finishRace(): void {
 }
 
 document.getElementById("reset-btn")!.addEventListener("click", () => {
-  if (mode !== "menu") restartRace();
+  if (mode === "calibrating" && track && scene) {
+    car = createCarState(track.start.x, track.start.y, track.startHeading);
+    scene.centerOn(car);
+  } else if (mode !== "menu") {
+    restartRace();
+  }
 });
 document.getElementById("home-btn")!.addEventListener("click", () => {
   if (mode !== "menu") goToMenu();
@@ -183,16 +271,37 @@ function loop(now: number): void {
     return;
   }
 
-  // The player's feel values scaled up to the selected speed class, computed
-  // per frame so dev-panel edits keep applying live mid-race.
-  const raceTuning = applySpeedClass(tuning, cls);
+  // The player's feel values scaled up to the selected speed class — or the
+  // active calibration variant — computed per frame so dev-panel edits keep
+  // applying live mid-race.
+  const raceTuning =
+    mode === "calibrating" && cal ? variantTuning(cal, tuning, calVariant) : applySpeedClass(tuning, cls);
 
-  if (mode === "racing") {
+  if (mode === "countdown") {
+    accumulator = 0;
+    const remaining = countdownEnd - now;
+    if (remaining <= 0) {
+      mode = "racing";
+      lapStart = countdownEnd; // clock starts exactly on green
+      hud.countdown("go!");
+      window.setTimeout(() => mode !== "countdown" && hud.countdown(null), GO_FLASH_MS);
+    } else {
+      hud.countdown(String(Math.ceil(remaining / COUNTDOWN_BEAT_MS)));
+    }
+  }
+
+  if (mode === "racing" || mode === "calibrating") {
     const carInput = input.read(car.heading);
+    const racing = mode === "racing";
     while (accumulator >= PHYSICS_DT) {
       accumulator -= PHYSICS_DT;
       car = stepCar(car, carInput, raceTuning, query.surfaceAt(car.x, car.y), PHYSICS_DT);
+      if (racing) {
+        stepOpponents(opponents, query, PHYSICS_DT, true);
+        separateCars([car, ...opponents.map((o) => o.car)]);
+      }
       applyWalls();
+      if (!racing) continue;
       recordGhostSample(ghostRec, now - lapStart, car);
 
       const p = query.progressAt(car.x, car.y);
@@ -201,14 +310,21 @@ function loop(now: number): void {
         if (mode !== "racing") break; // race just finished
       }
     }
-    hud.setLapTime(now - lapStart);
-  } else {
+    if (racing) {
+      hud.setLapTime(now - lapStart);
+      hud.setPosition(playerPosition(lapTracker, opponents), RACER_COUNT);
+    }
+  } else if (mode !== "countdown") {
     accumulator = 0;
   }
 
   const ghostPose =
     mode === "racing" && tuning.showGhost && ghost ? ghostAt(ghost, now - lapStart) : null;
-  scene.frame(frameDt, car, raceTuning, ghostPose);
+  const racerPoses: RacerPose[] =
+    mode === "racing" || mode === "countdown"
+      ? opponents.map((o) => ({ x: o.car.x, y: o.car.y, heading: o.car.heading, vehicleId: o.vehicleId }))
+      : [];
+  scene.frame(frameDt, car, raceTuning, ghostPose, racerPoses);
   requestAnimationFrame(loop);
 }
 
