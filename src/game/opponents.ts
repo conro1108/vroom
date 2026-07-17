@@ -4,6 +4,7 @@
 // them by vehicle id.
 import { createBot, type BotPersonality } from "./botdriver";
 import { createDraft, inSlipstream, stepDraft, type DraftState } from "./draft";
+import { SPIN_INPUT, spinCar, type ItemRacer } from "./items";
 import { createCarState, stepCar, type CarInput, type CarState } from "./physics";
 import { applySpeedClass, RACE_LAPS, type SpeedClass } from "./progression";
 import {
@@ -41,7 +42,10 @@ const GRID_FIRST_ROW = 16;
 const GRID_ROW_GAP = 18;
 const GRID_SIDE = 11;
 
-export interface Opponent {
+/** Opponents satisfy ItemRacer, so the item system treats bots and the
+ * player uniformly — `position`/`held`/`spin`/`boost`/`finished` are the
+ * ItemRacer fields, kept current by main.ts and game/items.ts. */
+export interface Opponent extends ItemRacer {
   vehicleId: string;
   car: CarState;
   tracker: LapTracker;
@@ -50,6 +54,8 @@ export interface Opponent {
   draft: DraftState;
   /** Seconds of speed boost remaining (earned from slipstreaming). */
   boostTimer: number;
+  /** Seconds until this bot uses the item it's holding. */
+  itemUseDelay: number;
   /** 1-based order in which this bot finished the race, or null if racing. */
   finishOrder: number | null;
 }
@@ -109,6 +115,12 @@ export function createOpponents(
       bot: createBot(track, query, tuning, personality),
       draft: createDraft(),
       boostTimer: 0,
+      itemUseDelay: 0,
+      position: i + 1,
+      held: null,
+      spin: 0,
+      boost: 0,
+      finished: false,
       finishOrder: null,
     };
   });
@@ -142,7 +154,9 @@ export function stepOpponents(
 ): void {
   let finished = opponents.filter((o) => o.finishOrder !== null).length;
   for (const o of opponents) {
-    const input = live ? o.bot(o.car) : { steer: 0, throttle: 0, brake: 0 };
+    const spinning = o.spin > 0;
+    const input = !live ? { steer: 0, throttle: 0, brake: 0 } : spinning ? SPIN_INPUT : o.bot(o.car);
+    if (spinning) spinCar(o.car, dt);
     let mult = 1;
     if (live && player !== null && o.tuning.rubberBand > 0 && o.finishOrder === null) {
       mult = rubberMult(raceDistance(o.tracker) - player.distance, o.tuning.rubberBand);
@@ -157,10 +171,9 @@ export function stepOpponents(
       if (stepDraft(o.draft, drafting, dt, o.tuning.draftChargeSeconds)) {
         o.boostTimer = o.tuning.draftBoostSeconds;
       }
-      if (o.boostTimer > 0) {
-        o.boostTimer = Math.max(0, o.boostTimer - dt);
-        mult *= o.tuning.boostPower;
-      }
+      if (o.boostTimer > 0) o.boostTimer = Math.max(0, o.boostTimer - dt);
+      // o.boost is the item turbo, ticked down by the item system
+      if (o.boostTimer > 0 || o.boost > 0) mult *= o.tuning.boostPower;
     }
     const tuning =
       mult === 1
@@ -172,6 +185,7 @@ export function stepOpponents(
     if (p !== null && updateLap(o.tracker, p).completed) {
       if (o.tracker.lap > RACE_LAPS && o.finishOrder === null) {
         o.finishOrder = ++finished;
+        o.finished = true;
       }
     }
   }

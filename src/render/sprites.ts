@@ -196,6 +196,42 @@ export const STUMP_MAP: PixelMap = [
 
 export const STUMP_PALETTE: Palette = { t: "#8a5a33", d: "#a97544" };
 
+// --- item art: pickup box, oil slick, homing missile shell ---
+
+export const ITEM_BOX_MAP: PixelMap = [
+  ".ooooooo.",
+  "oyyYYYyyo",
+  "oyYyyyYyo",
+  "oyyyyYYyo",
+  "oyyyYyyyo",
+  "oyyyYyyyo",
+  "oyyyyyyyo",
+  "oyyyYyyyo",
+  ".ooooooo.",
+];
+
+export const ITEM_BOX_PALETTE: Palette = { o: "#3a2b20", y: "#f2c14e", Y: "#8a5a33" };
+
+export const OIL_MAP: PixelMap = [
+  "...ddddd...",
+  ".ddddddddd.",
+  "ddDDdddDddd",
+  ".ddddDDddd.",
+  "...ddddd...",
+];
+
+export const OIL_PALETTE: Palette = { d: "#33302c", D: "#1f1c19" };
+
+export const MISSILE_MAP: PixelMap = [
+  ".ooo.",
+  "oRRRo",
+  "oRWRo",
+  "oRRRo",
+  ".ooo.",
+];
+
+export const MISSILE_PALETTE: Palette = { o: "#3a2b20", R: "#d94f3d", W: "#f6efdc" };
+
 export function drawMap(
   ctx: CanvasRenderingContext2D,
   map: PixelMap,

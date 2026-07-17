@@ -168,6 +168,11 @@ export function createTrackQuery(track: Track): TrackQuery {
  * velocity component is bounced. This is what makes lap boundaries physical —
  * you can run wide onto the grass, but not cut across the middle of the map.
  */
+// Minimum inward exit speed off the fence. Turn authority scales with speed,
+// so a car nosing into the fence at a crawl could otherwise pin itself there,
+// unable to build speed or rotate away — the springy kick self-rescues it.
+const FENCE_KICK = 40;
+
 export function fenceCar(
   car: { x: number; y: number; vx: number; vy: number },
   query: TrackQuery,
@@ -184,6 +189,11 @@ export function fenceCar(
   if (outward > 0) {
     car.vx -= outward * (1 + restitution) * nx;
     car.vy -= outward * (1 + restitution) * ny;
+  }
+  const inward = -(car.vx * nx + car.vy * ny);
+  if (inward < FENCE_KICK) {
+    car.vx -= (FENCE_KICK - inward) * nx;
+    car.vy -= (FENCE_KICK - inward) * ny;
   }
 }
 

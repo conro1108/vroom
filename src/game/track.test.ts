@@ -55,6 +55,23 @@ describe("fencing", () => {
     expect(outward).toBeLessThan(0);
   });
 
+  it("kicks a crawling head-on car back inward so it can't pin itself", () => {
+    const p = track.samples[40]!;
+    const hit = query.nearestOnRoad(p.x + 1, p.y + 1)!;
+    const nx = (p.x + 1 - hit.x) / hit.dist;
+    const ny = (p.y + 1 - hit.y) / hit.dist;
+    // barely moving into the fence — the trap case for speed-scaled turning
+    const car = {
+      x: hit.x + nx * (corridor + 0.5),
+      y: hit.y + ny * (corridor + 0.5),
+      vx: nx * 2,
+      vy: ny * 2,
+    };
+    fenceCar(car, query, corridor);
+    const inward = -(car.vx * nx + car.vy * ny);
+    expect(inward).toBeGreaterThanOrEqual(35);
+  });
+
   it("nearestOnRoad reports a point at the reported distance", () => {
     const p = track.samples[10]!;
     const hit = query.nearestOnRoad(p.x + 30, p.y)!;

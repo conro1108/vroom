@@ -1,11 +1,21 @@
 // Race HUD: lap timer, lap counter, live race position, best-lap display,
-// countdown, and toast. Pure display — record keeping lives in game/records.
+// countdown, item bubble, and toast. Pure display — record keeping lives in
+// game/records, item logic in game/items.
+import type { ItemKind } from "../game/items";
+
+const ITEM_ICONS: Record<ItemKind, string> = {
+  turbo: "⚡",
+  missile: "🚀",
+  oil: "🛢️",
+};
 
 export interface Hud {
   setLapTime(ms: number): void;
   setLap(lap: number, totalLaps: number): void;
   setPosition(pos: number, racers: number): void;
   setBest(ms: number | null): void;
+  /** Show the held item in the bubble (null hides it). */
+  setItem(item: ItemKind | null): void;
   /** Big center-screen text for the start countdown; null hides it. */
   countdown(text: string | null): void;
   toast(text: string): void;
@@ -18,6 +28,7 @@ export function createHud(): Hud {
   const posEl = document.getElementById("race-pos")!;
   const countdownEl = document.getElementById("countdown")!;
   const toastEl = document.getElementById("toast")!;
+  const itemEl = document.getElementById("item-bubble")!;
 
   return {
     setLapTime(ms) {
@@ -31,6 +42,18 @@ export function createHud(): Hud {
     },
     setBest(ms) {
       bestEl.textContent = ms === null ? "best —" : `best ${formatTime(ms)}`;
+    },
+    setItem(item) {
+      if (item === null) {
+        itemEl.hidden = true;
+        return;
+      }
+      itemEl.textContent = ITEM_ICONS[item];
+      itemEl.hidden = false;
+      // restart the pop animation on every new pickup
+      itemEl.style.animation = "none";
+      void itemEl.offsetWidth;
+      itemEl.style.animation = "";
     },
     countdown(text) {
       if (text === null) {

@@ -12,6 +12,16 @@ import {
 import { choose, createCalibration, skipAxis, variantTuning, type Calibration } from "./game/calibrate";
 import { createDraft, inSlipstream, stepDraft } from "./game/draft";
 import {
+  createItemRacer,
+  createItemWorld,
+  SPIN_INPUT,
+  spinCar,
+  stepItems,
+  useItem,
+  type ItemRacer,
+  type ItemWorld,
+} from "./game/items";
+import {
   createOpponents,
   playerGridSlot,
   playerPlacement,
@@ -89,6 +99,9 @@ let countdownEnd = 0;
 let boostTimer = 0; // seconds of player speed boost remaining (rocket start, slipstream)
 let throttleHeldSince: number | null = null; // when the player committed to throttle pre-green
 let playerDraft = createDraft();
+let playerRacer = createItemRacer(car); // the player's item-system view (spin/boost/held)
+let itemWorld: ItemWorld | null = null; // null = items off (solo mode)
+let itemRacers: ItemRacer[] = []; // [player, ...opponents]
 const ghosts = loadGhosts();
 let ghost: GhostLap | null = null; // best lap being replayed
 let ghostRec: GhostRecorder = createGhostRecorder();
@@ -196,6 +209,15 @@ function restartRace(): void {
   boostTimer = 0;
   throttleHeldSince = null;
   playerDraft = createDraft();
+  playerRacer = createItemRacer(car);
+  if (opponents.length > 0) {
+    itemWorld = createItemWorld(track);
+    itemRacers = [playerRacer, ...opponents];
+  } else {
+    itemWorld = null; // solo runs stay pure time trials
+    itemRacers = [];
+  }
+  hud.setItem(null);
   countdownEnd = performance.now() + 3 * COUNTDOWN_BEAT_MS;
   lapStart = countdownEnd;
   ghost = ghosts[recordKey(track.id, cls.id)] ?? null;
@@ -214,6 +236,7 @@ function goToMenu(): void {
   cal = null;
   calUi.hide();
   hud.countdown(null);
+  hud.setItem(null);
   hideResults();
   menu.show();
 }
@@ -238,6 +261,8 @@ function onLapCompleted(now: number): void {
   if (completeLap(race, lapMs).finished) {
     if (!finishPending) {
       finishPending = true;
+      playerRacer.finished = true; // out of the item game once across the line
+      hud.setItem(null);
       finishAt = now + FINISH_HOLD_MS;
     }
   } else {
@@ -344,16 +369,22 @@ function loop(now: number): void {
     const racing = mode === "racing";
     while (accumulator >= PHYSICS_DT) {
       accumulator -= PHYSICS_DT;
+      if (boostTimer > 0) boostTimer = Math.max(0, boostTimer - PHYSICS_DT);
       let stepTuning = raceTuning;
-      if (boostTimer > 0) {
-        boostTimer = Math.max(0, boostTimer - PHYSICS_DT);
+      if (boostTimer > 0 || playerRacer.boost > 0) {
         stepTuning = {
           ...raceTuning,
           maxSpeed: raceTuning.maxSpeed * raceTuning.boostPower,
           accel: raceTuning.accel * raceTuning.boostPower,
         };
       }
-      car = stepCar(car, carInput, stepTuning, query.surfaceAt(car.x, car.y), PHYSICS_DT);
+      let stepInput = carInput;
+      if (playerRacer.spin > 0) {
+        stepInput = SPIN_INPUT;
+        spinCar(car, PHYSICS_DT);
+      }
+      car = stepCar(car, stepInput, stepTuning, query.surfaceAt(car.x, car.y), PHYSICS_DT);
+      playerRacer.car = car;
       if (racing) {
         stepOpponents(
           opponents,
@@ -371,6 +402,7 @@ function loop(now: number): void {
           boostTimer = Math.max(boostTimer, raceTuning.draftBoostSeconds);
           hud.toast("slipstream!");
         }
+        stepItemWorld();
       }
       applyWalls();
       fenceCar(car, query, corridorPx());
@@ -400,9 +432,66 @@ function loop(now: number): void {
     mode === "racing" || mode === "countdown"
       ? opponents.map((o) => ({ x: o.car.x, y: o.car.y, heading: o.car.heading, vehicleId: o.vehicleId }))
       : [];
-  scene.frame(frameDt, car, raceTuning, ghostPose, racerPoses, boostTimer > 0);
+  scene.frame(
+    frameDt,
+    car,
+    raceTuning,
+    ghostPose,
+    racerPoses,
+    boostTimer > 0 || playerRacer.boost > 0,
+    mode === "racing" || mode === "countdown" ? itemWorld : null
+  );
   requestAnimationFrame(loop);
 }
+
+/** Live standings for the item system: better items land further back. */
+function updatePositions(): void {
+  const list = [
+    { r: playerRacer as ItemRacer, key: raceDistance(lapTracker) },
+    ...opponents.map((o) => ({
+      r: o as ItemRacer,
+      // finished racers rank by finish order, above everyone still driving
+      key: o.finishOrder !== null ? 200 - o.finishOrder : raceDistance(o.tracker),
+    })),
+  ];
+  list.sort((a, b) => b.key - a.key);
+  list.forEach((e, i) => (e.r.position = i + 1));
+}
+
+/** One physics step of items: pickups, hits, and bots deciding to fire. */
+function stepItemWorld(): void {
+  if (!itemWorld) return;
+  updatePositions();
+  for (const ev of stepItems(itemWorld, itemRacers, PHYSICS_DT)) {
+    if (ev.type === "pickup") {
+      if (ev.racer === 0) hud.setItem(playerRacer.held);
+      else opponents[ev.racer - 1]!.itemUseDelay = 0.8 + Math.random() * 2.2;
+    } else if (ev.racer === 0) {
+      hud.toast(ev.by === "oil" ? "slicked!" : "rocketed!");
+    }
+  }
+  for (let i = 0; i < opponents.length; i++) {
+    const o = opponents[i]!;
+    if (o.held === null || o.finished || o.spin > 0) continue;
+    o.itemUseDelay -= PHYSICS_DT;
+    if (o.itemUseDelay <= 0) useItem(itemWorld, itemRacers, i + 1);
+  }
+}
+
+/** The player fires whatever the bubble is holding (tap or space/E). */
+function useHeldItem(): void {
+  if (mode !== "racing" || !itemWorld) return;
+  if (useItem(itemWorld, itemRacers, 0)) hud.setItem(null);
+}
+
+const itemBubble = document.getElementById("item-bubble")!;
+itemBubble.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  useHeldItem();
+});
+window.addEventListener("keydown", (e) => {
+  if (e.key === " " || e.key.toLowerCase() === "e") useHeldItem();
+});
 
 /** How far from the centerline the fence sits on the current track. */
 function corridorPx(): number {

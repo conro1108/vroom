@@ -3,6 +3,7 @@
 // (grass, road, decorations, fence) is painted once; skid marks accumulate on
 // their own world-sized canvas and slowly fade.
 import type { GhostPose } from "../game/ghost";
+import type { ItemWorld } from "../game/items";
 import type { CarState } from "../game/physics";
 import type { Track, TrackQuery } from "../game/track";
 import type { Tuning } from "../game/tuning";
@@ -10,8 +11,14 @@ import {
   buildCarFrames,
   carFrameIndex,
   drawMap,
+  ITEM_BOX_MAP,
+  ITEM_BOX_PALETTE,
+  MISSILE_MAP,
+  MISSILE_PALETTE,
   MUSHROOM_MAP,
   MUSHROOM_PALETTE,
+  OIL_MAP,
+  OIL_PALETTE,
   STUMP_MAP,
   STUMP_PALETTE,
   vehicleSprite,
@@ -116,13 +123,14 @@ export class Scene {
     tuning: Tuning,
     ghost: GhostPose | null = null,
     racers: RacerPose[] = [],
-    boosting = false
+    boosting = false,
+    items: ItemWorld | null = null
   ): void {
     if (!this.ready) this.resize();
     if (!this.ready) return; // still no layout — skip this frame
     this.updateCamera(dt, car, tuning);
     this.updateEffects(dt, car, boosting);
-    this.draw(car, ghost, racers);
+    this.draw(car, ghost, racers, items);
   }
 
   /** Snap the camera onto the car with no easing (used after a reset). */
@@ -213,7 +221,12 @@ export class Scene {
     return frames;
   }
 
-  private draw(car: CarState, ghost: GhostPose | null, racers: RacerPose[]): void {
+  private draw(
+    car: CarState,
+    ghost: GhostPose | null,
+    racers: RacerPose[],
+    items: ItemWorld | null = null
+  ): void {
     const ctx = this.bufferCtx;
     const bw = this.buffer.width;
     const bh = this.buffer.height;
@@ -238,6 +251,20 @@ export class Scene {
       ctx.fillRect(Math.round(p.x - sx) - 1, Math.round(p.y - sy) - 1, 2, 2);
     }
     ctx.globalAlpha = 1;
+
+    // item world under the cars: oil first (on the road), then boxes, then shots
+    if (items) {
+      for (const oil of items.oils) {
+        drawMap(ctx, OIL_MAP, OIL_PALETTE, Math.round(oil.x - sx) - 5, Math.round(oil.y - sy) - 2);
+      }
+      for (const box of items.boxes) {
+        if (box.respawnIn > 0) continue;
+        drawMap(ctx, ITEM_BOX_MAP, ITEM_BOX_PALETTE, Math.round(box.x - sx) - 4, Math.round(box.y - sy) - 4);
+      }
+      for (const m of items.missiles) {
+        drawMap(ctx, MISSILE_MAP, MISSILE_PALETTE, Math.round(m.x - sx) - 2, Math.round(m.y - sy) - 2);
+      }
+    }
 
     // opponents under the player so the player's car always reads on top
     for (const racer of racers) {
