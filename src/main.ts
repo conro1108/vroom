@@ -78,6 +78,7 @@ import { createDevPanel } from "./ui/devpanel";
 import { createHud } from "./ui/hud";
 import { createInput } from "./ui/input";
 import { createMenu } from "./ui/menu";
+import { createMinimap } from "./ui/minimap";
 import { hideResults, showResults } from "./ui/results";
 
 const PHYSICS_DT = 1 / 120; // fixed step so feel doesn't vary with frame rate
@@ -93,6 +94,7 @@ const progress = loadProgress();
 const records = loadRecords();
 const input = createInput(canvas, tuning);
 const hud = createHud();
+const minimap = createMinimap();
 createDevPanel(
   tuning,
   () => startCalibration(),
@@ -189,6 +191,7 @@ function startCalibration(): void {
   track = createTrack(def);
   query = createTrackQuery(track);
   scene = new Scene(track, query, canvas, progress.lastVehicle, corridorPx());
+  minimap.setTrack(track);
   car = createCarState(track.start.x, track.start.y, track.startHeading);
   opponents = [];
   cal = createCalibration(tuning);
@@ -225,6 +228,7 @@ function startSeriesRace(raceIndex: number): void {
   track = createTrack(def);
   query = createTrackQuery(track);
   scene = new Scene(track, query, canvas, progress.lastVehicle, corridorPx(), themeById(cup.theme));
+  minimap.setTrack(track);
   hud.setBest(getRecords(records, def.id, cls.id).bestLapMs);
   menu.hide();
   hideResults();
@@ -525,6 +529,11 @@ function loop(now: number): void {
     boostTimer > 0 || playerRacer.boost > 0,
     mode === "racing" || mode === "countdown" ? itemWorld : null
   );
+  if (mode === "racing" || mode === "countdown" || mode === "calibrating") {
+    minimap.render(car, opponents.map((o) => o.car));
+  } else {
+    minimap.hide();
+  }
   requestAnimationFrame(loop);
 }
 

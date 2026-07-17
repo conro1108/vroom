@@ -11,12 +11,14 @@ import {
   SPEED_CLASSES,
   type Progress,
 } from "../game/progression";
+import { createTrack } from "../game/track";
 import { trackDefById } from "../game/tracks";
 import { saveTuning, type Tuning } from "../game/tuning";
 import { applyVehicle, CUSTOM_VEHICLE_ID, loadCustomVehicle, resetCustomVehicle, VEHICLES } from "../game/vehicles";
 import { drawMap, vehicleSprite } from "../render/sprites";
 import { ordinal } from "./hud";
 import { iconEl, STAR_5, type IconName } from "./icons";
+import { trackThumb } from "./trackshape";
 
 const PLACE_MEDALS: IconName[] = ["medal1", "medal2", "medal3"];
 
@@ -148,9 +150,15 @@ export function createMenu(
     const list = document.createElement("div");
     list.className = "track-picker-list";
     cup.trackIds.forEach((trackId, i) => {
+      const def = trackDefById(trackId);
       const btn = document.createElement("button");
       btn.className = "track-pick-btn";
-      btn.textContent = trackDefById(trackId).name;
+      const thumbBox = document.createElement("div");
+      thumbBox.className = "track-thumb-box";
+      thumbBox.appendChild(trackThumb(createTrack(def), 32, 28));
+      const label = document.createElement("span");
+      label.textContent = def.name;
+      btn.append(thumbBox, label);
       btn.addEventListener("click", () => onStart(cup.id, classId, i));
       list.appendChild(btn);
     });
