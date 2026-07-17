@@ -1,7 +1,12 @@
 // Calibration overlay: floats over the game while free-driving so A/B can be
-// toggled mid-corner. The state machine lives in game/calibrate; this is
-// just its cockpit.
+// toggled mid-corner. Variants also swap on their own every AUTO_SWITCH_SECONDS
+// so you can just keep driving through a corner and feel the difference,
+// rather than having to stop and tap; tapping A/B manually still works and
+// resets the clock. The state machine lives in game/calibrate; this is just
+// its cockpit.
 import { currentAxis, ROUNDS_PER_AXIS, variants, type Calibration } from "../game/calibrate";
+
+const AUTO_SWITCH_SECONDS = 10;
 
 export interface CalibrateUi {
   show(cal: Calibration, active: "a" | "b"): void;
@@ -24,6 +29,9 @@ export function createCalibrateUi(handlers: CalibrateHandlers): CalibrateUi {
 
   const title = document.createElement("div");
   title.className = "cal-title";
+
+  const countdown = document.createElement("div");
+  countdown.className = "cal-countdown";
 
   const abRow = document.createElement("div");
   abRow.className = "cal-ab";
@@ -60,9 +68,38 @@ export function createCalibrateUi(handlers: CalibrateHandlers): CalibrateUi {
   discard.addEventListener("click", () => handlers.onDiscard());
   confirmRow.append(apply, discard);
 
-  root.append(title, abRow, actions, confirmRow);
+  root.append(title, countdown, abRow, actions, confirmRow);
+
+  // auto-switch: flips the active variant on its own so you can keep driving
+  // through the same stretch of track instead of stopping to tap. Any manual
+  // tap or round change restarts the clock.
+  let autoTimer: number | null = null;
+  let secondsLeft = AUTO_SWITCH_SECONDS;
+  let activeVariant: "a" | "b" = "a";
+
+  const stopAutoSwitch = () => {
+    if (autoTimer !== null) {
+      window.clearInterval(autoTimer);
+      autoTimer = null;
+    }
+  };
+
+  const startAutoSwitch = () => {
+    stopAutoSwitch();
+    secondsLeft = AUTO_SWITCH_SECONDS;
+    countdown.textContent = `switches in ${secondsLeft}s — or tap to switch now`;
+    autoTimer = window.setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft <= 0) {
+        handlers.onVariant(activeVariant === "a" ? "b" : "a");
+      } else {
+        countdown.textContent = `switches in ${secondsLeft}s — or tap to switch now`;
+      }
+    }, 1000);
+  };
 
   const update = (cal: Calibration, active: "a" | "b") => {
+    activeVariant = active;
     const axis = currentAxis(cal);
     title.textContent = `${axis.label} · round ${cal.round + 1}/${ROUNDS_PER_AXIS}`;
     const { a, b } = variants(cal);
@@ -70,11 +107,13 @@ export function createCalibrateUi(handlers: CalibrateHandlers): CalibrateUi {
     btnB.textContent = `B ${b}`;
     btnA.classList.toggle("active", active === "a");
     btnB.classList.toggle("active", active === "b");
+    startAutoSwitch();
   };
 
   return {
     show(cal, active) {
       update(cal, active);
+      countdown.hidden = false;
       abRow.hidden = false;
       actions.hidden = false;
       confirmRow.hidden = true;
@@ -82,12 +121,15 @@ export function createCalibrateUi(handlers: CalibrateHandlers): CalibrateUi {
     },
     update,
     showConfirm() {
+      stopAutoSwitch();
       title.textContent = "calibration complete — keep it?";
+      countdown.hidden = true;
       abRow.hidden = true;
       actions.hidden = true;
       confirmRow.hidden = false;
     },
     hide() {
+      stopAutoSwitch();
       root.hidden = true;
     },
   };

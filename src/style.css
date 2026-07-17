@@ -337,6 +337,12 @@ body {
   margin-bottom: 8px;
 }
 
+#calibrate .cal-countdown {
+  font-size: 10px;
+  opacity: 0.65;
+  margin-bottom: 8px;
+}
+
 #calibrate .cal-ab[hidden],
 #calibrate .cal-actions[hidden] {
   display: none;
