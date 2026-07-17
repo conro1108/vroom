@@ -139,37 +139,14 @@ body {
   100% { opacity: 0; }
 }
 
-#stick-ring,
-#stick-nub {
+/* pixel-art arcade stick: drawn on a tiny canvas in input.ts, anchored so
+   the base plate (not the canvas box) sits on the touch center */
+#stick {
   position: fixed;
   pointer-events: none;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -68%);
+  image-rendering: pixelated;
   z-index: 2;
-}
-
-#stick-ring {
-  width: 84px;
-  height: 84px;
-  border: 4px solid var(--brown);
-  background:
-    radial-gradient(circle at 50% 42%, rgba(0, 0, 0, 0.14) 0 34%, transparent 36%),
-    var(--cream);
-  box-shadow:
-    inset 0 -4px 0 rgba(90, 70, 50, 0.35),
-    inset 0 3px 0 rgba(255, 255, 255, 0.5),
-    0 3px 0 rgba(74, 55, 40, 0.35);
-}
-
-#stick-nub {
-  width: 44px;
-  height: 44px;
-  background: radial-gradient(circle at 38% 32%, #f0885f 0 28%, var(--accent) 60%, #b23f22);
-  border: 4px solid var(--brown);
-  box-shadow:
-    inset 0 -5px 0 rgba(0, 0, 0, 0.22),
-    0 4px 0 rgba(74, 55, 40, 0.45);
-  transition: left 0.06s linear, top 0.06s linear;
 }
 
 #item-bubble {

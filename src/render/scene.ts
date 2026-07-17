@@ -273,7 +273,7 @@ export class Scene {
       const rx = Math.round(racer.x - sx);
       const ry = Math.round(racer.y - sy);
       ctx.fillStyle = COLORS.shadow;
-      ctx.fillRect(rx - 6, ry + 5, 12, 3);
+      ctx.fillRect(rx - 7, ry + 6, 14, 3);
       ctx.drawImage(frame, rx - Math.floor(frame.width / 2), ry - Math.floor(frame.height / 2));
     }
 
@@ -291,7 +291,7 @@ export class Scene {
     const cx = Math.round(car.x - sx);
     const cy = Math.round(car.y - sy);
     ctx.fillStyle = COLORS.shadow;
-    ctx.fillRect(cx - 6, cy + 5, 12, 3);
+    ctx.fillRect(cx - 7, cy + 6, 14, 3);
     ctx.drawImage(frame, cx - Math.floor(frame.width / 2), cy - Math.floor(frame.height / 2));
 
     this.displayCtx.drawImage(this.buffer, -fracX, -fracY, bw * this.scale, bh * this.scale);

@@ -252,15 +252,25 @@ export function drawMap(
 
 export const CAR_FRAME_COUNT = 64;
 
+// Cars render slightly larger than their source maps; combined with the
+// majority-vote sampling below this keeps rotated frames chunky and solid
+// instead of shedding pixels at diagonal angles.
+const CAR_SPRITE_SCALE = 1.25;
+
 /**
  * Pre-render a vehicle sprite at CAR_FRAME_COUNT rotations. Frame 0 faces up
- * (-y); frame k is rotated k * 2PI/N clockwise.
+ * (-y); frame k is rotated k * 2PI/N clockwise. Each destination pixel takes
+ * a majority vote over 2x2 subsamples of the rotated source, which fills the
+ * ragged single-pixel dropouts plain nearest-neighbor leaves on diagonals.
  */
-export function buildCarFrames(sprite: VehicleSprite = VEHICLE_SPRITES.classic!): HTMLCanvasElement[] {
+export function buildCarFrames(
+  sprite: VehicleSprite = VEHICLE_SPRITES.classic!,
+  scale = CAR_SPRITE_SCALE
+): HTMLCanvasElement[] {
   const { map, palette } = sprite;
   const mapW = map[0]!.length;
   const mapH = map.length;
-  const size = Math.ceil(Math.hypot(mapW, mapH)) + 2;
+  const size = Math.ceil(Math.hypot(mapW, mapH) * scale) + 2;
   const rgba = new Map<string, [number, number, number]>();
   for (const [key, hex] of Object.entries(palette)) {
     rgba.set(key, [
@@ -270,6 +280,7 @@ export function buildCarFrames(sprite: VehicleSprite = VEHICLE_SPRITES.classic!)
     ]);
   }
 
+  const SUB = [-0.25, 0.25];
   const frames: HTMLCanvasElement[] = [];
   for (let f = 0; f < CAR_FRAME_COUNT; f++) {
     const angle = (f / CAR_FRAME_COUNT) * Math.PI * 2;
@@ -280,15 +291,36 @@ export function buildCarFrames(sprite: VehicleSprite = VEHICLE_SPRITES.classic!)
     canvas.height = size;
     const ctx = canvas.getContext("2d")!;
     const img = ctx.createImageData(size, size);
+    const votes = new Map<string, number>();
     for (let dy = 0; dy < size; dy++) {
       for (let dx = 0; dx < size; dx++) {
-        const u = dx - size / 2 + 0.5;
-        const v = dy - size / 2 + 0.5;
-        const sx = Math.floor(u * cos - v * sin + mapW / 2);
-        const sy = Math.floor(u * sin + v * cos + mapH / 2);
-        if (sx < 0 || sy < 0 || sx >= mapW || sy >= mapH) continue;
-        const color = rgba.get(map[sy]![sx]!);
-        if (!color) continue;
+        votes.clear();
+        let transparent = 0;
+        for (const ou of SUB) {
+          for (const ov of SUB) {
+            const u = (dx + 0.5 + ou - size / 2) / scale;
+            const v = (dy + 0.5 + ov - size / 2) / scale;
+            const sx = Math.floor(u * cos - v * sin + mapW / 2);
+            const sy = Math.floor(u * sin + v * cos + mapH / 2);
+            if (sx < 0 || sy < 0 || sx >= mapW || sy >= mapH) {
+              transparent++;
+              continue;
+            }
+            const ch = map[sy]![sx]!;
+            if (!rgba.has(ch)) transparent++;
+            else votes.set(ch, (votes.get(ch) ?? 0) + 1);
+          }
+        }
+        let bestCh: string | null = null;
+        let bestN = 0;
+        for (const [ch, n] of votes) {
+          if (n > bestN) {
+            bestN = n;
+            bestCh = ch;
+          }
+        }
+        if (bestCh === null || bestN < transparent) continue;
+        const color = rgba.get(bestCh)!;
         const i = (dy * size + dx) * 4;
         img.data[i] = color[0];
         img.data[i + 1] = color[1];

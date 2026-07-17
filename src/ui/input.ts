@@ -31,6 +31,87 @@ export function joystickSteer(
   return clamp(diff / lockRad, -1, 1);
 }
 
+// --- the on-screen stick: a pixel-art arcade joystick drawn in 3/4 view ---
+// A squashed base plate with a socket, a shaft that leans with your thumb,
+// and a ball top. Redrawn each frame onto a tiny buffer blitted at an
+// integer scale so it stays on the same pixel grid as the game world.
+
+const STICK_SIZE = 44; // buffer px
+const STICK_SCALE = 3; // css px per buffer px
+const MAX_LEAN_PX = 26; // css px of drag for full visual lean
+
+const STICK_COLORS = {
+  outline: "#3a2b20",
+  plate: "#e5d5b8",
+  plateLight: "#f6efdc",
+  socket: "#43342a",
+  ball: "#e0532f",
+  ballDark: "#b23f22",
+  ballLight: "#f0885f",
+};
+
+function drawStick(ctx: CanvasRenderingContext2D, dxCss: number, dyCss: number): void {
+  ctx.clearRect(0, 0, STICK_SIZE, STICK_SIZE);
+  const len = Math.hypot(dxCss, dyCss);
+  const k = len > MAX_LEAN_PX ? MAX_LEAN_PX / len : 1;
+  const lx = (dxCss * k) / STICK_SCALE;
+  const ly = (dyCss * k) / STICK_SCALE;
+  const cx = STICK_SIZE / 2;
+  const cy = STICK_SIZE / 2 + 8;
+
+  // base plate: ellipse with a rim outline and a lit top edge
+  const a = 13;
+  const b = 7;
+  for (let y = -b; y <= b; y++) {
+    for (let x = -a; x <= a; x++) {
+      const d = (x / a) ** 2 + (y / b) ** 2;
+      if (d > 1) continue;
+      let color = STICK_COLORS.plate;
+      if (d > 0.72) color = STICK_COLORS.outline;
+      else if (y < -2 && d < 0.5) color = STICK_COLORS.plateLight;
+      ctx.fillStyle = color;
+      ctx.fillRect(cx + x, cy + y, 1, 1);
+    }
+  }
+  // socket the shaft rises from
+  for (let y = -2; y <= 2; y++) {
+    for (let x = -4; x <= 4; x++) {
+      if ((x / 4) ** 2 + (y / 2) ** 2 > 1) continue;
+      ctx.fillStyle = STICK_COLORS.socket;
+      ctx.fillRect(cx + x, cy + y, 1, 1);
+    }
+  }
+
+  // ball leans with the thumb; vertical lean is squashed by the 3/4 view
+  const bx = Math.round(cx + lx);
+  const by = Math.round(cy - 13 + ly * 0.55);
+
+  // shaft from socket to just under the ball
+  const steps = 8;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const sx = Math.round(cx + (bx - cx) * t);
+    const sy = Math.round(cy - 1 + (by + 3 - (cy - 1)) * t);
+    ctx.fillStyle = STICK_COLORS.outline;
+    ctx.fillRect(sx - 1, sy, 2, 2);
+  }
+
+  // ball top: outline ring, shaded belly, glint
+  const r = 5;
+  for (let y = -r; y <= r; y++) {
+    for (let x = -r; x <= r; x++) {
+      const d2 = x * x + y * y;
+      if (d2 > r * r) continue;
+      let color = STICK_COLORS.ball;
+      if (d2 > (r - 1) * (r - 1)) color = STICK_COLORS.outline;
+      else if (x + y >= 4) color = STICK_COLORS.ballDark;
+      else if ((x + 2) ** 2 + (y + 2) ** 2 <= 2) color = STICK_COLORS.ballLight;
+      ctx.fillStyle = color;
+      ctx.fillRect(bx + x, by + y, 1, 1);
+    }
+  }
+}
+
 export function createInput(target: HTMLElement, tuning: Tuning): InputRig {
   let pointerId: number | null = null;
   let originX = 0;
@@ -41,12 +122,15 @@ export function createInput(target: HTMLElement, tuning: Tuning): InputRig {
 
   const keys = new Set<string>();
 
-  const ring = document.createElement("div");
-  ring.id = "stick-ring";
-  const nub = document.createElement("div");
-  nub.id = "stick-nub";
-  ring.hidden = nub.hidden = true;
-  document.body.append(ring, nub);
+  const stick = document.createElement("canvas");
+  stick.id = "stick";
+  stick.width = STICK_SIZE;
+  stick.height = STICK_SIZE;
+  stick.style.width = `${STICK_SIZE * STICK_SCALE}px`;
+  stick.style.height = `${STICK_SIZE * STICK_SCALE}px`;
+  stick.hidden = true;
+  document.body.appendChild(stick);
+  const stickCtx = stick.getContext("2d")!;
 
   // In fixed mode the stick lives bottom-right and survives lifting the
   // thumb — re-touching steers from the same center, so no orientation reset.
@@ -58,24 +142,13 @@ export function createInput(target: HTMLElement, tuning: Tuning): InputRig {
 
   const updateIndicator = () => {
     const fixed = tuning.fixedStick && tuning.steerMode === "joystick";
-    ring.hidden = nub.hidden = !touching && !fixed;
-    if (ring.hidden) return;
+    stick.hidden = !touching && !fixed;
+    if (stick.hidden) return;
     const c = stickCenter();
-    ring.style.left = `${c.x}px`;
-    ring.style.top = `${c.y}px`;
-    ring.style.opacity = touching ? "1" : "0.85";
-    if (!touching) {
-      nub.style.left = `${c.x}px`;
-      nub.style.top = `${c.y}px`;
-      return;
-    }
-    const dx = curX - c.x;
-    const dy = curY - c.y;
-    const len = Math.hypot(dx, dy);
-    const max = 26; // keep the nub visually inside the ring
-    const k = len > max ? max / len : 1;
-    nub.style.left = `${c.x + dx * k}px`;
-    nub.style.top = `${c.y + dy * k}px`;
+    stick.style.left = `${c.x}px`;
+    stick.style.top = `${c.y}px`;
+    stick.style.opacity = touching ? "1" : "0.85";
+    drawStick(stickCtx, touching ? curX - c.x : 0, touching ? curY - c.y : 0);
   };
 
   target.addEventListener("pointerdown", (e) => {
