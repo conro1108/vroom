@@ -128,6 +128,42 @@ describe("observerPoints", () => {
       expect(nearest).toBeLessThanOrEqual(15 + 1e-6); // but only just off it
     }
   });
+
+  it("plants a listener at a sharp corner", () => {
+    // a smooth circle with one hard notch pulled inward at index 0
+    const N = 120;
+    const R = 100;
+    const loop: Observer[] = Array.from({ length: N }, (_, k) => {
+      const a = (k / N) * 2 * Math.PI;
+      return { x: Math.cos(a) * R, y: Math.sin(a) * R };
+    });
+    loop[0] = { x: 40, y: 0 };
+    const [o] = observerPoints(loop, 1, 10);
+    const dNotch = Math.hypot(o!.x - 40, o!.y);
+    const dFar = Math.hypot(o!.x + 100, o!.y); // the smooth far side of the loop
+    expect(dNotch).toBeLessThan(dFar); // landed at the notch, not somewhere bland
+    expect(dNotch).toBeLessThanOrEqual(10 + 1e-6);
+  });
+
+  it("plants a listener mid-straight where you're flat-out", () => {
+    // a stadium: two long straights (y = ±50) joined by tight semicircle ends
+    const loop: Observer[] = [];
+    const half = 150;
+    const r = 50;
+    const step = 3;
+    for (let x = -half; x < half; x += step) loop.push({ x, y: -r }); // bottom straight →
+    for (let a = -Math.PI / 2; a < Math.PI / 2; a += step / r)
+      loop.push({ x: half + Math.cos(a) * r, y: Math.sin(a) * r }); // right end ↑
+    for (let x = half; x > -half; x -= step) loop.push({ x, y: r }); // top straight ←
+    for (let a = Math.PI / 2; a < (3 * Math.PI) / 2; a += step / r)
+      loop.push({ x: -half + Math.cos(a) * r, y: Math.sin(a) * r }); // left end ↓
+
+    const pts = observerPoints(loop, 3, 8);
+    const onStraight = pts.some((o) => Math.abs(o.x) < 60); // straights live near x=0
+    const onEnds = pts.filter((o) => Math.abs(o.x) > 100).length; // ends live near x=±150
+    expect(onStraight).toBe(true); // grabbed a top-speed straight, not just corners
+    expect(onEnds).toBeGreaterThanOrEqual(1); // and at least one tight end
+  });
 });
 
 describe("createAudio", () => {

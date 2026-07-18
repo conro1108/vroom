@@ -72,16 +72,18 @@ export interface Observer {
   y: number;
 }
 
-/** Scatter a few stationary "listeners" around the loop, sitting just off the
- *  road (alternating sides). Crossing near one fires the doppler vroom — like a
- *  spectator hearing you rip past — which gives the sound a sporadic, positional
- *  feel instead of firing on every steering input. */
+/** Place a few stationary "listeners" at the *dramatic* spots on the loop —
+ *  the apex of a tight corner, or the middle of a long straight where you're
+ *  flat-out — sitting just off the road (alternating sides). Crossing near one
+ *  fires the doppler vroom, like a spectator hearing you rip past the place
+ *  where the racing is tensest. Falls back to even spacing on a shapeless loop. */
 export function observerPoints(samples: Observer[], count: number, offset: number): Observer[] {
   const n = samples.length;
   if (n < 2 || count < 1) return [];
+  const picks = dramaticIndices(samples, count);
   const out: Observer[] = [];
-  for (let k = 0; k < count; k++) {
-    const i = Math.floor(((k + 0.5) / count) * n) % n; // spread around, skip the start line
+  for (let k = 0; k < picks.length; k++) {
+    const i = picks[k]!;
     const a = samples[i]!;
     const b = samples[(i + 1) % n]!;
     let tx = b.x - a.x;
@@ -93,6 +95,67 @@ export function observerPoints(samples: Observer[], count: number, offset: numbe
     out.push({ x: a.x - ty * offset * side, y: a.y + tx * offset * side });
   }
   return out;
+}
+
+/** Circular index distance around a loop of length n. */
+function circDist(a: number, b: number, n: number): number {
+  const d = Math.abs(a - b);
+  return Math.min(d, n - d);
+}
+
+/** Turn magnitude (radians) of the corner around sample i, measured over a
+ *  ±w window so a dense polyline reads as corners not micro-jitter. */
+function windowedTurn(samples: Observer[], i: number, w: number): number {
+  const n = samples.length;
+  const a = samples[(i - w + n) % n]!;
+  const b = samples[i]!;
+  const c = samples[(i + w) % n]!;
+  let d = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(b.y - a.y, b.x - a.x);
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return Math.abs(d);
+}
+
+/** Pick `count` sample indices at the loop's most dramatic spots, spread apart
+ *  so they don't bunch into one corner complex. Drama = a tight apex OR the
+ *  heart of a long straight (far from any corner = top speed). */
+function dramaticIndices(samples: Observer[], count: number): number[] {
+  const n = samples.length;
+  const w = Math.max(1, Math.floor(n / 48));
+  const turn = samples.map((_, i) => windowedTurn(samples, i, w));
+  const maxTurn = Math.max(1e-6, ...turn);
+
+  // Corner peaks: local maxima that actually bend, so "distance to a corner"
+  // means something for scoring the straights.
+  const peaks: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const p = turn[(i - 1 + n) % n]!;
+    const c = turn[i]!;
+    const nx = turn[(i + 1) % n]!;
+    if (c >= p && c >= nx && c > 0.4 * maxTurn) peaks.push(i);
+  }
+  const nearCorner = samples.map((_, i) =>
+    peaks.length ? Math.min(...peaks.map((j) => circDist(i, j, n))) : 0
+  );
+  const maxNear = Math.max(1e-6, ...nearCorner);
+
+  // Each spot scores as the better of its corner drama and its straight drama.
+  const score = samples.map((_, i) =>
+    Math.max(turn[i]! / maxTurn, 0.85 * (nearCorner[i]! / maxNear))
+  );
+
+  // Greedily take the top scorers while keeping them spread around the loop,
+  // relaxing the spacing (then giving up on it entirely) if we can't fill count.
+  const order = [...score.keys()].sort((a, b) => score[b]! - score[a]!);
+  const picks: number[] = [];
+  for (let sep = Math.floor((n / count) * 0.55); picks.length < count; sep = Math.floor(sep / 2)) {
+    for (const i of order) {
+      if (picks.length >= count) break;
+      if (!picks.includes(i) && picks.every((p) => circDist(i, p, n) >= sep)) picks.push(i);
+    }
+    if (sep <= 0) break;
+  }
+  return picks.sort((a, b) => a - b);
 }
 
 /** Stereo pan (-1 left .. 1 right) for an object at world offset (dx,dy) given
@@ -308,8 +371,12 @@ export function createAudio(volume: number): GameAudio {
       // it passes ("nyeeeeEEE-yowwwm") and fades darker as it tears away. The
       // whole thing scales with `seconds` — a quick zip to a long drawn-out pass.
       // peakT is closest approach: loudest, brightest, and the pitch drop.
+      // The pass sits early in the window (peakT) so the recede gets a long
+      // tail — the car spends more time tearing away than bearing down, which is
+      // what a trackside pass actually feels like: a gathering approach, one
+      // hard hit, then a drawn-out fade.
       const d = clamp(seconds, 0.2, 4);
-      const peakT = d * 0.52;
+      const peakT = d * 0.4;
       const endT = d;
       const stop = now + endT + 0.08;
       const s = clamp01(strength);
@@ -318,21 +385,22 @@ export function createAudio(volume: number): GameAudio {
       // happens over `dropDur` centred on the pass — tighter = a sharper zip-by.
       const baseHz = 210 + s * 65; // a screaming fundamental (F1, not muscle car)
       const approachHz = baseHz * 1.5;
-      const recedeHz = baseHz * 0.62;
-      const dropDur = clamp(d * 0.2, 0.08, 0.35);
+      const recedeHz = baseHz * 0.55; // heavier drop than a subtle dip
+      const dropDur = clamp(d * 0.13, 0.05, 0.22); // sharp, so the pass really cracks
 
-      // Brightness peaks at the pass and muffles as it recedes.
+      // Brightness climbs to the pass, then muffles over the long recede tail.
       const lp = ctx.createBiquadFilter();
       lp.type = "lowpass";
       lp.Q.value = 0.9;
       lp.frequency.setValueAtTime(1400, now);
       lp.frequency.exponentialRampToValueAtTime(6000, now + peakT);
-      lp.frequency.exponentialRampToValueAtTime(900, now + endT);
-      // Loudness swells in, holds loud across the pass, then fades receding.
+      lp.frequency.exponentialRampToValueAtTime(700, now + endT);
+      // Loudness eases up smoothly out of near-silence, spikes at the pass, then
+      // decays over the long tail — no held plateau, which is what made it read
+      // as a symmetric parabola before.
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, now);
-      g.gain.exponentialRampToValueAtTime(peak, now + Math.max(0.02, peakT - dropDur * 0.5));
-      g.gain.setValueAtTime(peak, now + peakT + dropDur * 0.5);
+      g.gain.exponentialRampToValueAtTime(peak, now + peakT);
       g.gain.exponentialRampToValueAtTime(0.0001, now + endT);
       lp.connect(g);
 
@@ -350,7 +418,7 @@ export function createAudio(volume: number): GameAudio {
         o.type = L.type;
         const og = ctx.createGain();
         og.gain.value = L.gain;
-        dopplerSweep(o.frequency, now, approachHz * L.mul, recedeHz * L.mul, peakT, dropDur);
+        dopplerSweep(o.frequency, now, approachHz * L.mul, recedeHz * L.mul, peakT, dropDur, endT);
         o.connect(og).connect(lp);
         return o;
       });
@@ -394,23 +462,26 @@ export function createAudio(volume: number): GameAudio {
   };
 }
 
-/** Doppler pitch contour for a flyby: hold the elevated `approach` pitch while
- *  the car bears down, then snap down to the depressed `recede` pitch over a
- *  short `dropDur` window centred on closest approach (`peakT`), and stay there
- *  as it tears away. The near-instant drop through the pass is the signature of
- *  the trackside F1 scream — a smooth symmetric swell reads as a siren instead. */
+/** Doppler pitch contour for a flyby: ease gently up to the elevated `approach`
+ *  pitch as the car gathers on you, snap down hard to `recede` over a short
+ *  `dropDur` centred on closest approach (`peakT`), then keep gliding down a
+ *  touch through the long recede tail (out to `endT`) as it shrinks into the
+ *  distance. The gentle-in / hard-drop / long-out shape is the signature of the
+ *  trackside F1 scream — a symmetric swell reads as a siren instead. */
 function dopplerSweep(
   p: AudioParam,
   at: number,
   approach: number,
   recede: number,
   peakT: number,
-  dropDur: number
+  dropDur: number,
+  endT: number
 ): void {
   const dropStart = Math.max(0.01, peakT - dropDur * 0.5);
-  p.setValueAtTime(approach, at);
-  p.setValueAtTime(approach, at + dropStart); // hold elevated through the approach
-  p.exponentialRampToValueAtTime(recede, at + dropStart + dropDur); // snap down at the pass
+  p.setValueAtTime(approach * 0.82, at); // start a touch low...
+  p.exponentialRampToValueAtTime(approach, at + dropStart); // ...ease up as it gathers
+  p.exponentialRampToValueAtTime(recede, at + dropStart + dropDur); // hard snap-down at the pass
+  p.exponentialRampToValueAtTime(recede * 0.8, at + endT); // keep sinking down the long tail
 }
 
 function chirp(ctx: Ctx, noise: AudioBuffer, out: AudioNode, at: number, dur: number, level: number): void {
