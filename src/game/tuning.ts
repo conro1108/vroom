@@ -27,6 +27,7 @@ export interface Tuning {
   fenceMarginPx: number; // grass runoff between road edge and the fence
   cameraLerp: number; // 1/s camera chase
   lookAhead: number; // seconds of velocity the camera leads by
+  desktopZoomWorldHeight: number; // wide-screen zoom: world-px kept visible vertically so you still see ahead (phones stay width-driven)
   steerMode: "joystick" | "dragx"; // joystick: thumb vector = screen direction to drive
   fixedStick: boolean; // joystick anchored bottom-right instead of at touch-down
   joystickDeadzonePx: number; // css px of drag before steering engages
@@ -63,6 +64,7 @@ export const DEFAULT_TUNING: Tuning = {
   fenceMarginPx: 34,
   cameraLerp: 5,
   lookAhead: 0.35,
+  desktopZoomWorldHeight: 190,
   steerMode: "joystick",
   fixedStick: true,
   joystickDeadzonePx: 10,

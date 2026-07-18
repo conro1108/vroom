@@ -45,6 +45,7 @@ const SLIDERS: SliderSpec[] = [
   { key: "draftBoostSeconds", label: "slipstream boost s", min: 0.2, max: 2, step: 0.1 },
   { key: "cameraLerp", label: "camera follow", min: 1, max: 15, step: 0.5 },
   { key: "lookAhead", label: "camera look-ahead", min: 0, max: 0.8, step: 0.05 },
+  { key: "desktopZoomWorldHeight", label: "desktop zoom (view height)", min: 110, max: 320, step: 10 },
   { key: "joystickDeadzonePx", label: "stick deadzone px", min: 0, max: 30, step: 1 },
   { key: "joystickLockDeg", label: "stick full-lock angle", min: 10, max: 90, step: 5 },
   { key: "steerRangePx", label: "drag-x steer range", min: 30, max: 160, step: 5 },

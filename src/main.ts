@@ -650,7 +650,7 @@ function stepItemWorld(): void {
   }
 }
 
-/** The player fires whatever the bubble is holding (tap or space/E). */
+/** The player fires whatever the bubble is holding (tap, or space/E/shift). */
 function useHeldItem(): void {
   if (mode !== "racing" || !itemWorld) return;
   if (useItem(itemWorld, itemRacers, 0)) hud.setItem(null);
@@ -662,7 +662,8 @@ itemBubble.addEventListener("pointerdown", (e) => {
   useHeldItem();
 });
 window.addEventListener("keydown", (e) => {
-  if (e.key === " " || e.key.toLowerCase() === "e") useHeldItem();
+  // space/E, or either shift as a left-hand fire key while steering with arrows.
+  if (e.key === " " || e.key.toLowerCase() === "e" || e.key === "Shift") useHeldItem();
 });
 
 /** How far from the centerline the fence sits on the current track. */

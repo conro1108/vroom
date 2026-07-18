@@ -74,6 +74,7 @@ export class Scene {
   private particles: Particle[] = [];
   private cam: { x: number; y: number };
   private scale = 2;
+  private viewHeight = 190; // world-px kept vertically visible on wide screens; frame() syncs it from Tuning
   private skidFadeTimer = 0;
   private lastCarFrame = -1;
   private clock = 0; // wall time, for the player marker's idle bob
@@ -113,7 +114,13 @@ export class Scene {
     // Layout isn't ready yet (0-size box): skip so we don't lock in a broken
     // buffer. A ResizeObserver re-runs this the moment the canvas gets a box.
     if (dispW === 0 || dispH === 0) return;
-    this.scale = Math.max(2, Math.round((rect.width * dpr) / TARGET_BUFFER_WIDTH));
+    // Zoom to whichever axis is the tighter fit: portrait phones are
+    // width-bound (a fixed ~210px-wide field), but a wide desktop window would
+    // otherwise show a squat letterbox with no road ahead — there the height
+    // target wins, zooming out until viewHeight world-px are visible vertically.
+    const scaleW = (rect.width * dpr) / TARGET_BUFFER_WIDTH;
+    const scaleH = dispH / this.viewHeight;
+    this.scale = Math.max(2, Math.round(Math.min(scaleW, scaleH)));
     // +2px margin so the sub-pixel scroll offset always has buffer to reveal.
     this.buffer.width = Math.ceil(dispW / this.scale) + 2;
     this.buffer.height = Math.ceil(dispH / this.scale) + 2;
@@ -121,6 +128,13 @@ export class Scene {
     this.display.height = dispH;
     this.displayCtx.imageSmoothingEnabled = false;
     this.ready = true;
+  }
+
+  /** Dial the wide-screen vertical field (world-px). Re-zooms if it changed. */
+  setViewHeight(h: number): void {
+    if (h === this.viewHeight) return;
+    this.viewHeight = h;
+    this.resize();
   }
 
   frame(
@@ -134,6 +148,7 @@ export class Scene {
   ): void {
     if (!this.ready) this.resize();
     if (!this.ready) return; // still no layout — skip this frame
+    this.setViewHeight(tuning.desktopZoomWorldHeight);
     this.clock += dt;
     this.updateCamera(dt, car, tuning);
     this.updateEffects(dt, car, boosting);
