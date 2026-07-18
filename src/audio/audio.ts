@@ -21,12 +21,12 @@ export function engineFreq(forwardSpeed: number, maxSpeed: number, throttle: num
   return IDLE_HZ + frac * REV_HZ + clamp01(throttle) * THROTTLE_HZ;
 }
 
-/** Base engine loudness (0..1, pre master-volume). Deliberately tiny — normal
- *  driving is pretty flat, so a loud constant drone just grates; this is a
- *  barely-there hum and the corner vroom does the loud, fun work. */
+/** Base engine loudness (0..1, pre master-volume). Deliberately near-silent —
+ *  normal driving is flat, so a constant drone just grates. This is a
+ *  barely-there hum; the doppler vrooms do all the loud, fun work. */
 export function engineGain(forwardSpeed: number, maxSpeed: number, throttle: number): number {
   const frac = clamp01(forwardSpeed / Math.max(1, maxSpeed));
-  return 0.014 + clamp01(throttle) * 0.02 + frac * 0.03;
+  return 0.006 + clamp01(throttle) * 0.008 + frac * 0.014;
 }
 
 /** Tremolo rate (Hz) of the grumble: a slow lopey putter at idle that smooths
@@ -36,20 +36,23 @@ export function engineTremolo(forwardSpeed: number, maxSpeed: number): { rate: n
   return { rate: 6 + frac * 30, depth: 0.06 * (1 - frac * 0.6) };
 }
 
-/** Lowpass cutoff (Hz) that opens up as the engine revs — muffled at idle,
- *  bright and buzzy at full chat. */
+/** Lowpass cutoff (Hz) for the idle hum. Kept low so the ongoing engine stays
+ *  soft and un-buzzy — it barely opens up with revs on purpose. */
 export function engineCutoff(forwardSpeed: number, maxSpeed: number, throttle: number): number {
   const frac = clamp01(forwardSpeed / Math.max(1, maxSpeed));
-  return 400 + frac * 2600 + clamp01(throttle) * 700;
+  return 260 + frac * 700 + clamp01(throttle) * 180;
 }
 
-const DRIFT_FLOOR = 45; // px/s of slide below which tires stay quiet
-const DRIFT_FULL = 200; // px/s of slide for a full-volume screech
-
-/** Tire-screech loudness (0..1) from sideways slide speed; 0 when not drifting. */
-export function driftGain(lateralSpeed: number, drifting: boolean): number {
-  if (!drifting) return 0;
-  return clamp01((Math.abs(lateralSpeed) - DRIFT_FLOOR) / (DRIFT_FULL - DRIFT_FLOOR));
+/** Tire-screech loudness (0..1) from how much the car is sliding sideways.
+ *  Tires start protesting *before* the drift break-point — grip complaining as
+ *  you lean on it — and keep swelling once you're actually drifting (which is
+ *  the more hardcore, louder end). Scaled to the car's own driftThreshold so it
+ *  tracks whatever grip the current tuning has. */
+export function driftGain(lateralSpeed: number, driftThreshold: number): number {
+  const slip = Math.abs(lateralSpeed);
+  const floor = driftThreshold * 0.45; // squeal begins here, below the break-point
+  const full = driftThreshold * 2; // deep into a drift = full screech
+  return clamp01((slip - floor) / Math.max(1, full - floor));
 }
 
 export const PASS_RADIUS = 72; // px: how close a car has to be to whoosh
@@ -64,16 +67,32 @@ export function passStrength(distPx: number, relSpeed: number): number {
   return clamp01(near * 0.7 + fast * 0.6);
 }
 
-export const CORNER_YAW_MIN = 1.6; // rad/s of heading change that counts as "hitting a corner"
+export interface Observer {
+  x: number;
+  y: number;
+}
 
-/** Strength (0..1) of a corner vroom from how sharply the car is turning and how
- *  fast it's going — you have to be genuinely cranking it at speed to trigger. */
-export function cornerStrength(yawRate: number, speedFrac: number): number {
-  const s = clamp01(speedFrac);
-  if (s < 0.25) return 0; // has to be moving to vroom
-  const y = (Math.abs(yawRate) - CORNER_YAW_MIN) / 2.2;
-  if (y <= 0) return 0;
-  return clamp01(0.45 + clamp01(y) * 0.55) * s;
+/** Scatter a few stationary "listeners" around the loop, sitting just off the
+ *  road (alternating sides). Crossing near one fires the doppler vroom — like a
+ *  spectator hearing you rip past — which gives the sound a sporadic, positional
+ *  feel instead of firing on every steering input. */
+export function observerPoints(samples: Observer[], count: number, offset: number): Observer[] {
+  const n = samples.length;
+  if (n < 2 || count < 1) return [];
+  const out: Observer[] = [];
+  for (let k = 0; k < count; k++) {
+    const i = Math.floor(((k + 0.5) / count) * n) % n; // spread around, skip the start line
+    const a = samples[i]!;
+    const b = samples[(i + 1) % n]!;
+    let tx = b.x - a.x;
+    let ty = b.y - a.y;
+    const len = Math.hypot(tx, ty) || 1;
+    tx /= len;
+    ty /= len;
+    const side = k % 2 === 0 ? 1 : -1; // alternate which side of the road they stand on
+    out.push({ x: a.x - ty * offset * side, y: a.y + tx * offset * side });
+  }
+  return out;
 }
 
 /** Stereo pan (-1 left .. 1 right) for an object at world offset (dx,dy) given
@@ -94,8 +113,8 @@ export interface EngineFrame {
   forwardSpeed: number;
   maxSpeed: number;
   throttle: number; // 0..1
-  drifting: boolean;
   lateralSpeed: number; // px/s sideways
+  driftThreshold: number; // px/s of slide where this tuning breaks into a drift
 }
 
 export interface GameAudio {
@@ -103,11 +122,11 @@ export interface GameAudio {
   update(f: EngineFrame): void;
   /** One-shot rev off the line; rocket start gets extra pitch and sparkle. */
   launch(rocket: boolean): void;
-  /** One-shot doppler swipe as a car passes; pan -1..1, strength 0..1. */
+  /** One-shot doppler swipe as an opponent passes; pan -1..1, strength 0..1. */
   whoosh(pan: number, strength: number): void;
-  /** Louder engine-flavored doppler vroom when you carve into a corner; pan
-   *  points toward the turn (-1 left .. 1 right), strength 0..1. */
-  cornerVroom(pan: number, strength: number): void;
+  /** Louder engine-flavored doppler vroom, fired as you rip past an observer;
+   *  pan points toward the listener (-1 left .. 1 right), strength 0..1. */
+  vroom(pan: number, strength: number): void;
   /** Master volume, 0..1 (0 mutes). Comes from Tuning.soundVolume. */
   setVolume(v: number): void;
   /** Resume the context from a user gesture (mobile autoplay unlock). */
@@ -150,9 +169,9 @@ export function createAudio(volume: number): GameAudio {
 
   // --- persistent engine voice ---
   const engOsc = ctx.createOscillator();
-  engOsc.type = "sawtooth";
-  const engSub = ctx.createOscillator(); // an octave down for body / grumble
-  engSub.type = "square";
+  engOsc.type = "triangle"; // soft, un-buzzy — this is only a faint idle hum
+  const engSub = ctx.createOscillator(); // an octave down for a little body
+  engSub.type = "sine";
   const engFilter = ctx.createBiquadFilter();
   engFilter.type = "lowpass";
   engFilter.frequency.value = 500;
@@ -209,7 +228,7 @@ export function createAudio(volume: number): GameAudio {
       lfoDepth.gain.setTargetAtTime(f.active ? trem.depth * targetEng * 6 : 0, now, 0.05);
 
       driftGainNode.gain.setTargetAtTime(
-        f.active ? driftGain(f.lateralSpeed, f.drifting) * 0.5 : 0,
+        f.active ? driftGain(f.lateralSpeed, f.driftThreshold) * 0.45 : 0,
         now,
         0.04
       );
@@ -279,7 +298,7 @@ export function createAudio(volume: number): GameAudio {
       src.start(now);
       src.stop(now + 0.4);
     },
-    cornerVroom(pan, strength) {
+    vroom(pan, strength) {
       if (master <= 0 || strength <= 0) return;
       resume();
       const now = ctx.currentTime;
@@ -385,7 +404,7 @@ function noopAudio(): GameAudio {
     update() {},
     launch() {},
     whoosh() {},
-    cornerVroom() {},
+    vroom() {},
     setVolume() {},
     resume() {},
   };

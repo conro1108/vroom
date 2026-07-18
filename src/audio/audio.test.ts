@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  cornerStrength,
-  CORNER_YAW_MIN,
   createAudio,
   driftGain,
   engineCutoff,
   engineFreq,
   engineGain,
   engineTremolo,
+  observerPoints,
   panForOffset,
   PASS_RADIUS,
   passStrength,
+  type Observer,
 } from "./audio";
 
 describe("engineFreq", () => {
@@ -29,10 +29,14 @@ describe("engineFreq", () => {
 });
 
 describe("engineGain", () => {
-  it("keeps an idle rumble even off throttle at a stop", () => {
+  it("stays a near-silent hum even flat out", () => {
+    // the ongoing engine is deliberately tiny; the doppler vrooms carry the mix
+    expect(engineGain(140, 140, 1)).toBeLessThan(0.05);
+  });
+  it("keeps a faint idle rumble off throttle at a stop", () => {
     expect(engineGain(0, 140, 0)).toBeGreaterThan(0);
   });
-  it("is louder under throttle and at speed", () => {
+  it("is a touch louder under throttle and at speed", () => {
     expect(engineGain(140, 140, 1)).toBeGreaterThan(engineGain(0, 140, 0));
   });
 });
@@ -47,23 +51,30 @@ describe("engineTremolo", () => {
 });
 
 describe("engineCutoff", () => {
-  it("opens the filter up as revs climb", () => {
+  it("stays low and soft, only cracking open a little with revs", () => {
+    expect(engineCutoff(0, 140, 0)).toBeLessThan(400);
     expect(engineCutoff(140, 140, 1)).toBeGreaterThan(engineCutoff(0, 140, 0));
   });
 });
 
 describe("driftGain", () => {
-  it("is silent when not drifting, whatever the slide", () => {
-    expect(driftGain(500, false)).toBe(0);
+  it("is silent when the car is tracking straight", () => {
+    expect(driftGain(10, 55)).toBe(0);
   });
-  it("swells from zero to full as sideways slide grows", () => {
-    expect(driftGain(45, true)).toBe(0); // at the floor
-    expect(driftGain(120, true)).toBeGreaterThan(0);
-    expect(driftGain(120, true)).toBeLessThan(1);
-    expect(driftGain(400, true)).toBe(1); // clamped
+  it("starts squealing before the drift break-point", () => {
+    const belowBreak = driftGain(45, 55); // slip still under the 55 threshold
+    expect(belowBreak).toBeGreaterThan(0);
+    expect(belowBreak).toBeLessThan(1);
+  });
+  it("keeps swelling once actually drifting, up to a full screech", () => {
+    expect(driftGain(80, 55)).toBeGreaterThan(driftGain(45, 55));
+    expect(driftGain(400, 55)).toBe(1);
+  });
+  it("scales with the tuning's own threshold (grippier car = quieter for the same slip)", () => {
+    expect(driftGain(60, 90)).toBeLessThan(driftGain(60, 40));
   });
   it("treats slide direction symmetrically", () => {
-    expect(driftGain(-120, true)).toBeCloseTo(driftGain(120, true));
+    expect(driftGain(-70, 55)).toBeCloseTo(driftGain(70, 55));
   });
 });
 
@@ -95,21 +106,27 @@ describe("passStrength", () => {
   });
 });
 
-describe("cornerStrength", () => {
-  it("stays silent when barely turning or too slow", () => {
-    expect(cornerStrength(CORNER_YAW_MIN - 0.1, 1)).toBe(0); // gentle steer
-    expect(cornerStrength(3, 0.1)).toBe(0); // cranking it but crawling
+describe("observerPoints", () => {
+  const square: Observer[] = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 100 },
+    { x: 0, y: 100 },
+  ];
+
+  it("returns the requested number of listeners", () => {
+    expect(observerPoints(square, 3, 10)).toHaveLength(3);
   });
-  it("fires with a solid punch once you crank it at speed", () => {
-    const s = cornerStrength(CORNER_YAW_MIN + 0.5, 0.8);
-    expect(s).toBeGreaterThan(0.3);
-    expect(s).toBeLessThanOrEqual(1);
+  it("degrades to empty on a too-small path or zero count", () => {
+    expect(observerPoints([{ x: 0, y: 0 }], 3, 10)).toEqual([]);
+    expect(observerPoints(square, 0, 10)).toEqual([]);
   });
-  it("gets louder the harder and faster you corner", () => {
-    expect(cornerStrength(3.4, 1)).toBeGreaterThan(cornerStrength(CORNER_YAW_MIN + 0.2, 0.5));
-  });
-  it("triggers on either turn direction", () => {
-    expect(cornerStrength(3, 0.8)).toBeCloseTo(cornerStrength(-3, 0.8));
+  it("sits each listener off to the side, ~offset from the road", () => {
+    for (const o of observerPoints(square, 2, 15)) {
+      const nearest = Math.min(...square.map((s) => Math.hypot(o.x - s.x, o.y - s.y)));
+      expect(nearest).toBeGreaterThan(0); // not on the centerline
+      expect(nearest).toBeLessThanOrEqual(15 + 1e-6); // but only just off it
+    }
   });
 });
 
@@ -122,12 +139,12 @@ describe("createAudio", () => {
         forwardSpeed: 100,
         maxSpeed: 140,
         throttle: 1,
-        drifting: true,
         lateralSpeed: 80,
+        driftThreshold: 55,
       });
       a.launch(true);
       a.whoosh(0.5, 0.8);
-      a.cornerVroom(-0.6, 0.9);
+      a.vroom(-0.6, 0.9);
       a.setVolume(0.3);
       a.resume();
     }).not.toThrow();
