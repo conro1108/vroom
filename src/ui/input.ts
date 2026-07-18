@@ -132,16 +132,20 @@ export function createInput(target: HTMLElement, tuning: Tuning): InputRig {
   document.body.appendChild(stick);
   const stickCtx = stick.getContext("2d")!;
 
+  // Mouse-primary devices (desktop browsers) steer with the arrow keys, so the
+  // always-on fixed stick is just idle clutter there — suppress the anchored
+  // stick; it still appears during an actual pointer drag for mouse steering.
+  const mousePrimary = window.matchMedia("(hover: hover) and (pointer: fine)");
+
   // In fixed mode the stick lives bottom-right and survives lifting the
   // thumb — re-touching steers from the same center, so no orientation reset.
   const fixedCenter = () => ({ x: window.innerWidth - 138, y: window.innerHeight - 165 });
-  const stickCenter = () =>
-    tuning.fixedStick && tuning.steerMode === "joystick"
-      ? fixedCenter()
-      : { x: originX, y: originY };
+  const fixedActive = () =>
+    tuning.fixedStick && tuning.steerMode === "joystick" && !mousePrimary.matches;
+  const stickCenter = () => (fixedActive() ? fixedCenter() : { x: originX, y: originY });
 
   const updateIndicator = () => {
-    const fixed = tuning.fixedStick && tuning.steerMode === "joystick";
+    const fixed = fixedActive();
     stick.hidden = !touching && !fixed;
     if (stick.hidden) return;
     const c = stickCenter();
