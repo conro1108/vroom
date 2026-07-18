@@ -68,7 +68,7 @@ import {
   type TrackQuery,
 } from "./game/track";
 import { trackDefById, TRACKS } from "./game/tracks";
-import { loadTuning, saveTuning } from "./game/tuning";
+import { boostTuning, loadTuning, saveTuning } from "./game/tuning";
 import { CUSTOM_VEHICLE_ID, saveCustomVehicle, vehicleById } from "./game/vehicles";
 import { Scene, type RacerPose } from "./render/scene";
 import { themeById } from "./render/themes";
@@ -464,11 +464,7 @@ function loop(now: number): void {
       if (boostTimer > 0) boostTimer = Math.max(0, boostTimer - PHYSICS_DT);
       let stepTuning = raceTuning;
       if (boostTimer > 0 || playerRacer.boost > 0) {
-        stepTuning = {
-          ...raceTuning,
-          maxSpeed: raceTuning.maxSpeed * raceTuning.boostPower,
-          accel: raceTuning.accel * raceTuning.boostPower,
-        };
+        stepTuning = boostTuning(raceTuning);
       }
       let stepInput = carInput;
       if (playerRacer.spin > 0) {

@@ -16,7 +16,7 @@ import {
   type Track,
   type TrackQuery,
 } from "./track";
-import type { Tuning } from "./tuning";
+import { boostTuning, type Tuning } from "./tuning";
 import { vehicleById, VEHICLES } from "./vehicles";
 
 export const OPPONENT_COUNT = 3; // default field; tuning.opponentCount overrides
@@ -183,6 +183,7 @@ export function stepOpponents(
     const input = !live ? { steer: 0, throttle: 0, brake: 0 } : spinning ? SPIN_INPUT : o.bot(o.car);
     if (spinning) spinCar(o.car, dt);
     let mult = 1;
+    let boosting = false;
     if (live && player !== null && o.tuning.rubberBand > 0 && o.finishOrder === null) {
       mult = rubberMult(raceDistance(o.tracker) - player.distance, o.tuning.rubberBand);
     }
@@ -198,12 +199,13 @@ export function stepOpponents(
       }
       if (o.boostTimer > 0) o.boostTimer = Math.max(0, o.boostTimer - dt);
       // o.boost is the item turbo, ticked down by the item system
-      if (o.boostTimer > 0 || o.boost > 0) mult *= o.tuning.boostPower;
+      if (o.boostTimer > 0 || o.boost > 0) boosting = true;
     }
-    const tuning =
+    let tuning =
       mult === 1
         ? o.tuning
         : { ...o.tuning, maxSpeed: o.tuning.maxSpeed * mult, accel: o.tuning.accel * mult };
+    if (boosting) tuning = boostTuning(tuning);
     o.car = stepCar(o.car, input, tuning, query.surfaceAt(o.car.x, o.car.y), dt);
     if (corridorPx !== null) fenceCar(o.car, query, corridorPx);
     const p = query.progressAt(o.car.x, o.car.y);

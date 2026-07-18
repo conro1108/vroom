@@ -14,6 +14,7 @@ export interface Tuning {
   driftThreshold: number; // px/s of sideways velocity where drift begins
   offroadMaxSpeed: number; // fraction of maxSpeed on grass
   offroadFriction: number; // drag multiplier on grass
+  boostOffroad: number; // 0..1, how much a live boost negates the grass penalty (1 = grass drives like road)
   opponentCount: number; // AI cars in a group race
   rubberBand: number; // 0..0.4, how hard the field converges on the player
   botSloppiness: number; // 0..1, how human (wobbly, mistake-prone) bots drive
@@ -47,6 +48,7 @@ export const DEFAULT_TUNING: Tuning = {
   driftThreshold: 55,
   offroadMaxSpeed: 0.55,
   offroadFriction: 1.6,
+  boostOffroad: 0.8,
   opponentCount: 3,
   rubberBand: 0.12,
   botSloppiness: 0.6,
@@ -103,6 +105,20 @@ export function loadTuning(): Tuning {
     // corrupt or unavailable storage: fall back to defaults
   }
   return tuning;
+}
+
+// The tuning a car steps with while a boost is live: faster top speed/accel,
+// and — crucially — most of the grass penalty lifted so a boost blows you over
+// the grass instead of slamming into it. boostOffroad lerps the offroad levers
+// back toward their road values (1 = grass drives exactly like road).
+export function boostTuning(t: Tuning): Tuning {
+  return {
+    ...t,
+    maxSpeed: t.maxSpeed * t.boostPower,
+    accel: t.accel * t.boostPower,
+    offroadMaxSpeed: t.offroadMaxSpeed + (1 - t.offroadMaxSpeed) * t.boostOffroad,
+    offroadFriction: t.offroadFriction + (1 - t.offroadFriction) * t.boostOffroad,
+  };
 }
 
 export function saveTuning(tuning: Tuning): void {
