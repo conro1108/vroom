@@ -125,8 +125,9 @@ export interface GameAudio {
   /** One-shot doppler swipe as an opponent passes; pan -1..1, strength 0..1. */
   whoosh(pan: number, strength: number): void;
   /** Louder engine-flavored doppler vroom, fired as you rip past an observer;
-   *  pan points toward the listener (-1 left .. 1 right), strength 0..1. */
-  vroom(pan: number, strength: number): void;
+   *  pan points toward the listener (-1 left .. 1 right), strength 0..1,
+   *  seconds sets how drawn-out the flyby is. */
+  vroom(pan: number, strength: number, seconds: number): void;
   /** Master volume, 0..1 (0 mutes). Comes from Tuning.soundVolume. */
   setVolume(v: number): void;
   /** Resume the context from a user gesture (mobile autoplay unlock). */
@@ -298,10 +299,17 @@ export function createAudio(volume: number): GameAudio {
       src.start(now);
       src.stop(now + 0.4);
     },
-    vroom(pan, strength) {
+    vroom(pan, strength, seconds) {
       if (master <= 0 || strength <= 0) return;
       resume();
       const now = ctx.currentTime;
+      // Whole envelope scales with `seconds` so it can go from a quick blip to a
+      // long drawn-out flyby. peakT is closest approach (pitch/brightness peak).
+      const d = clamp(seconds, 0.2, 4);
+      const attack = Math.min(0.12, d * 0.18);
+      const peakT = d * 0.5;
+      const endT = d;
+      const stop = now + endT + 0.06;
       const peak = 0.5 * clamp01(strength);
       const baseHz = 155;
 
@@ -313,14 +321,15 @@ export function createAudio(volume: number): GameAudio {
       const lp = ctx.createBiquadFilter();
       lp.type = "lowpass";
       lp.frequency.setValueAtTime(700, now);
-      lp.frequency.exponentialRampToValueAtTime(2800, now + 0.16);
-      lp.frequency.exponentialRampToValueAtTime(750, now + 0.42);
+      lp.frequency.exponentialRampToValueAtTime(2800, now + peakT);
+      lp.frequency.exponentialRampToValueAtTime(750, now + endT);
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, now);
-      g.gain.exponentialRampToValueAtTime(peak, now + 0.12);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.46);
-      sweep(osc.frequency, now, baseHz, baseHz * 2.4, baseHz * 1.05);
-      sweep(sub.frequency, now, baseHz / 2, baseHz * 1.2, baseHz * 0.55);
+      g.gain.exponentialRampToValueAtTime(peak, now + attack);
+      g.gain.exponentialRampToValueAtTime(peak * 0.9, now + peakT); // hold loud through the pass
+      g.gain.exponentialRampToValueAtTime(0.0001, now + endT);
+      sweep(osc.frequency, now, baseHz, baseHz * 2.4, baseHz * 1.05, peakT, endT);
+      sweep(sub.frequency, now, baseHz / 2, baseHz * 1.2, baseHz * 0.55, peakT, endT);
       osc.connect(lp);
       sub.connect(lp);
       lp.connect(g);
@@ -328,24 +337,25 @@ export function createAudio(volume: number): GameAudio {
       // an airy noise layer for the "speeding past" whoosh body
       const src = ctx.createBufferSource();
       src.buffer = noise;
+      src.loop = true; // so a long vroom doesn't run past the 2s buffer
       const bp = ctx.createBiquadFilter();
       bp.type = "bandpass";
       bp.Q.value = 1;
       bp.frequency.setValueAtTime(500, now);
-      bp.frequency.exponentialRampToValueAtTime(1900, now + 0.16);
-      bp.frequency.exponentialRampToValueAtTime(420, now + 0.42);
+      bp.frequency.exponentialRampToValueAtTime(1900, now + peakT);
+      bp.frequency.exponentialRampToValueAtTime(420, now + endT);
       const ng = ctx.createGain();
       ng.gain.setValueAtTime(0.0001, now);
-      ng.gain.exponentialRampToValueAtTime(peak * 0.35, now + 0.12);
-      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.44);
+      ng.gain.exponentialRampToValueAtTime(peak * 0.35, now + attack);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + endT);
       src.connect(bp).connect(ng);
 
-      // sweep the whole thing across the stereo field toward the turn
+      // sweep the whole thing across the stereo field, front-past-to-behind
       if (ctx.createStereoPanner) {
         const panner = ctx.createStereoPanner();
         const side = clamp(pan, -1, 1);
         panner.pan.setValueAtTime(-side * 0.8, now);
-        panner.pan.linearRampToValueAtTime(side * 0.9, now + 0.44);
+        panner.pan.linearRampToValueAtTime(side * 0.9, now + endT);
         g.connect(panner);
         ng.connect(panner);
         panner.connect(masterGain);
@@ -354,20 +364,29 @@ export function createAudio(volume: number): GameAudio {
         ng.connect(masterGain);
       }
       osc.start(now);
-      osc.stop(now + 0.52);
+      osc.stop(stop);
       sub.start(now);
-      sub.stop(now + 0.52);
+      sub.stop(stop);
       src.start(now);
-      src.stop(now + 0.46);
+      src.stop(stop);
     },
   };
 }
 
-/** Three-point exponential pitch sweep: up to a peak, then back down (doppler). */
-function sweep(p: AudioParam, at: number, from: number, peak: number, to: number): void {
+/** Three-point exponential sweep: up to a peak at `peakT`, back down by `endT`
+ *  — the classic approach-then-recede doppler contour. */
+function sweep(
+  p: AudioParam,
+  at: number,
+  from: number,
+  peak: number,
+  to: number,
+  peakT: number,
+  endT: number
+): void {
   p.setValueAtTime(from, at);
-  p.exponentialRampToValueAtTime(peak, at + 0.16);
-  p.exponentialRampToValueAtTime(to, at + 0.42);
+  p.exponentialRampToValueAtTime(peak, at + peakT);
+  p.exponentialRampToValueAtTime(to, at + endT);
 }
 
 function chirp(ctx: Ctx, noise: AudioBuffer, out: AudioNode, at: number, dur: number, level: number): void {

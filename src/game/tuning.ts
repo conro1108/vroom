@@ -34,6 +34,7 @@ export interface Tuning {
   steerRangePx: number; // dragx mode: css px of thumb-drag for full lock
   holdToGo: boolean; // touch: throttle only while a finger is down
   soundVolume: number; // 0..1 master audio level, 0 = muted
+  vroomSeconds: number; // how drawn-out the doppler vroom past a trackside listener is
 }
 
 export const DEFAULT_TUNING: Tuning = {
@@ -69,6 +70,7 @@ export const DEFAULT_TUNING: Tuning = {
   steerRangePx: 70,
   holdToGo: true,
   soundVolume: 0.7,
+  vroomSeconds: 1.1,
 };
 
 // Bump the suffix when DEFAULT_TUNING changes meaningfully. Rather than discard

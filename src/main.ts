@@ -562,7 +562,7 @@ function loop(now: number): void {
       const dy = observers[i]!.y - car.y;
       const dist = Math.hypot(dx, dy);
       if (dist < obsRadius && obsArmed[i] && speedFrac > 0.25) {
-        audio.vroom(panForOffset(dx, dy, h), 0.45 + speedFrac * 0.55);
+        audio.vroom(panForOffset(dx, dy, h), 0.45 + speedFrac * 0.55, tuning.vroomSeconds);
         obsArmed[i] = false;
       } else if (dist > obsRadius * 1.7) {
         obsArmed[i] = true; // left the zone: ready to vroom on the next lap

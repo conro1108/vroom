@@ -58,6 +58,14 @@ const SOUND_VOLUME_SLIDER: SliderSpec = {
   step: 0.05,
 };
 
+const VROOM_LENGTH_SLIDER: SliderSpec = {
+  key: "vroomSeconds",
+  label: "vroom length (s)",
+  min: 0.3,
+  max: 3,
+  step: 0.1,
+};
+
 const OPPONENT_COUNT_SLIDER: SliderSpec = {
   key: "opponentCount",
   label: "AI opponents",
@@ -158,6 +166,7 @@ export function createDevPanel(
     );
 
     panel.appendChild(buildSliderRow(SOUND_VOLUME_SLIDER));
+    panel.appendChild(buildSliderRow(VROOM_LENGTH_SLIDER));
     panel.appendChild(buildSliderRow(OPPONENT_COUNT_SLIDER));
 
     if (onCalibrate) {

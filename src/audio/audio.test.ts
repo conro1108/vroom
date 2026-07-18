@@ -144,7 +144,7 @@ describe("createAudio", () => {
       });
       a.launch(true);
       a.whoosh(0.5, 0.8);
-      a.vroom(-0.6, 0.9);
+      a.vroom(-0.6, 0.9, 1.2);
       a.setVolume(0.3);
       a.resume();
     }).not.toThrow();
