@@ -303,50 +303,71 @@ export function createAudio(volume: number): GameAudio {
       if (master <= 0 || strength <= 0) return;
       resume();
       const now = ctx.currentTime;
-      // Whole envelope scales with `seconds` so it can go from a quick blip to a
-      // long drawn-out flyby. peakT is closest approach (pitch/brightness peak).
+      // An F1 flyby heard from trackside: a high metallic scream that HOLDS an
+      // elevated pitch as the car bears down on you, then snaps down the instant
+      // it passes ("nyeeeeEEE-yowwwm") and fades darker as it tears away. The
+      // whole thing scales with `seconds` — a quick zip to a long drawn-out pass.
+      // peakT is closest approach: loudest, brightest, and the pitch drop.
       const d = clamp(seconds, 0.2, 4);
-      const attack = Math.min(0.12, d * 0.18);
-      const peakT = d * 0.5;
+      const peakT = d * 0.52;
       const endT = d;
-      const stop = now + endT + 0.06;
-      const peak = 0.5 * clamp01(strength);
-      const baseHz = 155;
+      const stop = now + endT + 0.08;
+      const s = clamp01(strength);
+      const peak = 0.5 * s;
+      // Doppler pitch: elevated approaching, depressed receding. The snap-down
+      // happens over `dropDur` centred on the pass — tighter = a sharper zip-by.
+      const baseHz = 300 + s * 90; // a screaming fundamental (F1, not muscle car)
+      const approachHz = baseHz * 1.5;
+      const recedeHz = baseHz * 0.62;
+      const dropDur = clamp(d * 0.2, 0.08, 0.35);
 
-      // engine tone doing a doppler pass: pitch and brightness rise, then fall
-      const osc = ctx.createOscillator();
-      osc.type = "sawtooth";
-      const sub = ctx.createOscillator();
-      sub.type = "square";
+      // Brightness peaks at the pass and muffles as it recedes.
       const lp = ctx.createBiquadFilter();
       lp.type = "lowpass";
-      lp.frequency.setValueAtTime(700, now);
-      lp.frequency.exponentialRampToValueAtTime(2800, now + peakT);
-      lp.frequency.exponentialRampToValueAtTime(750, now + endT);
+      lp.Q.value = 0.9;
+      lp.frequency.setValueAtTime(1400, now);
+      lp.frequency.exponentialRampToValueAtTime(6000, now + peakT);
+      lp.frequency.exponentialRampToValueAtTime(900, now + endT);
+      // Loudness swells in, holds loud across the pass, then fades receding.
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, now);
-      g.gain.exponentialRampToValueAtTime(peak, now + attack);
-      g.gain.exponentialRampToValueAtTime(peak * 0.9, now + peakT); // hold loud through the pass
+      g.gain.exponentialRampToValueAtTime(peak, now + Math.max(0.02, peakT - dropDur * 0.5));
+      g.gain.setValueAtTime(peak, now + peakT + dropDur * 0.5);
       g.gain.exponentialRampToValueAtTime(0.0001, now + endT);
-      sweep(osc.frequency, now, baseHz, baseHz * 2.4, baseHz * 1.05, peakT, endT);
-      sweep(sub.frequency, now, baseHz / 2, baseHz * 1.2, baseHz * 0.55, peakT, endT);
-      osc.connect(lp);
-      sub.connect(lp);
       lp.connect(g);
 
-      // an airy noise layer for the "speeding past" whoosh body
+      // Three saw layers make a rich metallic scream — the fundamental, a
+      // slightly detuned twin that beats/shimmers, and an octave-up wail for the
+      // piercing top — plus a quiet sub sine so it isn't thin.
+      const layers: { type: OscillatorType; mul: number; gain: number }[] = [
+        { type: "sawtooth", mul: 1, gain: 1 },
+        { type: "sawtooth", mul: 1.007, gain: 0.7 },
+        { type: "sawtooth", mul: 2, gain: 0.32 },
+        { type: "sine", mul: 0.5, gain: 0.28 },
+      ];
+      const oscs = layers.map((L) => {
+        const o = ctx.createOscillator();
+        o.type = L.type;
+        const og = ctx.createGain();
+        og.gain.value = L.gain;
+        dopplerSweep(o.frequency, now, approachHz * L.mul, recedeHz * L.mul, peakT, dropDur);
+        o.connect(og).connect(lp);
+        return o;
+      });
+
+      // an airy noise layer for the "tearing past" body
       const src = ctx.createBufferSource();
       src.buffer = noise;
       src.loop = true; // so a long vroom doesn't run past the 2s buffer
       const bp = ctx.createBiquadFilter();
       bp.type = "bandpass";
-      bp.Q.value = 1;
-      bp.frequency.setValueAtTime(500, now);
-      bp.frequency.exponentialRampToValueAtTime(1900, now + peakT);
-      bp.frequency.exponentialRampToValueAtTime(420, now + endT);
+      bp.Q.value = 0.9;
+      bp.frequency.setValueAtTime(700, now);
+      bp.frequency.exponentialRampToValueAtTime(2600, now + peakT);
+      bp.frequency.exponentialRampToValueAtTime(500, now + endT);
       const ng = ctx.createGain();
       ng.gain.setValueAtTime(0.0001, now);
-      ng.gain.exponentialRampToValueAtTime(peak * 0.35, now + attack);
+      ng.gain.exponentialRampToValueAtTime(peak * 0.3, now + peakT);
       ng.gain.exponentialRampToValueAtTime(0.0001, now + endT);
       src.connect(bp).connect(ng);
 
@@ -354,8 +375,8 @@ export function createAudio(volume: number): GameAudio {
       if (ctx.createStereoPanner) {
         const panner = ctx.createStereoPanner();
         const side = clamp(pan, -1, 1);
-        panner.pan.setValueAtTime(-side * 0.8, now);
-        panner.pan.linearRampToValueAtTime(side * 0.9, now + endT);
+        panner.pan.setValueAtTime(-side * 0.85, now);
+        panner.pan.linearRampToValueAtTime(side * 0.95, now + endT);
         g.connect(panner);
         ng.connect(panner);
         panner.connect(masterGain);
@@ -363,30 +384,33 @@ export function createAudio(volume: number): GameAudio {
         g.connect(masterGain);
         ng.connect(masterGain);
       }
-      osc.start(now);
-      osc.stop(stop);
-      sub.start(now);
-      sub.stop(stop);
+      oscs.forEach((o) => {
+        o.start(now);
+        o.stop(stop);
+      });
       src.start(now);
       src.stop(stop);
     },
   };
 }
 
-/** Three-point exponential sweep: up to a peak at `peakT`, back down by `endT`
- *  — the classic approach-then-recede doppler contour. */
-function sweep(
+/** Doppler pitch contour for a flyby: hold the elevated `approach` pitch while
+ *  the car bears down, then snap down to the depressed `recede` pitch over a
+ *  short `dropDur` window centred on closest approach (`peakT`), and stay there
+ *  as it tears away. The near-instant drop through the pass is the signature of
+ *  the trackside F1 scream — a smooth symmetric swell reads as a siren instead. */
+function dopplerSweep(
   p: AudioParam,
   at: number,
-  from: number,
-  peak: number,
-  to: number,
+  approach: number,
+  recede: number,
   peakT: number,
-  endT: number
+  dropDur: number
 ): void {
-  p.setValueAtTime(from, at);
-  p.exponentialRampToValueAtTime(peak, at + peakT);
-  p.exponentialRampToValueAtTime(to, at + endT);
+  const dropStart = Math.max(0.01, peakT - dropDur * 0.5);
+  p.setValueAtTime(approach, at);
+  p.setValueAtTime(approach, at + dropStart); // hold elevated through the approach
+  p.exponentialRampToValueAtTime(recede, at + dropStart + dropDur); // snap down at the pass
 }
 
 function chirp(ctx: Ctx, noise: AudioBuffer, out: AudioNode, at: number, dur: number, level: number): void {
