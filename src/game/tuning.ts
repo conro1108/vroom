@@ -56,7 +56,7 @@ export const DEFAULT_TUNING: Tuning = {
   draftRangePx: 55,
   draftChargeSeconds: 1.0,
   draftBoostSeconds: 0.8,
-  fenceMarginPx: 26,
+  fenceMarginPx: 34,
   cameraLerp: 5,
   lookAhead: 0.35,
   steerMode: "joystick",
@@ -69,7 +69,7 @@ export const DEFAULT_TUNING: Tuning = {
 
 // Bump the suffix when DEFAULT_TUNING changes meaningfully, so stale saved
 // tuning doesn't mask the new baseline on devices that played before.
-const STORAGE_KEY = "vroom.tuning.v3";
+const STORAGE_KEY = "vroom.tuning.v4";
 
 export function loadTuning(): Tuning {
   const tuning = { ...DEFAULT_TUNING };

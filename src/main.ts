@@ -38,7 +38,6 @@ import {
   createOpponents,
   gridColumns,
   gridSlot,
-  playerPlacement,
   playerPosition,
   raceDistance,
   separateCars,
@@ -119,6 +118,9 @@ let raceHadBestLap = false;
 let lapStart = performance.now();
 let finishPending = false;
 let finishAt = 0;
+// Player's place locked in the instant they cross the final line, so bots that
+// trail across during the finish-hold window can't demote them after the fact.
+let playerFinishPlace = 1;
 let opponents: Opponent[] = [];
 let countdownEnd = 0;
 let boostTimer = 0; // seconds of player speed boost remaining (rocket start, slipstream)
@@ -253,6 +255,7 @@ function restartRace(): void {
   race = createRace(RACE_LAPS);
   raceHadBestLap = false;
   finishPending = false;
+  playerFinishPlace = 1;
   boostTimer = 0;
   throttleHeldSince = null;
   playerDraft = createDraft();
@@ -298,7 +301,7 @@ function onLapCompleted(now: number): void {
     hud.setBest(lapMs);
     hud.toast("new best lap!");
     // this lap is the new ghost, raced from the very next lap on
-    ghost = finishGhostLap(ghostRec, lapMs);
+    ghost = finishGhostLap(ghostRec, lapMs, progress.lastVehicle);
     ghosts[recordKey(track.id, cls.id)] = ghost;
     saveGhosts(ghosts);
   }
@@ -308,6 +311,7 @@ function onLapCompleted(now: number): void {
   if (completeLap(race, lapMs).finished) {
     if (!finishPending) {
       finishPending = true;
+      playerFinishPlace = playerPosition(lapTracker, opponents);
       playerRacer.finished = true; // out of the item game once across the line
       hud.setItem(null);
       finishAt = now + FINISH_HOLD_MS;
@@ -319,7 +323,7 @@ function onLapCompleted(now: number): void {
 
 /** Full finish order of this race: index 0 = player, i+1 = opponents[i]. */
 function racePlacements(): number[] {
-  const pp = playerPlacement(opponents);
+  const pp = playerFinishPlace;
   const botOrder = opponents
     .map((o, i) => ({ i, fin: o.finishOrder ?? Infinity, d: raceDistance(o.tracker) }))
     .sort((a, b) => a.fin - b.fin || b.d - a.d);
@@ -349,7 +353,7 @@ function finishRace(): void {
   const newBestRace = applyRace(records, track.id, cls.id, totalMs);
   saveRecords(records);
   const solo = series.roster.length === 0;
-  const placement = playerPlacement(opponents);
+  const placement = playerFinishPlace;
   if (!solo) recordCupRace(series, racePlacements());
   const lastRace = series.raceIndex >= RACES_PER_CUP - 1;
 

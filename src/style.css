@@ -717,7 +717,10 @@ body {
 
 .cup-node {
   position: absolute;
-  transform: translate(-50%, -50%);
+  /* Anchor the coordinate to the icon's center (icon is 54px tall, first child)
+     rather than the whole icon+label box — otherwise the label below drags the
+     box center down, floating the icon high and leaving the map lopsided. */
+  transform: translate(-50%, -27px);
   display: flex;
   flex-direction: column;
   align-items: center;

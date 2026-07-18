@@ -77,7 +77,11 @@ const CROWN_TURN_RATE = 4.2; // the leader-hunter corners harder — it will not
 const CROWN_TTL_SECONDS = 9; // and it stays airborne long enough to run the leader down
 const SHOT_NOSE_PX = 9; // spawn a shot at the car's nose, not its center
 const BOX_RESPAWN_SECONDS = 4;
-const SPIN_SECONDS = 1.1;
+// How long a hit spins you out — the item's whole bite. Slicks sting a little
+// less than they used to; rockets/missiles/crowns sting less still, so a shot
+// is a nudge off your line rather than a race-ender.
+const OIL_SPIN_SECONDS = 0.85;
+const SHOT_SPIN_SECONDS = 0.6;
 const SPIN_RATE = 3 * 2 * Math.PI; // three full rotations per second of spin
 const TURBO_SECONDS = 1.6;
 const OIL_DROP_BACK_PX = 16;
@@ -141,10 +145,10 @@ export function rollItem(
 ): ItemKind {
   const p = Math.max(0, Math.min(1, deficit));
   const turbo = 0.2 + 0.7 * p;
-  const rocket = leading ? 0 : 0.35 + 0.2 * p;
-  const missile = leading ? 0 : 0.5 * p * p; // rare, and only really shows up near the back
-  const crown = leading ? 0 : 0.16 * p * p * p; // rarest: a near-last comeback treat
-  const oil = 0.65 - 0.45 * p;
+  const rocket = leading ? 0 : 0.4 + 0.2 * p;
+  const missile = leading ? 0 : 0.85 * p * p; // the better shot — now a real slice of the roll
+  const crown = leading ? 0 : 0.32 * p * p * p; // rarest, but a fatter near-last comeback treat
+  const oil = 0.35 - 0.3 * p; // slicks pulled well back — fewer of them across the board
   const roll = rng() * (turbo + rocket + missile + crown + oil);
   if (roll < turbo) return "turbo";
   if (roll < turbo + rocket) return "rocket";
@@ -184,7 +188,7 @@ export function stepItems(
       const r = racers[i]!;
       if (r.spin > 0 || r.finished) continue;
       if (Math.hypot(r.car.x - oil.x, r.car.y - oil.y) > OIL_RADIUS) continue;
-      r.spin = SPIN_SECONDS;
+      r.spin = OIL_SPIN_SECONDS;
       world.oils.splice(oi, 1);
       events.push({ type: "spin", racer: i, by: "oil" });
       break;
@@ -234,7 +238,7 @@ export function stepItems(
       }
     }
     if (hit >= 0) {
-      racers[hit]!.spin = SPIN_SECONDS;
+      racers[hit]!.spin = SHOT_SPIN_SECONDS;
       world.missiles.splice(mi, 1);
       events.push({ type: "spin", racer: hit, by: m.chaseLeader ? "crown" : "missile" });
     }

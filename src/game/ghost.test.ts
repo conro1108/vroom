@@ -58,6 +58,6 @@ describe("ghost replay", () => {
   });
 
   it("handles an empty recording", () => {
-    expect(ghostAt({ lapMs: 1000, samples: [] }, 100)).toBeNull();
+    expect(ghostAt({ lapMs: 1000, vehicleId: "classic", samples: [] }, 100)).toBeNull();
   });
 });

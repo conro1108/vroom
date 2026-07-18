@@ -112,7 +112,7 @@ describe("items in flight", () => {
     world.oils.push({ x: 100, y: 100 });
     const racer = createItemRacer(createCarState(102, 100, 0));
     const events = stepItems(world, [racer], 1 / 120);
-    expect(racer.spin).toBeGreaterThan(1);
+    expect(racer.spin).toBeGreaterThan(0.5);
     expect(world.oils).toHaveLength(0);
     expect(events).toEqual([{ type: "spin", racer: 0, by: "oil" }]);
   });

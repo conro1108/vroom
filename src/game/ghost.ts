@@ -8,6 +8,7 @@ export type GhostSample = [x: number, y: number, heading: number];
 
 export interface GhostLap {
   lapMs: number;
+  vehicleId: string; // the car that set this record — the ghost renders as it
   samples: GhostSample[];
 }
 
@@ -34,14 +35,19 @@ export function recordGhostSample(
   }
 }
 
-export function finishGhostLap(rec: GhostRecorder, lapMs: number): GhostLap {
-  return { lapMs, samples: rec.samples };
+export function finishGhostLap(
+  rec: GhostRecorder,
+  lapMs: number,
+  vehicleId = "classic"
+): GhostLap {
+  return { lapMs, vehicleId, samples: rec.samples };
 }
 
 export interface GhostPose {
   x: number;
   y: number;
   heading: number;
+  vehicleId: string; // which car to draw the ghost as
 }
 
 /** Interpolated ghost pose at lap time t, or null once the ghost has finished. */
@@ -58,6 +64,7 @@ export function ghostAt(ghost: GhostLap, tMs: number): GhostPose | null {
     x: a[0] + (b[0] - a[0]) * k,
     y: a[1] + (b[1] - a[1]) * k,
     heading: lerpAngle(a[2], b[2], k),
+    vehicleId: ghost.vehicleId,
   };
 }
 
@@ -88,7 +95,11 @@ export function loadGhosts(): Ghosts {
           Array.isArray(ghost.samples) &&
           ghost.samples.every((s) => Array.isArray(s) && s.length === 3)
         ) {
-          ghosts[key] = ghost;
+          // ghosts saved before vehicles were tracked default to the house car
+          ghosts[key] = {
+            ...ghost,
+            vehicleId: typeof ghost.vehicleId === "string" ? ghost.vehicleId : "classic",
+          };
         }
       }
     }

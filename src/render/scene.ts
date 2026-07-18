@@ -286,9 +286,9 @@ export class Scene {
       ctx.drawImage(frame, rx - Math.floor(frame.width / 2), ry - Math.floor(frame.height / 2));
     }
 
-    // ghost under the real car: same pre-rendered frames, just translucent
+    // ghost under the real car: drawn as the vehicle that set the record, translucent
     if (ghost) {
-      const gFrame = this.carFrames[carFrameIndex(ghost.heading)]!;
+      const gFrame = this.framesFor(ghost.vehicleId)[carFrameIndex(ghost.heading)]!;
       const gx = Math.round(ghost.x - sx);
       const gy = Math.round(ghost.y - sy);
       ctx.globalAlpha = 0.45;

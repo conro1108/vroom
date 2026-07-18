@@ -171,7 +171,9 @@ export function createTrackQuery(track: Track): TrackQuery {
 // Minimum inward exit speed off the fence. Turn authority scales with speed,
 // so a car nosing into the fence at a crawl could otherwise pin itself there,
 // unable to build speed or rotate away — the springy kick self-rescues it.
-const FENCE_KICK = 40;
+// Tuned up from 40: a head-on nose-in was still burying itself and grinding in
+// place, so give it a firmer shove back onto the grass with room to rotate out.
+const FENCE_KICK = 65;
 
 export function fenceCar(
   car: { x: number; y: number; vx: number; vy: number },
