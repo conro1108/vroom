@@ -21,11 +21,12 @@ export function engineFreq(forwardSpeed: number, maxSpeed: number, throttle: num
   return IDLE_HZ + frac * REV_HZ + clamp01(throttle) * THROTTLE_HZ;
 }
 
-/** Base engine loudness (0..1, pre master-volume): always a little idle rumble,
- *  louder under throttle and at speed. */
+/** Base engine loudness (0..1, pre master-volume). Deliberately tiny — normal
+ *  driving is pretty flat, so a loud constant drone just grates; this is a
+ *  barely-there hum and the corner vroom does the loud, fun work. */
 export function engineGain(forwardSpeed: number, maxSpeed: number, throttle: number): number {
   const frac = clamp01(forwardSpeed / Math.max(1, maxSpeed));
-  return 0.05 + clamp01(throttle) * 0.1 + frac * 0.12;
+  return 0.014 + clamp01(throttle) * 0.02 + frac * 0.03;
 }
 
 /** Tremolo rate (Hz) of the grumble: a slow lopey putter at idle that smooths
@@ -63,6 +64,18 @@ export function passStrength(distPx: number, relSpeed: number): number {
   return clamp01(near * 0.7 + fast * 0.6);
 }
 
+export const CORNER_YAW_MIN = 1.6; // rad/s of heading change that counts as "hitting a corner"
+
+/** Strength (0..1) of a corner vroom from how sharply the car is turning and how
+ *  fast it's going — you have to be genuinely cranking it at speed to trigger. */
+export function cornerStrength(yawRate: number, speedFrac: number): number {
+  const s = clamp01(speedFrac);
+  if (s < 0.25) return 0; // has to be moving to vroom
+  const y = (Math.abs(yawRate) - CORNER_YAW_MIN) / 2.2;
+  if (y <= 0) return 0;
+  return clamp01(0.45 + clamp01(y) * 0.55) * s;
+}
+
 /** Stereo pan (-1 left .. 1 right) for an object at world offset (dx,dy) given
  *  the camera looks along the car's heading. Cars sliding by on your right
  *  whoosh on the right. */
@@ -92,6 +105,9 @@ export interface GameAudio {
   launch(rocket: boolean): void;
   /** One-shot doppler swipe as a car passes; pan -1..1, strength 0..1. */
   whoosh(pan: number, strength: number): void;
+  /** Louder engine-flavored doppler vroom when you carve into a corner; pan
+   *  points toward the turn (-1 left .. 1 right), strength 0..1. */
+  cornerVroom(pan: number, strength: number): void;
   /** Master volume, 0..1 (0 mutes). Comes from Tuning.soundVolume. */
   setVolume(v: number): void;
   /** Resume the context from a user gesture (mobile autoplay unlock). */
@@ -263,7 +279,76 @@ export function createAudio(volume: number): GameAudio {
       src.start(now);
       src.stop(now + 0.4);
     },
+    cornerVroom(pan, strength) {
+      if (master <= 0 || strength <= 0) return;
+      resume();
+      const now = ctx.currentTime;
+      const peak = 0.5 * clamp01(strength);
+      const baseHz = 155;
+
+      // engine tone doing a doppler pass: pitch and brightness rise, then fall
+      const osc = ctx.createOscillator();
+      osc.type = "sawtooth";
+      const sub = ctx.createOscillator();
+      sub.type = "square";
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.setValueAtTime(700, now);
+      lp.frequency.exponentialRampToValueAtTime(2800, now + 0.16);
+      lp.frequency.exponentialRampToValueAtTime(750, now + 0.42);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(peak, now + 0.12);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.46);
+      sweep(osc.frequency, now, baseHz, baseHz * 2.4, baseHz * 1.05);
+      sweep(sub.frequency, now, baseHz / 2, baseHz * 1.2, baseHz * 0.55);
+      osc.connect(lp);
+      sub.connect(lp);
+      lp.connect(g);
+
+      // an airy noise layer for the "speeding past" whoosh body
+      const src = ctx.createBufferSource();
+      src.buffer = noise;
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.Q.value = 1;
+      bp.frequency.setValueAtTime(500, now);
+      bp.frequency.exponentialRampToValueAtTime(1900, now + 0.16);
+      bp.frequency.exponentialRampToValueAtTime(420, now + 0.42);
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.0001, now);
+      ng.gain.exponentialRampToValueAtTime(peak * 0.35, now + 0.12);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.44);
+      src.connect(bp).connect(ng);
+
+      // sweep the whole thing across the stereo field toward the turn
+      if (ctx.createStereoPanner) {
+        const panner = ctx.createStereoPanner();
+        const side = clamp(pan, -1, 1);
+        panner.pan.setValueAtTime(-side * 0.8, now);
+        panner.pan.linearRampToValueAtTime(side * 0.9, now + 0.44);
+        g.connect(panner);
+        ng.connect(panner);
+        panner.connect(masterGain);
+      } else {
+        g.connect(masterGain);
+        ng.connect(masterGain);
+      }
+      osc.start(now);
+      osc.stop(now + 0.52);
+      sub.start(now);
+      sub.stop(now + 0.52);
+      src.start(now);
+      src.stop(now + 0.46);
+    },
   };
+}
+
+/** Three-point exponential pitch sweep: up to a peak, then back down (doppler). */
+function sweep(p: AudioParam, at: number, from: number, peak: number, to: number): void {
+  p.setValueAtTime(from, at);
+  p.exponentialRampToValueAtTime(peak, at + 0.16);
+  p.exponentialRampToValueAtTime(to, at + 0.42);
 }
 
 function chirp(ctx: Ctx, noise: AudioBuffer, out: AudioNode, at: number, dur: number, level: number): void {
@@ -300,6 +385,7 @@ function noopAudio(): GameAudio {
     update() {},
     launch() {},
     whoosh() {},
+    cornerVroom() {},
     setVolume() {},
     resume() {},
   };

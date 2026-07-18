@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  cornerStrength,
+  CORNER_YAW_MIN,
   createAudio,
   driftGain,
   engineCutoff,
@@ -93,6 +95,24 @@ describe("passStrength", () => {
   });
 });
 
+describe("cornerStrength", () => {
+  it("stays silent when barely turning or too slow", () => {
+    expect(cornerStrength(CORNER_YAW_MIN - 0.1, 1)).toBe(0); // gentle steer
+    expect(cornerStrength(3, 0.1)).toBe(0); // cranking it but crawling
+  });
+  it("fires with a solid punch once you crank it at speed", () => {
+    const s = cornerStrength(CORNER_YAW_MIN + 0.5, 0.8);
+    expect(s).toBeGreaterThan(0.3);
+    expect(s).toBeLessThanOrEqual(1);
+  });
+  it("gets louder the harder and faster you corner", () => {
+    expect(cornerStrength(3.4, 1)).toBeGreaterThan(cornerStrength(CORNER_YAW_MIN + 0.2, 0.5));
+  });
+  it("triggers on either turn direction", () => {
+    expect(cornerStrength(3, 0.8)).toBeCloseTo(cornerStrength(-3, 0.8));
+  });
+});
+
 describe("createAudio", () => {
   it("returns a working no-op when WebAudio is unavailable (node/jsdom)", () => {
     const a = createAudio(0.7);
@@ -107,6 +127,7 @@ describe("createAudio", () => {
       });
       a.launch(true);
       a.whoosh(0.5, 0.8);
+      a.cornerVroom(-0.6, 0.9);
       a.setVolume(0.3);
       a.resume();
     }).not.toThrow();

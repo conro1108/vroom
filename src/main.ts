@@ -45,7 +45,14 @@ import {
   type Opponent,
 } from "./game/opponents";
 import { createCarState, forwardSpeedOf, stepCar } from "./game/physics";
-import { createAudio, panForOffset, passStrength, PASS_RADIUS } from "./audio/audio";
+import {
+  cornerStrength,
+  CORNER_YAW_MIN,
+  createAudio,
+  panForOffset,
+  passStrength,
+  PASS_RADIUS,
+} from "./audio/audio";
 import {
   applySpeedClass,
   loadProgress,
@@ -129,6 +136,9 @@ let finishAt = 0;
 let playerFinishPlace = 1;
 let opponents: Opponent[] = [];
 let whooshCooldowns: number[] = []; // per-opponent seconds until it can whoosh past again
+let prevHeading = 0; // last frame's heading, for corner yaw-rate detection
+let cornerCooldown = 0; // seconds until another corner vroom can fire
+let cornerArmed = true; // re-armed only once the turn eases, so one corner = one vroom
 let countdownEnd = 0;
 let boostTimer = 0; // seconds of player speed boost remaining (rocket start, slipstream)
 let throttleHeldSince: number | null = null; // when the player committed to throttle pre-green
@@ -260,6 +270,9 @@ function restartRace(): void {
       ? createOpponents(track, query, roster, tuning, cls, Math.random, grid.slice(1), columns)
       : [];
   whooshCooldowns = opponents.map(() => 0);
+  prevHeading = car.heading;
+  cornerCooldown = 0;
+  cornerArmed = true;
   race = createRace(RACE_LAPS);
   raceHadBestLap = false;
   finishPending = false;
@@ -533,14 +546,31 @@ function loop(now: number): void {
     audio.setVolume(lastVolume);
   }
   const h = car.heading;
+  const fwd = forwardSpeedOf(car);
   audio.update({
     active: mode === "racing" || mode === "countdown" || mode === "calibrating",
-    forwardSpeed: forwardSpeedOf(car),
+    forwardSpeed: fwd,
     maxSpeed: raceTuning.maxSpeed,
     throttle: engineThrottle,
     drifting: car.drifting,
     lateralSpeed: -car.vx * Math.sin(h) + car.vy * Math.cos(h),
   });
+  // The loud, fun voice: an engine doppler when you actually carve a corner.
+  cornerCooldown = Math.max(0, cornerCooldown - frameDt);
+  if (mode === "racing" || mode === "calibrating") {
+    let dh = h - prevHeading;
+    while (dh > Math.PI) dh -= 2 * Math.PI;
+    while (dh < -Math.PI) dh += 2 * Math.PI;
+    const yawRate = frameDt > 0 ? dh / frameDt : 0;
+    const cs = cornerStrength(yawRate, fwd / raceTuning.maxSpeed);
+    if (cs > 0 && cornerArmed && cornerCooldown <= 0) {
+      audio.cornerVroom(Math.sign(yawRate), cs);
+      cornerArmed = false;
+      cornerCooldown = 0.4;
+    }
+    if (Math.abs(yawRate) < CORNER_YAW_MIN * 0.6) cornerArmed = true; // turn eased: re-arm
+  }
+  prevHeading = h;
   if (mode === "racing") {
     for (let i = 0; i < opponents.length; i++) {
       whooshCooldowns[i] = Math.max(0, (whooshCooldowns[i] ?? 0) - frameDt);
