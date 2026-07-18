@@ -316,7 +316,7 @@ export function createAudio(volume: number): GameAudio {
       const peak = 0.5 * s;
       // Doppler pitch: elevated approaching, depressed receding. The snap-down
       // happens over `dropDur` centred on the pass — tighter = a sharper zip-by.
-      const baseHz = 300 + s * 90; // a screaming fundamental (F1, not muscle car)
+      const baseHz = 210 + s * 65; // a screaming fundamental (F1, not muscle car)
       const approachHz = baseHz * 1.5;
       const recedeHz = baseHz * 0.62;
       const dropDur = clamp(d * 0.2, 0.08, 0.35);
