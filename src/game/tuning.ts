@@ -67,17 +67,33 @@ export const DEFAULT_TUNING: Tuning = {
   holdToGo: true,
 };
 
-// Bump the suffix when DEFAULT_TUNING changes meaningfully, so stale saved
-// tuning doesn't mask the new baseline on devices that played before.
+// Bump the suffix when DEFAULT_TUNING changes meaningfully. Rather than discard
+// the whole saved object on a bump (which would wipe every value the player
+// tuned on-device), we migrate the previous version forward and only reset the
+// specific keys whose default actually moved — see MIGRATIONS below.
 const STORAGE_KEY = "vroom.tuning.v4";
+
+// Older keys, newest-first, tried in order when the current key is empty. Each
+// lists the keys whose default changed in the step up to the *next* version, so
+// a migrated save takes the new default there instead of masking it.
+const MIGRATIONS: { key: string; resetKeys: (keyof Tuning)[] }[] = [
+  { key: "vroom.tuning.v3", resetKeys: ["fenceMarginPx"] },
+];
 
 export function loadTuning(): Tuning {
   const tuning = { ...DEFAULT_TUNING };
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    let raw = localStorage.getItem(STORAGE_KEY);
+    let resetKeys: (keyof Tuning)[] = [];
+    for (const m of MIGRATIONS) {
+      if (raw) break;
+      raw = localStorage.getItem(m.key);
+      if (raw) resetKeys = m.resetKeys;
+    }
     if (raw) {
       const saved = JSON.parse(raw) as Partial<Tuning>;
       for (const key of Object.keys(tuning) as (keyof Tuning)[]) {
+        if (resetKeys.includes(key)) continue; // migrated: keep the new default
         if (typeof saved[key] === typeof tuning[key]) {
           (tuning as Record<string, unknown>)[key] = saved[key];
         }
