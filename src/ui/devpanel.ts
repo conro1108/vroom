@@ -50,6 +50,14 @@ const SLIDERS: SliderSpec[] = [
   { key: "steerRangePx", label: "drag-x steer range", min: 30, max: 160, step: 5 },
 ];
 
+const SOUND_VOLUME_SLIDER: SliderSpec = {
+  key: "soundVolume",
+  label: "sound volume (0 = mute)",
+  min: 0,
+  max: 1,
+  step: 0.05,
+};
+
 const OPPONENT_COUNT_SLIDER: SliderSpec = {
   key: "opponentCount",
   label: "AI opponents",
@@ -149,6 +157,7 @@ export function createDevPanel(
       (v) => (tuning.holdToGo = v)
     );
 
+    panel.appendChild(buildSliderRow(SOUND_VOLUME_SLIDER));
     panel.appendChild(buildSliderRow(OPPONENT_COUNT_SLIDER));
 
     if (onCalibrate) {

@@ -44,7 +44,8 @@ import {
   stepOpponents,
   type Opponent,
 } from "./game/opponents";
-import { createCarState, stepCar } from "./game/physics";
+import { createCarState, forwardSpeedOf, stepCar } from "./game/physics";
+import { createAudio, panForOffset, passStrength, PASS_RADIUS } from "./audio/audio";
 import {
   applySpeedClass,
   loadProgress,
@@ -92,6 +93,11 @@ const tuning = loadTuning();
 const progress = loadProgress();
 const records = loadRecords();
 const input = createInput(canvas, tuning);
+const audio = createAudio(tuning.soundVolume);
+let lastVolume = tuning.soundVolume;
+// Autoplay policy: the audio context can only start from a user gesture.
+window.addEventListener("pointerdown", () => audio.resume(), { capture: true });
+window.addEventListener("keydown", () => audio.resume());
 const hud = createHud();
 const minimap = createMinimap();
 createDevPanel(
@@ -122,6 +128,7 @@ let finishAt = 0;
 // trail across during the finish-hold window can't demote them after the fact.
 let playerFinishPlace = 1;
 let opponents: Opponent[] = [];
+let whooshCooldowns: number[] = []; // per-opponent seconds until it can whoosh past again
 let countdownEnd = 0;
 let boostTimer = 0; // seconds of player speed boost remaining (rocket start, slipstream)
 let throttleHeldSince: number | null = null; // when the player committed to throttle pre-green
@@ -252,6 +259,7 @@ function restartRace(): void {
     roster.length > 0
       ? createOpponents(track, query, roster, tuning, cls, Math.random, grid.slice(1), columns)
       : [];
+  whooshCooldowns = opponents.map(() => 0);
   race = createRace(RACE_LAPS);
   raceHadBestLap = false;
   finishPending = false;
@@ -433,22 +441,26 @@ function loop(now: number): void {
   // applying live mid-race.
   const raceTuning =
     mode === "calibrating" && cal ? variantTuning(cal, tuning, calVariant) : applySpeedClass(tuning, cls);
+  let engineThrottle = 0; // this frame's throttle, fed to the engine synth
 
   if (mode === "countdown") {
     accumulator = 0;
     // keep the joystick visible/live so you're ready on "go" — and watch the
     // throttle so nailing the beat can be rewarded with a rocket start
     const preInput = input.read(car.heading);
+    engineThrottle = preInput.throttle;
     if (preInput.throttle > 0) throttleHeldSince ??= now;
     else throttleHeldSince = null;
     const remaining = countdownEnd - now;
     if (remaining <= 0) {
       mode = "racing";
       lapStart = countdownEnd; // clock starts exactly on green
-      if (rocketStart(throttleHeldSince, countdownEnd, raceTuning.startBoostWindowMs)) {
+      const rocket = rocketStart(throttleHeldSince, countdownEnd, raceTuning.startBoostWindowMs);
+      if (rocket) {
         boostTimer = raceTuning.boostSeconds;
         hud.toast("rocket start!");
       }
+      audio.launch(rocket);
       hud.countdown("go!");
       window.setTimeout(() => mode !== "countdown" && hud.countdown(null), GO_FLASH_MS);
     } else {
@@ -458,6 +470,7 @@ function loop(now: number): void {
 
   if (mode === "racing" || mode === "calibrating") {
     const carInput = input.read(car.heading);
+    engineThrottle = carInput.throttle;
     const racing = mode === "racing";
     while (accumulator >= PHYSICS_DT) {
       accumulator -= PHYSICS_DT;
@@ -512,6 +525,38 @@ function loop(now: number): void {
     }
   } else if (mode !== "countdown") {
     accumulator = 0;
+  }
+
+  // --- audio: engine + tires every frame, a whoosh when a bot zips past ---
+  if (tuning.soundVolume !== lastVolume) {
+    lastVolume = tuning.soundVolume;
+    audio.setVolume(lastVolume);
+  }
+  const h = car.heading;
+  audio.update({
+    active: mode === "racing" || mode === "countdown" || mode === "calibrating",
+    forwardSpeed: forwardSpeedOf(car),
+    maxSpeed: raceTuning.maxSpeed,
+    throttle: engineThrottle,
+    drifting: car.drifting,
+    lateralSpeed: -car.vx * Math.sin(h) + car.vy * Math.cos(h),
+  });
+  if (mode === "racing") {
+    for (let i = 0; i < opponents.length; i++) {
+      whooshCooldowns[i] = Math.max(0, (whooshCooldowns[i] ?? 0) - frameDt);
+      if (whooshCooldowns[i]! > 0) continue;
+      const o = opponents[i]!.car;
+      const dx = o.x - car.x;
+      const dy = o.y - car.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > PASS_RADIUS) continue;
+      const relFwd = (o.vx - car.vx) * Math.cos(h) + (o.vy - car.vy) * Math.sin(h);
+      const strength = passStrength(dist, relFwd);
+      if (strength > 0) {
+        audio.whoosh(panForOffset(dx, dy, h), strength);
+        whooshCooldowns[i] = 0.55;
+      }
+    }
   }
 
   const ghostPose =
