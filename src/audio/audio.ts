@@ -101,12 +101,6 @@ export function observerPoints(samples: Observer[], count: number, offset: numbe
   return out;
 }
 
-/** Circular index distance around a loop of length n. */
-function circDist(a: number, b: number, n: number): number {
-  const d = Math.abs(a - b);
-  return Math.min(d, n - d);
-}
-
 /** Turn magnitude (radians) of the corner around sample i, measured over a
  *  ±w window so a dense polyline reads as corners not micro-jitter. */
 function windowedTurn(samples: Observer[], i: number, w: number): number {
@@ -120,46 +114,54 @@ function windowedTurn(samples: Observer[], i: number, w: number): number {
   return Math.abs(d);
 }
 
-/** Pick `count` sample indices at the loop's most dramatic spots, spread apart
- *  so they don't bunch into one corner complex. Drama = a tight apex OR the
- *  heart of a long straight (far from any corner = top speed). */
+/** Fraction of the loop's tightest bend a spot must reach to count as a "tight
+ *  corner." Below this it's a gentle sweeper or a straight — no vroom there. */
+const TIGHT_FRAC = 0.55;
+
+/** Pick up to `count` sample indices at the loop's tightest corners — one at the
+ *  apex of each distinct bend, since the vroom is a trackside listener at the
+ *  hairpins where the racing is tensest. A track with fewer sharp corners than
+ *  `count` gets fewer listeners rather than one parked on a straight, and two
+ *  never land on the same corner. */
 function dramaticIndices(samples: Observer[], count: number): number[] {
   const n = samples.length;
   const w = Math.max(1, Math.floor(n / 48));
   const turn = samples.map((_, i) => windowedTurn(samples, i, w));
   const maxTurn = Math.max(1e-6, ...turn);
 
-  // Corner peaks: local maxima that actually bend, so "distance to a corner"
-  // means something for scoring the straights.
-  const peaks: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const p = turn[(i - 1 + n) % n]!;
-    const c = turn[i]!;
-    const nx = turn[(i + 1) % n]!;
-    if (c >= p && c >= nx && c > 0.4 * maxTurn) peaks.push(i);
+  // Uniformly-curved loop (a circle, or a square that's all corners and no
+  // straights): there are no distinct bends to single out, so fall back to
+  // even spacing so it still gets its full set of listeners.
+  const tight = turn.map((t) => t >= TIGHT_FRAC * maxTurn);
+  if (tight.every(Boolean)) {
+    return Array.from({ length: count }, (_, k) => Math.floor((k * n) / count));
   }
-  const nearCorner = samples.map((_, i) =>
-    peaks.length ? Math.min(...peaks.map((j) => circDist(i, j, n))) : 0
-  );
-  const maxNear = Math.max(1e-6, ...nearCorner);
 
-  // Each spot scores as the better of its corner drama and its straight drama.
-  const score = samples.map((_, i) =>
-    Math.max(turn[i]! / maxTurn, 0.85 * (nearCorner[i]! / maxNear))
-  );
-
-  // Greedily take the top scorers while keeping them spread around the loop,
-  // relaxing the spacing (then giving up on it entirely) if we can't fill count.
-  const order = [...score.keys()].sort((a, b) => score[b]! - score[a]!);
-  const picks: number[] = [];
-  for (let sep = Math.floor((n / count) * 0.55); picks.length < count; sep = Math.floor(sep / 2)) {
-    for (const i of order) {
-      if (picks.length >= count) break;
-      if (!picks.includes(i) && picks.every((p) => circDist(i, p, n) >= sep)) picks.push(i);
+  // Group the loop's contiguous "tight" stretches into runs (one per bend,
+  // wrapping across the start/end seam), keeping each run's apex — the single
+  // sharpest sample — and how tight that apex is.
+  const start = tight.findIndex((t, i) => t && !tight[(i - 1 + n) % n]!);
+  const apexes: { i: number; turn: number }[] = [];
+  if (start >= 0) {
+    let apex = -1;
+    for (let k = 0; k < n; k++) {
+      const i = (start + k) % n;
+      if (tight[i]) {
+        if (apex < 0 || turn[i]! > turn[apex]!) apex = i;
+      } else if (apex >= 0) {
+        apexes.push({ i: apex, turn: turn[apex]! });
+        apex = -1;
+      }
     }
-    if (sep <= 0) break;
+    if (apex >= 0) apexes.push({ i: apex, turn: turn[apex]! });
   }
-  return picks.sort((a, b) => a - b);
+
+  // Take the tightest corners, up to count. Fewer corners than count → fewer.
+  return apexes
+    .sort((a, b) => b.turn - a.turn)
+    .slice(0, count)
+    .map((c) => c.i)
+    .sort((a, b) => a - b);
 }
 
 /** Stereo pan (-1 left .. 1 right) for an object at world offset (dx,dy) given

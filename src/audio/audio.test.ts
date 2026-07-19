@@ -145,7 +145,7 @@ describe("observerPoints", () => {
     expect(dNotch).toBeLessThanOrEqual(10 + 1e-6);
   });
 
-  it("plants a listener mid-straight where you're flat-out", () => {
+  it("keeps listeners on the tight corners, never mid-straight", () => {
     // a stadium: two long straights (y = ±50) joined by tight semicircle ends
     const loop: Observer[] = [];
     const half = 150;
@@ -160,9 +160,8 @@ describe("observerPoints", () => {
 
     const pts = observerPoints(loop, 3, 8);
     const onStraight = pts.some((o) => Math.abs(o.x) < 60); // straights live near x=0
-    const onEnds = pts.filter((o) => Math.abs(o.x) > 100).length; // ends live near x=±150
-    expect(onStraight).toBe(true); // grabbed a top-speed straight, not just corners
-    expect(onEnds).toBeGreaterThanOrEqual(1); // and at least one tight end
+    expect(onStraight).toBe(false); // no vrooms on the flat-out straights
+    for (const o of pts) expect(Math.abs(o.x)).toBeGreaterThan(100); // every listener at a tight end
   });
 });
 
