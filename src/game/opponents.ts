@@ -144,6 +144,7 @@ export function createOpponents(
       deficit: 0,
       held: null,
       spin: 0,
+      spinFrom: 0,
       boost: 0,
       finished: false,
       finishOrder: null,

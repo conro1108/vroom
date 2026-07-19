@@ -9,6 +9,8 @@
 // input.ts), not gameplay feel — the one player-facing feel knob, master
 // volume, lives in Tuning and is passed in via setVolume().
 
+import type { ItemKind } from "../game/items";
+
 // ---- pure mappings (unit-tested; no WebAudio needed) ----
 
 const IDLE_HZ = 44; // engine pitch at a dead stop — low for a growly rumble
@@ -29,18 +31,20 @@ export function engineGain(forwardSpeed: number, maxSpeed: number, throttle: num
   return 0.032 + clamp01(throttle) * 0.038 + frac * 0.055;
 }
 
-/** Tremolo rate (Hz) of the grumble: a slow lopey putter at idle that smooths
- *  into a fast buzz at speed. This is what reads as "cute engine." */
+/** Tremolo rate (Hz) of the grumble: a slow lopey chug at idle that smooths
+ *  into a fast buzz at speed. Deep at idle so it reads as pistons firing —
+ *  the mechanical chug, not a smooth hum. */
 export function engineTremolo(forwardSpeed: number, maxSpeed: number): { rate: number; depth: number } {
   const frac = clamp01(forwardSpeed / Math.max(1, maxSpeed));
-  return { rate: 6 + frac * 30, depth: 0.06 * (1 - frac * 0.6) };
+  return { rate: 7 + frac * 32, depth: 0.11 * (1 - frac * 0.55) };
 }
 
-/** Lowpass cutoff (Hz) for the idle hum. Kept low so the ongoing engine stays
- *  soft and un-buzzy — it barely opens up with revs on purpose. */
+/** Lowpass cutoff (Hz) for the engine. Opens up more than the old hum did so
+ *  the sawtooth's harmonics come through as a mechanical buzz/growl, but stays
+ *  low enough at idle to keep a throaty low end rather than a thin whine. */
 export function engineCutoff(forwardSpeed: number, maxSpeed: number, throttle: number): number {
   const frac = clamp01(forwardSpeed / Math.max(1, maxSpeed));
-  return 260 + frac * 700 + clamp01(throttle) * 180;
+  return 340 + frac * 900 + clamp01(throttle) * 260;
 }
 
 /** Tire-screech loudness (0..1) from how much the car is sliding sideways.
@@ -187,6 +191,12 @@ export interface GameAudio {
   launch(rocket: boolean): void;
   /** One-shot doppler swipe as an opponent passes; pan -1..1, strength 0..1. */
   whoosh(pan: number, strength: number): void;
+  /** Cheery "get" when you grab an item box. */
+  pickup(): void;
+  /** The distinct noise for firing/using a held item. */
+  item(kind: ItemKind): void;
+  /** Comedic descending "wah" when a hit spins you out. */
+  spun(): void;
   /** Louder engine-flavored doppler vroom, fired as you rip past an observer;
    *  pan points toward the listener (-1 left .. 1 right), strength 0..1,
    *  seconds sets how drawn-out the flyby is. */
@@ -232,8 +242,14 @@ export function createAudio(volume: number): GameAudio {
   const noise = makeNoiseBuffer(ctx);
 
   // --- persistent engine voice ---
+  // A pair of sawtooths (rich in harmonics = mechanical/buzzy) that beat
+  // against each other for a rough motor grind, plus a sine sub for body. A
+  // deep tremolo chops the whole thing into a piston-y chug.
   const engOsc = ctx.createOscillator();
-  engOsc.type = "triangle"; // soft, un-buzzy — this is only a faint idle hum
+  engOsc.type = "sawtooth";
+  const engOsc2 = ctx.createOscillator(); // a detuned twin so it grinds/beats
+  engOsc2.type = "sawtooth";
+  engOsc2.detune.value = 26; // a touch sharp — the roughness that reads as gears
   const engSub = ctx.createOscillator(); // an octave down for a little body
   engSub.type = "sine";
   const engFilter = ctx.createBiquadFilter();
@@ -241,16 +257,18 @@ export function createAudio(volume: number): GameAudio {
   engFilter.frequency.value = 500;
   const engGain = ctx.createGain();
   engGain.gain.value = 0;
-  // tremolo LFO modulates the engine gain to make the putter
+  // tremolo LFO modulates the engine gain to make the chug
   const lfo = ctx.createOscillator();
   lfo.type = "sine";
   const lfoDepth = ctx.createGain();
   lfoDepth.gain.value = 0;
   lfo.connect(lfoDepth).connect(engGain.gain);
   engOsc.connect(engFilter);
+  engOsc2.connect(engFilter);
   engSub.connect(engFilter);
   engFilter.connect(engGain).connect(masterGain);
   engOsc.start();
+  engOsc2.start();
   engSub.start();
   lfo.start();
 
@@ -285,6 +303,7 @@ export function createAudio(volume: number): GameAudio {
       const trem = engineTremolo(f.forwardSpeed, f.maxSpeed);
       // ~30ms smoothing so parameter changes glide instead of zippering
       engOsc.frequency.setTargetAtTime(freq, now, 0.03);
+      engOsc2.frequency.setTargetAtTime(freq, now, 0.03);
       engSub.frequency.setTargetAtTime(freq / 2, now, 0.03);
       engFilter.frequency.setTargetAtTime(engineCutoff(f.forwardSpeed, f.maxSpeed, f.throttle), now, 0.03);
       engGain.gain.setTargetAtTime(targetEng, now, 0.05);
@@ -362,6 +381,103 @@ export function createAudio(volume: number): GameAudio {
       src.start(now);
       src.stop(now + 0.4);
     },
+    pickup() {
+      if (master <= 0) return;
+      resume();
+      const now = ctx.currentTime;
+      // a bright two-note ping — the "you got it" jingle
+      blip(ctx, masterGain, now, 660, 0.16);
+      blip(ctx, masterGain, now + 0.08, 990, 0.18);
+    },
+    item(kind) {
+      if (master <= 0) return;
+      resume();
+      const now = ctx.currentTime;
+      if (kind === "turbo") {
+        // rising power-up whoosh: a swept-bright noise plus an up-glide tone
+        const src = ctx.createBufferSource();
+        src.buffer = noise;
+        const bp = ctx.createBiquadFilter();
+        bp.type = "bandpass";
+        bp.Q.value = 1.4;
+        bp.frequency.setValueAtTime(300, now);
+        bp.frequency.exponentialRampToValueAtTime(2600, now + 0.34);
+        const ng = ctx.createGain();
+        ng.gain.setValueAtTime(0.0001, now);
+        ng.gain.exponentialRampToValueAtTime(0.3, now + 0.08);
+        ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+        src.connect(bp).connect(ng).connect(masterGain);
+        src.start(now);
+        src.stop(now + 0.45);
+        const o = ctx.createOscillator();
+        o.type = "sawtooth";
+        o.frequency.setValueAtTime(220, now);
+        o.frequency.exponentialRampToValueAtTime(880, now + 0.32);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.13, now + 0.06);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
+        o.connect(g).connect(masterGain);
+        o.start(now);
+        o.stop(now + 0.4);
+      } else if (kind === "oil") {
+        // a wet splat: short lowpassed noise that dives dark
+        const src = ctx.createBufferSource();
+        src.buffer = noise;
+        const lp = ctx.createBiquadFilter();
+        lp.type = "lowpass";
+        lp.frequency.setValueAtTime(1200, now);
+        lp.frequency.exponentialRampToValueAtTime(180, now + 0.18);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.3, now);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+        src.connect(lp).connect(g).connect(masterGain);
+        src.start(now);
+        src.stop(now + 0.25);
+      } else {
+        // a fired shot (rocket / missile / crown): a zappy down-swept "pew"
+        const o = ctx.createOscillator();
+        o.type = "sawtooth";
+        o.frequency.setValueAtTime(900, now);
+        o.frequency.exponentialRampToValueAtTime(180, now + 0.22);
+        const bp = ctx.createBiquadFilter();
+        bp.type = "bandpass";
+        bp.Q.value = 1;
+        bp.frequency.value = 1200;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.3, now + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+        o.connect(bp).connect(g).connect(masterGain);
+        o.start(now);
+        o.stop(now + 0.3);
+        chirp(ctx, noise, masterGain, now, 0.18, 0.22); // launch hiss
+        // the crown gets a little regal fanfare on top
+        if (kind === "crown") {
+          [784, 988, 1319].forEach((hz, i) => blip(ctx, masterGain, now + 0.05 + i * 0.06, hz, 0.15));
+        }
+      }
+    },
+    spun() {
+      if (master <= 0) return;
+      resume();
+      const now = ctx.currentTime;
+      // a comedic descending "waaah" as you lose it
+      const o = ctx.createOscillator();
+      o.type = "square";
+      o.frequency.setValueAtTime(400, now);
+      o.frequency.exponentialRampToValueAtTime(120, now + 0.4);
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 1400;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.22, now + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+      o.connect(lp).connect(g).connect(masterGain);
+      o.start(now);
+      o.stop(now + 0.5);
+    },
     vroom(pan, strength, seconds) {
       if (master <= 0 || strength <= 0) return;
       resume();
@@ -373,13 +489,13 @@ export function createAudio(volume: number): GameAudio {
       // peakT is closest approach: loudest, brightest, and the pitch drop.
       // The pass sits deep in the window (peakT) so the buildup is a long, slow
       // low gather — "mmmmmmmMM" — that dwarfs the pass itself, then one hard
-      // crack and a quick "owww" fade away. Buildup ~4x the recede.
+      // crack and a quick "owww" fade away. Buildup ~6x the recede.
       const d = clamp(seconds, 0.2, 4);
-      const peakT = d * 0.8;
+      const peakT = d * (6 / 7);
       const endT = d;
       const stop = now + endT + 0.08;
       const s = clamp01(strength);
-      const peak = 0.5 * s;
+      const peak = 1.0 * s; // the loud crack at the pass
       // Doppler pitch: elevated approaching, depressed receding. The snap-down
       // happens over `dropDur` centred on the pass — tighter = a sharper zip-by.
       const baseHz = 150 + s * 50; // a screaming fundamental (F1, not muscle car)
@@ -517,6 +633,9 @@ function noopAudio(): GameAudio {
     update() {},
     launch() {},
     whoosh() {},
+    pickup() {},
+    item() {},
+    spun() {},
     vroom() {},
     setVolume() {},
     resume() {},

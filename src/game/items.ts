@@ -21,12 +21,13 @@ export interface ItemRacer {
   deficit: number; // 0 = on the leader, 1 = a full ITEM_GAP_WINDOW back; updated by the caller
   held: ItemKind | null;
   spin: number; // seconds of spin-out remaining
+  spinFrom: number; // heading captured when the spin began, restored on exit
   boost: number; // seconds of item speed-boost remaining
   finished: boolean;
 }
 
 export function createItemRacer(car: CarState): ItemRacer {
-  return { car, position: 1, deficit: 0, held: null, spin: 0, boost: 0, finished: false };
+  return { car, position: 1, deficit: 0, held: null, spin: 0, spinFrom: 0, boost: 0, finished: false };
 }
 
 /** Being this many laps behind the leader maxes out the comeback-item roll. */
@@ -77,19 +78,23 @@ const CROWN_TURN_RATE = 4.2; // the leader-hunter corners harder — it will not
 const CROWN_TTL_SECONDS = 9; // and it stays airborne long enough to run the leader down
 const SHOT_NOSE_PX = 9; // spawn a shot at the car's nose, not its center
 const BOX_RESPAWN_SECONDS = 4;
-// How long a hit spins you out — the item's whole bite. Slicks sting a little
-// less than they used to; rockets/missiles/crowns sting less still, so a shot
-// is a nudge off your line rather than a race-ender.
-const OIL_SPIN_SECONDS = 0.85;
-const SHOT_SPIN_SECONDS = 0.6;
-const SPIN_RATE = 3 * 2 * Math.PI; // three full rotations per second of spin
+// How long a hit spins you out — the item's whole bite. Kept deliberately
+// short: a slick is a shove off your line, a shot barely a nudge, not a
+// race-ender. Durations are whole turns at SPIN_RATE (oil = 2, shot = 1) so a
+// spin unwinds back to where it started rather than leaving you facing away.
+const OIL_SPIN_SECONDS = 0.8;
+const SHOT_SPIN_SECONDS = 0.4;
+const SPIN_RATE = 2.5 * 2 * Math.PI; // 2.5 rotations per second of spin
 const TURBO_SECONDS = 1.6;
 const OIL_DROP_BACK_PX = 16;
 
-/** The forced input while spun out: off throttle, hard on the brakes. */
-export const SPIN_INPUT: CarInput = { steer: 0, throttle: 0, brake: 1 };
+/** The forced input while spun out: off throttle, only a light brake so you
+ *  keep some momentum through the spin instead of dead-stopping. */
+export const SPIN_INPUT: CarInput = { steer: 0, throttle: 0, brake: 0.45 };
 
-/** Rotate a spinning car's heading; the owner applies this before stepping physics. */
+/** Rotate a spinning car's heading; the owner applies this before stepping
+ *  physics. The final heading is snapped back to `spinFrom` when the spin ends
+ *  (see stepItems), so the car always comes out facing the way it went in. */
 export function spinCar(car: CarState, dt: number): void {
   let h = car.heading + SPIN_RATE * dt;
   while (h > Math.PI) h -= 2 * Math.PI;
@@ -189,6 +194,7 @@ export function stepItems(
       if (r.spin > 0 || r.finished) continue;
       if (Math.hypot(r.car.x - oil.x, r.car.y - oil.y) > OIL_RADIUS) continue;
       r.spin = OIL_SPIN_SECONDS;
+      r.spinFrom = r.car.heading;
       world.oils.splice(oi, 1);
       events.push({ type: "spin", racer: i, by: "oil" });
       break;
@@ -239,13 +245,18 @@ export function stepItems(
     }
     if (hit >= 0) {
       racers[hit]!.spin = SHOT_SPIN_SECONDS;
+      racers[hit]!.spinFrom = racers[hit]!.car.heading;
       world.missiles.splice(mi, 1);
       events.push({ type: "spin", racer: hit, by: m.chaseLeader ? "crown" : "missile" });
     }
   }
 
   for (const r of racers) {
+    const wasSpinning = r.spin > 0;
     r.spin = Math.max(0, r.spin - dt);
+    // the instant the spin runs out, land back on the entry heading so the car
+    // never comes to rest facing backward
+    if (wasSpinning && r.spin === 0) r.car.heading = r.spinFrom;
     r.boost = Math.max(0, r.boost - dt);
   }
   return events;

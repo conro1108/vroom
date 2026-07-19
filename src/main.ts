@@ -636,10 +636,13 @@ function stepItemWorld(): void {
   updatePositions();
   for (const ev of stepItems(itemWorld, itemRacers, PHYSICS_DT)) {
     if (ev.type === "pickup") {
-      if (ev.racer === 0) hud.setItem(playerRacer.held);
-      else opponents[ev.racer - 1]!.itemUseDelay = 0.8 + Math.random() * 2.2;
+      if (ev.racer === 0) {
+        hud.setItem(playerRacer.held);
+        audio.pickup();
+      } else opponents[ev.racer - 1]!.itemUseDelay = 0.8 + Math.random() * 2.2;
     } else if (ev.racer === 0) {
       hud.toast(ev.by === "oil" ? "slicked!" : ev.by === "crown" ? "dethroned!" : "rocketed!");
+      audio.spun();
     }
   }
   for (let i = 0; i < opponents.length; i++) {
@@ -653,7 +656,11 @@ function stepItemWorld(): void {
 /** The player fires whatever the bubble is holding (tap, or space/E/shift). */
 function useHeldItem(): void {
   if (mode !== "racing" || !itemWorld) return;
-  if (useItem(itemWorld, itemRacers, 0)) hud.setItem(null);
+  const used = useItem(itemWorld, itemRacers, 0);
+  if (used) {
+    hud.setItem(null);
+    audio.item(used);
+  }
 }
 
 const itemBubble = document.getElementById("item-bubble")!;

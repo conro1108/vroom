@@ -4,6 +4,7 @@ import {
   createItemWorld,
   PICKUP_RADIUS,
   rollItem,
+  spinCar,
   stepItems,
   useItem,
   type ItemWorld,
@@ -115,6 +116,21 @@ describe("items in flight", () => {
     expect(racer.spin).toBeGreaterThan(0.5);
     expect(world.oils).toHaveLength(0);
     expect(events).toEqual([{ type: "spin", racer: 0, by: "oil" }]);
+  });
+
+  it("a spin unwinds back to the heading it started from", () => {
+    const world = emptyWorld();
+    world.oils.push({ x: 100, y: 100 });
+    const racer = createItemRacer(createCarState(100, 100, 0.7)); // driving at 0.7 rad
+    const dt = 1 / 120;
+    stepItems(world, [racer], dt); // oil hit captures the entry heading
+    expect(racer.spin).toBeGreaterThan(0);
+    // drive the spin the way the game loop does: rotate each step until it ends
+    while (racer.spin > 0) {
+      spinCar(racer.car, dt);
+      stepItems(world, [racer], dt);
+    }
+    expect(racer.car.heading).toBeCloseTo(0.7); // back facing forward, not backward
   });
 
   it("a homing missile curves onto a nearby racer and spins it", () => {
