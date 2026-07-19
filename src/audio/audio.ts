@@ -11,8 +11,8 @@
 
 // ---- pure mappings (unit-tested; no WebAudio needed) ----
 
-const IDLE_HZ = 60; // engine pitch at a dead stop
-const REV_HZ = 175; // extra pitch at full speed
+const IDLE_HZ = 44; // engine pitch at a dead stop — low for a growly rumble
+const REV_HZ = 150; // extra pitch at full speed
 const THROTTLE_HZ = 28; // extra pitch from flooring it (revs before speed builds)
 
 /** Engine oscillator pitch (Hz) from how fast we're going and how hard we're on it. */
@@ -21,12 +21,12 @@ export function engineFreq(forwardSpeed: number, maxSpeed: number, throttle: num
   return IDLE_HZ + frac * REV_HZ + clamp01(throttle) * THROTTLE_HZ;
 }
 
-/** Base engine loudness (0..1, pre master-volume). Deliberately near-silent —
- *  normal driving is flat, so a constant drone just grates. This is a
- *  barely-there hum; the doppler vrooms do all the loud, fun work. */
+/** Base engine loudness (0..1, pre master-volume). A present, growly rumble now
+ *  — audible at idle and thickening under throttle/speed — but still well below
+ *  the doppler vrooms, which stay the loud, fun peaks of the mix. */
 export function engineGain(forwardSpeed: number, maxSpeed: number, throttle: number): number {
   const frac = clamp01(forwardSpeed / Math.max(1, maxSpeed));
-  return 0.006 + clamp01(throttle) * 0.008 + frac * 0.014;
+  return 0.016 + clamp01(throttle) * 0.02 + frac * 0.03;
 }
 
 /** Tremolo rate (Hz) of the grumble: a slow lopey putter at idle that smooths
@@ -306,18 +306,18 @@ export function createAudio(volume: number): GameAudio {
       if (master <= 0) return;
       resume();
       const now = ctx.currentTime;
-      const top = rocket ? 420 : 260;
+      const top = rocket ? 340 : 210; // lower top for a growlier pull-off
       // rev sweep
       const osc = ctx.createOscillator();
       osc.type = "sawtooth";
       const filt = ctx.createBiquadFilter();
       filt.type = "lowpass";
-      filt.frequency.value = 2200;
+      filt.frequency.value = 1900; // a touch darker to match the lower rev
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, now);
-      g.gain.exponentialRampToValueAtTime(0.35, now + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.52, now + 0.05); // louder off the line
       g.gain.exponentialRampToValueAtTime(0.0001, now + (rocket ? 0.5 : 0.38));
-      osc.frequency.setValueAtTime(90, now);
+      osc.frequency.setValueAtTime(70, now);
       osc.frequency.exponentialRampToValueAtTime(top, now + (rocket ? 0.4 : 0.3));
       osc.connect(filt).connect(g).connect(masterGain);
       osc.start(now);
@@ -371,12 +371,11 @@ export function createAudio(volume: number): GameAudio {
       // it passes ("nyeeeeEEE-yowwwm") and fades darker as it tears away. The
       // whole thing scales with `seconds` — a quick zip to a long drawn-out pass.
       // peakT is closest approach: loudest, brightest, and the pitch drop.
-      // The pass sits early in the window (peakT) so the recede gets a long
-      // tail — the car spends more time tearing away than bearing down, which is
-      // what a trackside pass actually feels like: a gathering approach, one
-      // hard hit, then a drawn-out fade.
+      // The pass sits past the middle of the window (peakT) so the buildup is a
+      // long, slow gather that keeps swelling right up to the hard hit — the
+      // approach dominates, then a hard crack and a shorter fade away.
       const d = clamp(seconds, 0.2, 4);
-      const peakT = d * 0.4;
+      const peakT = d * 0.6;
       const endT = d;
       const stop = now + endT + 0.08;
       const s = clamp01(strength);

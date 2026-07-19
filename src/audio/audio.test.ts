@@ -18,7 +18,7 @@ describe("engineFreq", () => {
     const idle = engineFreq(0, 140, 0);
     const flooredStill = engineFreq(0, 140, 1); // revving before speed builds
     const fast = engineFreq(140, 140, 1);
-    expect(idle).toBeCloseTo(60);
+    expect(idle).toBeCloseTo(44);
     expect(flooredStill).toBeGreaterThan(idle);
     expect(fast).toBeGreaterThan(flooredStill);
   });
@@ -29,9 +29,9 @@ describe("engineFreq", () => {
 });
 
 describe("engineGain", () => {
-  it("stays a near-silent hum even flat out", () => {
-    // the ongoing engine is deliberately tiny; the doppler vrooms carry the mix
-    expect(engineGain(140, 140, 1)).toBeLessThan(0.05);
+  it("is a present growl but still below the doppler vrooms", () => {
+    // the ongoing engine has body now, yet the vrooms stay the loud peaks
+    expect(engineGain(140, 140, 1)).toBeLessThan(0.1);
   });
   it("keeps a faint idle rumble off throttle at a stop", () => {
     expect(engineGain(0, 140, 0)).toBeGreaterThan(0);

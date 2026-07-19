@@ -133,8 +133,8 @@ export function createInput(target: HTMLElement, tuning: Tuning): InputRig {
   const stickCtx = stick.getContext("2d")!;
 
   // Mouse-primary devices (desktop browsers) steer with the arrow keys, so the
-  // always-on fixed stick is just idle clutter there — suppress the anchored
-  // stick; it still appears during an actual pointer drag for mouse steering.
+  // on-screen stick is just idle clutter there — suppress it entirely, including
+  // during a mouse drag. Mouse steering still works; it just isn't drawn.
   const mousePrimary = window.matchMedia("(hover: hover) and (pointer: fine)");
 
   // In fixed mode the stick lives bottom-right and survives lifting the
@@ -146,7 +146,7 @@ export function createInput(target: HTMLElement, tuning: Tuning): InputRig {
 
   const updateIndicator = () => {
     const fixed = fixedActive();
-    stick.hidden = !touching && !fixed;
+    stick.hidden = mousePrimary.matches || (!touching && !fixed);
     if (stick.hidden) return;
     const c = stickCenter();
     stick.style.left = `${c.x}px`;
