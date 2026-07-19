@@ -31,7 +31,7 @@ describe("engineFreq", () => {
 describe("engineGain", () => {
   it("is a present growl but still below the doppler vrooms", () => {
     // the ongoing engine has body now, yet the vrooms stay the loud peaks
-    expect(engineGain(140, 140, 1)).toBeLessThan(0.1);
+    expect(engineGain(140, 140, 1)).toBeLessThan(0.2);
   });
   it("keeps a faint idle rumble off throttle at a stop", () => {
     expect(engineGain(0, 140, 0)).toBeGreaterThan(0);

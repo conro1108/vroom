@@ -26,7 +26,7 @@ export function engineFreq(forwardSpeed: number, maxSpeed: number, throttle: num
  *  the doppler vrooms, which stay the loud, fun peaks of the mix. */
 export function engineGain(forwardSpeed: number, maxSpeed: number, throttle: number): number {
   const frac = clamp01(forwardSpeed / Math.max(1, maxSpeed));
-  return 0.016 + clamp01(throttle) * 0.02 + frac * 0.03;
+  return 0.032 + clamp01(throttle) * 0.038 + frac * 0.055;
 }
 
 /** Tremolo rate (Hz) of the grumble: a slow lopey putter at idle that smooths
@@ -371,11 +371,11 @@ export function createAudio(volume: number): GameAudio {
       // it passes ("nyeeeeEEE-yowwwm") and fades darker as it tears away. The
       // whole thing scales with `seconds` — a quick zip to a long drawn-out pass.
       // peakT is closest approach: loudest, brightest, and the pitch drop.
-      // The pass sits past the middle of the window (peakT) so the buildup is a
-      // long, slow gather that keeps swelling right up to the hard hit — the
-      // approach dominates, then a hard crack and a shorter fade away.
+      // The pass sits deep in the window (peakT) so the buildup is a long, slow
+      // low gather — "mmmmmmmMM" — that dwarfs the pass itself, then one hard
+      // crack and a quick "owww" fade away. Buildup ~4x the recede.
       const d = clamp(seconds, 0.2, 4);
-      const peakT = d * 0.6;
+      const peakT = d * 0.8;
       const endT = d;
       const stop = now + endT + 0.08;
       const s = clamp01(strength);
