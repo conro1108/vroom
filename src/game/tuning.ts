@@ -21,6 +21,8 @@ export interface Tuning {
   startBoostWindowMs: number; // committing to throttle within this window before green = rocket start
   boostPower: number; // maxSpeed/accel multiplier while a boost is live
   boostSeconds: number; // how long a rocket start's boost lasts
+  boostGuide: number; // 0..1 steering assist a *guided* boost applies (mega-turbo) — eases you onto the racing line so the boost is easier to keep on-track; the common turbo gets none
+  boostGuideMaxDeg: number; // heading error (deg) at which the boost assist saturates
   draftRangePx: number; // how close behind a car the slipstream reaches
   draftChargeSeconds: number; // continuous drafting needed to earn a boost
   draftBoostSeconds: number; // how long a slipstream boost lasts
@@ -58,6 +60,8 @@ export const DEFAULT_TUNING: Tuning = {
   startBoostWindowMs: 350,
   boostPower: 1.35,
   boostSeconds: 1.2,
+  boostGuide: 0.5,
+  boostGuideMaxDeg: 40,
   draftRangePx: 55,
   draftChargeSeconds: 1.0,
   draftBoostSeconds: 0.8,

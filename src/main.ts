@@ -12,6 +12,7 @@ import {
 import { choose, createCalibration, skipAxis, variantTuning, type Calibration } from "./game/calibrate";
 import { createDraft, inSlipstream, stepDraft } from "./game/draft";
 import {
+  BOOST_TIERS,
   createItemRacer,
   createItemWorld,
   ITEM_GAP_WINDOW,
@@ -44,7 +45,7 @@ import {
   stepOpponents,
   type Opponent,
 } from "./game/opponents";
-import { createCarState, forwardSpeedOf, stepCar } from "./game/physics";
+import { boostGuideSteer, createCarState, forwardSpeedOf, stepCar } from "./game/physics";
 import {
   createAudio,
   observerPoints,
@@ -141,6 +142,7 @@ let obsArmed: boolean[] = []; // per-observer: ready to fire (re-armed once you'
 let obsRadius = 0; // how close counts as ripping past a listener
 let countdownEnd = 0;
 let boostTimer = 0; // seconds of player speed boost remaining (rocket start, slipstream)
+let itemBoostGuide = 0; // steering-assist strength of the player's active item boost (mega guides, plain turbo is 0)
 let throttleHeldSince: number | null = null; // when the player committed to throttle pre-green
 let playerDraft = createDraft();
 let playerRacer = createItemRacer(car); // the player's item-system view (spin/boost/held)
@@ -277,6 +279,7 @@ function restartRace(): void {
   finishPending = false;
   playerFinishPlace = 1;
   boostTimer = 0;
+  itemBoostGuide = 0;
   throttleHeldSince = null;
   playerDraft = createDraft();
   playerRacer = createItemRacer(car);
@@ -495,6 +498,20 @@ function loop(now: number): void {
       if (playerRacer.spin > 0) {
         stepInput = SPIN_INPUT;
         spinCar(car, PHYSICS_DT);
+      } else if (playerRacer.boost > 0 && itemBoostGuide > 0) {
+        // A guided boost (mega-turbo) eases the car onto the racing line so it's
+        // spendable through corners instead of into the fence. Added to the
+        // driver's own steer, so you can still steer against it.
+        const tan = query.tangentAt(car.x, car.y);
+        if (tan) {
+          const assist = boostGuideSteer(
+            car.heading,
+            Math.atan2(tan.y, tan.x),
+            raceTuning.boostGuideMaxDeg,
+            itemBoostGuide
+          );
+          stepInput = { ...carInput, steer: Math.max(-1, Math.min(1, carInput.steer + assist)) };
+        }
       }
       car = stepCar(car, stepInput, stepTuning, query.surfaceAt(car.x, car.y), PHYSICS_DT);
       playerRacer.car = car;
@@ -659,6 +676,10 @@ function useHeldItem(): void {
   if (mode !== "racing" || !itemWorld) return;
   const used = useItem(itemWorld, itemRacers, 0);
   if (used) {
+    // capture how hard this boost tier guides, read back while it's live
+    if (used === "turbo" || used === "megaturbo") {
+      itemBoostGuide = tuning.boostGuide * BOOST_TIERS[used].guide;
+    }
     hud.setItem(null);
     audio.item(used);
   }

@@ -72,6 +72,26 @@ export function stepCar(
   return { x: s.x + vx * dt, y: s.y + vy * dt, heading, vx, vy, steer, drifting };
 }
 
+/**
+ * A boost's steering assist: how much extra steer (-1..1) to add so the car
+ * eases onto the track's racing line instead of rocketing off at the next
+ * corner. Returns a nudge proportional to the heading error between where the
+ * car points (`heading`) and the track direction (`tangent`, radians),
+ * saturating at `maxDeg` of error and scaled by `strength` (0 = no assist).
+ * It's *added* to the driver's own steer, so you can always steer against it.
+ */
+export function boostGuideSteer(
+  heading: number,
+  tangent: number,
+  maxDeg: number,
+  strength: number
+): number {
+  if (strength <= 0) return 0;
+  const diff = normalizeAngle(tangent - heading);
+  const maxRad = (maxDeg * Math.PI) / 180 || 1;
+  return clamp(diff / maxRad, -1, 1) * strength;
+}
+
 export function speedOf(s: CarState): number {
   return Math.hypot(s.vx, s.vy);
 }

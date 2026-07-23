@@ -3,6 +3,9 @@
 // Pure logic: main.ts owns when to step this, render/ui draw what's here.
 //
 //   turbo   — short speed burst for yourself
+//   megaturbo — the comeback tier: a longer burst that guides you harder onto
+//               the racing line (see boostGuide), so a car dropped well back
+//               can actually spend it through corners instead of into a fence
 //   rocket  — fired straight out where you're facing; hits whoever's in its path
 //   missile — the cute one: locks a nearby racer and curves toward them
 //   crown   — the rare one: relentlessly chases down whoever's in first place
@@ -10,7 +13,7 @@
 import type { CarInput, CarState } from "./physics";
 import type { Track } from "./track";
 
-export type ItemKind = "turbo" | "rocket" | "missile" | "crown" | "oil";
+export type ItemKind = "turbo" | "megaturbo" | "rocket" | "missile" | "crown" | "oil";
 
 /** The item-relevant view of one racer. Opponents satisfy this directly;
  * main.ts keeps one for the player. `car` must be re-pointed whenever the
@@ -88,6 +91,19 @@ const SPIN_RATE = 2.5 * 2 * Math.PI; // 2.5 rotations per second of spin
 const TURBO_SECONDS = 1.6;
 const OIL_DROP_BACK_PX = 16;
 
+/**
+ * The speed-boost item tiers. Every tier hits with the same force (boostPower);
+ * a higher tier just lasts longer, so it carries you *farther*. `guide` is how
+ * much of the tuning steering-assist it applies (0 = the common base turbo,
+ * with no help staying on the line; 1 = the full assist). The owner
+ * (main.ts / opponents.ts) reads `guide` when it steps a boosted car — that's
+ * where the track tangent lives; here we only own the tier shape.
+ */
+export const BOOST_TIERS: Record<"turbo" | "megaturbo", { seconds: number; guide: number }> = {
+  turbo: { seconds: TURBO_SECONDS, guide: 0 },
+  megaturbo: { seconds: 2.8, guide: 1 },
+};
+
 /** The forced input while spun out: off throttle, only a light brake so you
  *  keep some momentum through the spin instead of dead-stopping. */
 export const SPIN_INPUT: CarInput = { steer: 0, throttle: 0, brake: 0.45 };
@@ -141,7 +157,10 @@ export function createItemWorld(track: Track, fieldSize = 4, rowsOverride?: numb
  * roll gently and only a car that's truly dropped off gets the big comeback
  * tools. Leaders mostly get oil to defend with; the plain straight rocket is
  * the common attack, the homing missile a rarer treat, the leader-chasing
- * crown rarer still. Not full parity — a nudge toward it.
+ * crown rarer still. The speed boost comes in two tiers: the plain turbo is a
+ * common roll anywhere in the field, and the longer, guided mega-turbo is a
+ * rare back-of-field comeback you can actually hold through the corners.
+ * Not full parity — a nudge toward it.
  */
 export function rollItem(
   deficit: number,
@@ -149,16 +168,18 @@ export function rollItem(
   rng: () => number = Math.random
 ): ItemKind {
   const p = Math.max(0, Math.min(1, deficit));
-  const turbo = 0.2 + 0.7 * p;
+  const turbo = 0.25 + 0.35 * p; // the common boost — a solid slice at every position
+  const megaturbo = 0.4 * p * p * p; // the guided comeback tier — only near the very back
   const rocket = leading ? 0 : 0.4 + 0.2 * p;
   const missile = leading ? 0 : 0.85 * p * p; // the better shot — now a real slice of the roll
   const crown = leading ? 0 : 0.32 * p * p * p; // rarest, but a fatter near-last comeback treat
   const oil = 0.35 - 0.3 * p; // slicks pulled well back — fewer of them across the board
-  const roll = rng() * (turbo + rocket + missile + crown + oil);
+  const roll = rng() * (turbo + megaturbo + rocket + missile + crown + oil);
   if (roll < turbo) return "turbo";
-  if (roll < turbo + rocket) return "rocket";
-  if (roll < turbo + rocket + missile) return "missile";
-  if (roll < turbo + rocket + missile + crown) return "crown";
+  if (roll < turbo + megaturbo) return "megaturbo";
+  if (roll < turbo + megaturbo + rocket) return "rocket";
+  if (roll < turbo + megaturbo + rocket + missile) return "missile";
+  if (roll < turbo + megaturbo + rocket + missile + crown) return "crown";
   return "oil";
 }
 
@@ -307,8 +328,8 @@ export function useItem(world: ItemWorld, racers: ItemRacer[], index: number): I
   if (!item || r.spin > 0 || r.finished) return null;
   r.held = null;
 
-  if (item === "turbo") {
-    r.boost = TURBO_SECONDS;
+  if (item === "turbo" || item === "megaturbo") {
+    r.boost = BOOST_TIERS[item].seconds;
   } else if (item === "rocket" || item === "missile" || item === "crown") {
     const homing = item !== "rocket";
     const chaseLeader = item === "crown";

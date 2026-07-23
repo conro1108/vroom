@@ -92,6 +92,9 @@ export interface TrackQuery {
   progressAt(x: number, y: number): number | null;
   /** Closest centerline point and its distance, or null when far off track. */
   nearestOnRoad(x: number, y: number): { x: number; y: number; dist: number } | null;
+  /** Unit vector of the racing direction at the nearest centerline point
+   *  (points the way progress increases), or null when far off track. */
+  tangentAt(x: number, y: number): { x: number; y: number } | null;
 }
 
 export function createTrackQuery(track: Track): TrackQuery {
@@ -158,6 +161,16 @@ export function createTrackQuery(track: Track): TrackQuery {
         y: a.y + (b.y - a.y) * hit.t,
         dist: hit.dist,
       };
+    },
+    tangentAt(x, y) {
+      const hit = nearest(x, y);
+      if (!hit || hit.dist > reach) return null;
+      const a = track.samples[hit.index]!;
+      const b = track.samples[(hit.index + 1) % n]!;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      return { x: dx / len, y: dy / len };
     },
   };
 }

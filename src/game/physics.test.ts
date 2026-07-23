@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createCarState, forwardSpeedOf, speedOf, stepCar, type CarInput } from "./physics";
+import {
+  boostGuideSteer,
+  createCarState,
+  forwardSpeedOf,
+  speedOf,
+  stepCar,
+  type CarInput,
+} from "./physics";
 import { DEFAULT_TUNING } from "./tuning";
 
 const T = DEFAULT_TUNING;
@@ -83,5 +90,32 @@ describe("stepCar", () => {
     const car = drive(600, { throttle: 1 });
     expect(forwardSpeedOf(car)).toBeCloseTo(speedOf(car), 3);
     expect(car.y).toBeLessThan(0); // heading starts -PI/2 = up
+  });
+});
+
+describe("boostGuideSteer", () => {
+  const MAX = 40;
+  const S = 0.5;
+
+  it("is zero when already aligned with the track", () => {
+    expect(boostGuideSteer(1.2, 1.2, MAX, S)).toBe(0);
+  });
+
+  it("steers toward the track direction (sign follows the shorter turn)", () => {
+    // heading points +x (0), track wants +y (PI/2): a left/positive nudge.
+    expect(boostGuideSteer(0, Math.PI / 2, MAX, S)).toBeGreaterThan(0);
+    expect(boostGuideSteer(0, -Math.PI / 2, MAX, S)).toBeLessThan(0);
+  });
+
+  it("takes the short way around the wrap and saturates at strength", () => {
+    // a small error just across the ±PI seam is a tiny nudge, not a full swing
+    const nudge = boostGuideSteer(3.1, -3.1, MAX, S);
+    expect(Math.abs(nudge)).toBeLessThan(S);
+    // error past the max-degree window clamps to the full strength
+    expect(boostGuideSteer(0, Math.PI / 2, MAX, S)).toBeCloseTo(S, 5);
+  });
+
+  it("does nothing with no strength", () => {
+    expect(boostGuideSteer(0, Math.PI, MAX, 0)).toBe(0);
   });
 });

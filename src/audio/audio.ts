@@ -397,7 +397,7 @@ export function createAudio(volume: number): GameAudio {
       if (master <= 0) return;
       resume();
       const now = ctx.currentTime;
-      if (kind === "turbo") {
+      if (kind === "turbo" || kind === "megaturbo") {
         // rising power-up whoosh: a swept-bright noise plus an up-glide tone
         const src = ctx.createBufferSource();
         src.buffer = noise;

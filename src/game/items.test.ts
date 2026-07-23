@@ -74,7 +74,7 @@ describe("rollItem", () => {
   const rolls = (position: number, fieldSize: number) => {
     const deficit = fieldSize <= 1 ? 0 : (position - 1) / (fieldSize - 1);
     const leading = position === 1;
-    const counts = { turbo: 0, rocket: 0, missile: 0, crown: 0, oil: 0 };
+    const counts = { turbo: 0, megaturbo: 0, rocket: 0, missile: 0, crown: 0, oil: 0 };
     for (let i = 0; i < 400; i++) {
       counts[rollItem(deficit, leading, () => (i + 0.5) / 400)]++;
     }
@@ -98,6 +98,20 @@ describe("rollItem", () => {
     expect(midfield.rocket).toBeGreaterThan(midfield.missile);
     // and they cluster at the back of the field
     expect(last.missile).toBeGreaterThan(midfield.missile);
+  });
+
+  it("the plain turbo is common everywhere; the mega tier is a back-of-field comeback", () => {
+    const leader = rolls(1, 4);
+    const midfield = rolls(2, 4);
+    const last = rolls(4, 4);
+    // the base turbo shows up at every position, the leader included
+    expect(leader.turbo).toBeGreaterThan(0);
+    expect(last.turbo).toBeGreaterThan(0);
+    // the mega tier is pinned to the back: none up front, and it climbs as you drop
+    expect(leader.megaturbo).toBe(0);
+    expect(last.megaturbo).toBeGreaterThan(midfield.megaturbo);
+    // and even at the back the common turbo still out-rolls the rare mega
+    expect(last.turbo).toBeGreaterThan(last.megaturbo);
   });
 
   it("the crown is the rarest shot, scarcer than the missile and pinned to the back", () => {

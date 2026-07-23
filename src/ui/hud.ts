@@ -20,6 +20,7 @@ import { ICONS, mapIconEl } from "./icons";
 // (turbo has no world sprite, so it borrows the UI bolt icon)
 const ITEM_ICONS: Record<ItemKind, { map: PixelMap; palette: Palette }> = {
   turbo: ICONS.bolt,
+  megaturbo: ICONS.bolt, // same bolt; the payoff is felt (longer, harder guide), not a distinct sprite
   rocket: { map: ROCKET_MAP, palette: ROCKET_PALETTE },
   missile: { map: HOMING_MAP, palette: HOMING_PALETTE }, // the cute homing seeker
   crown: { map: CROWN_MAP, palette: CROWN_PALETTE }, // the rare one — hunts down 1st place
