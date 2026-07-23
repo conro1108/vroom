@@ -513,7 +513,8 @@ function loop(now: number): void {
         );
         if (stepDraft(playerDraft, drafting, PHYSICS_DT, raceTuning.draftChargeSeconds)) {
           boostTimer = Math.max(boostTimer, raceTuning.draftBoostSeconds);
-          hud.toast("slipstream!");
+          scene.slipstreamBurst(car);
+          audio.slipstream();
         }
         stepItemWorld();
       }
@@ -715,6 +716,12 @@ if (import.meta.env.DEV) {
     },
     get mode() {
       return mode;
+    },
+    // fire the slipstream payoff on demand — it's otherwise only reachable by
+    // tailing a bot long enough, which a screenshot pass can't wait for
+    slipstream() {
+      scene?.slipstreamBurst(car);
+      audio.slipstream();
     },
   };
 }

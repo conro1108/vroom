@@ -199,6 +199,8 @@ export interface GameAudio {
   item(kind: ItemKind): void;
   /** Comedic descending "wah" when a hit spins you out. */
   spun(): void;
+  /** Air-rush swell when a slipstream charge pays off into a boost. */
+  slipstream(): void;
   /** Louder engine-flavored doppler vroom, fired as you rip past an observer;
    *  pan points toward the listener (-1 left .. 1 right), strength 0..1,
    *  seconds sets how drawn-out the flyby is. */
@@ -480,6 +482,39 @@ export function createAudio(volume: number): GameAudio {
       o.start(now);
       o.stop(now + 0.5);
     },
+    slipstream() {
+      if (master <= 0) return;
+      resume();
+      const now = ctx.currentTime;
+      // Pure air, no tone: a wide band of noise that swells in from nothing and
+      // sweeps up as the pocket of still air lets go and shoves you forward.
+      const src = ctx.createBufferSource();
+      src.buffer = noise;
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.Q.value = 0.7; // wide = airy rush rather than the whistly pass-by whoosh
+      bp.frequency.setValueAtTime(240, now);
+      bp.frequency.exponentialRampToValueAtTime(3200, now + 0.42);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.32, now + 0.22); // slow swell, quick let-go
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+      src.connect(bp).connect(g).connect(masterGain);
+      src.start(now);
+      src.stop(now + 0.55);
+      // a soft low thump under it — the shove in the back
+      const o = ctx.createOscillator();
+      o.type = "sine";
+      o.frequency.setValueAtTime(120, now);
+      o.frequency.exponentialRampToValueAtTime(60, now + 0.3);
+      const og = ctx.createGain();
+      og.gain.setValueAtTime(0.0001, now);
+      og.gain.exponentialRampToValueAtTime(0.16, now + 0.1);
+      og.gain.exponentialRampToValueAtTime(0.0001, now + 0.36);
+      o.connect(og).connect(masterGain);
+      o.start(now);
+      o.stop(now + 0.4);
+    },
     vroom(pan, strength, seconds) {
       if (master <= 0 || strength <= 0) return;
       resume();
@@ -638,6 +673,7 @@ function noopAudio(): GameAudio {
     pickup() {},
     item() {},
     spun() {},
+    slipstream() {},
     vroom() {},
     setVolume() {},
     resume() {},
