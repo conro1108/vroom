@@ -155,24 +155,24 @@ export class Scene {
     this.draw(car, ghost, racers, items);
   }
 
-  /** One-shot burst for a slipstream payoff: a pair of air streaks that rip
-   *  forward past the car, so the boost reads without a line of HUD text. */
+  /** One-shot burst for a slipstream payoff: a pair of air streaks that whoosh
+   *  back past the car, so the boost reads without a line of HUD text. */
   slipstreamBurst(car: CarState): void {
     const fx = Math.cos(car.heading);
     const fy = Math.sin(car.heading);
     const lx = -fy;
     const ly = fx;
     for (let i = 0; i < 34; i++) {
-      // A wide fan alongside the car that rips forward *past* it — the air
-      // pocket letting go. Velocities are relative to the car so the streaks
-      // always overtake it instead of hanging around the tail like boost dust.
-      const along = -14 + Math.random() * 22;
+      // A wide fan starting level with the nose that sweeps *backward* past the
+      // car — the air pocket letting go. Velocities are relative to the car so
+      // the streaks always fall behind it however fast the boost is carrying.
+      const along = -4 + Math.random() * 22;
       const side = (Math.random() < 0.5 ? -1 : 1) * (5 + Math.random() * 12);
       this.particles.push({
         x: car.x + fx * along + lx * side,
         y: car.y + fy * along + ly * side,
-        vx: car.vx + fx * 190 - lx * side * 2, // splayed streaks pinch in as they pass
-        vy: car.vy + fy * 190 - ly * side * 2,
+        vx: car.vx - fx * 190 + lx * side * 2, // the wake splays out as it drops back
+        vy: car.vy - fy * 190 + ly * side * 2,
         life: 0.45 + Math.random() * 0.3,
         color: COLORS.boost,
       });
