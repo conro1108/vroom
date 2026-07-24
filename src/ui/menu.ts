@@ -178,13 +178,19 @@ export function createMenu(
     const vehicleScroll = root.querySelector(".vehicle-row")?.scrollLeft ?? 0;
     root.innerHTML = "";
 
+    // A phone-width column so the menu stays a tidy centered strip on a wide
+    // desktop browser instead of sprawling edge to edge.
+    const inner = document.createElement("div");
+    inner.className = "menu-inner";
+    root.appendChild(inner);
+
     const title = document.createElement("h1");
     title.className = "menu-title";
     title.textContent = "vroom";
     const sub = document.createElement("div");
     sub.className = "menu-sub";
     sub.textContent = "one thumb. four tracks. go.";
-    root.append(title, sub);
+    inner.append(title, sub);
 
     // speed class picker
     const classRow = document.createElement("div");
@@ -200,7 +206,7 @@ export function createMenu(
       });
       classRow.appendChild(btn);
     }
-    root.appendChild(classRow);
+    inner.appendChild(classRow);
 
     // vehicle picker: selecting one writes its handling into the live tuning
     const vehicleRow = document.createElement("div");
@@ -283,7 +289,7 @@ export function createMenu(
     customWrap.append(customTile, revertBtn);
     vehicleRow.appendChild(customWrap);
 
-    root.appendChild(vehicleRow);
+    inner.appendChild(vehicleRow);
     vehicleRow.scrollLeft = vehicleScroll;
 
     // solo (ghost) vs group (AI opponents): a binary switch, not two
@@ -306,7 +312,7 @@ export function createMenu(
       });
       modeRow.appendChild(btn);
     }
-    root.appendChild(modeRow);
+    inner.appendChild(modeRow);
 
     // the progression map
     const mapWrap = document.createElement("div");
@@ -362,7 +368,7 @@ export function createMenu(
       });
       mapWrap.appendChild(node);
     }
-    root.appendChild(mapWrap);
+    inner.appendChild(mapWrap);
   };
 
   return {

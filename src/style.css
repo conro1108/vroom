@@ -535,6 +535,13 @@ body {
   from { opacity: 0; }
 }
 
+/* Keep the menu a phone-width centered column so it doesn't sprawl across a
+   wide desktop browser — the sideways-scrolling vehicle row stays a strip. */
+.menu-inner {
+  max-width: 460px;
+  margin: 0 auto;
+}
+
 .menu-title {
   font-size: 52px;
   letter-spacing: 4px;
