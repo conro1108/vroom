@@ -73,6 +73,16 @@ describe("stepCar", () => {
     expect(car.drifting).toBe(true);
   });
 
+  it("rotates faster while drifting than while gripping", () => {
+    // Same speed, same full lock — the only difference is whether the car
+    // arrives already sideways. The drifting one should point further round.
+    const base = { ...createCarState(0, 0, 0), vx: 100 };
+    const gripped = stepCar({ ...base, drifting: false }, { steer: 1, throttle: 1, brake: 0 }, T, "road", DT);
+    const sliding = stepCar({ ...base, drifting: true }, { steer: 1, throttle: 1, brake: 0 }, T, "road", DT);
+    expect(sliding.heading).toBeGreaterThan(gripped.heading);
+    expect(sliding.heading / gripped.heading).toBeCloseTo(1 + T.driftTurnBonus, 3);
+  });
+
   it("is slower offroad", () => {
     const road = drive(2400, { throttle: 1 }, "road");
     const grass = drive(2400, { throttle: 1 }, "offroad");

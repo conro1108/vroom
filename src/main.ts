@@ -11,6 +11,7 @@ import {
 } from "./game/ghost";
 import { choose, createCalibration, skipAxis, variantTuning, type Calibration } from "./game/calibrate";
 import { createDraft, inSlipstream, stepDraft } from "./game/draft";
+import { createDriftBoost, driftChargeFrac, stepDriftBoost } from "./game/driftboost";
 import {
   BOOST_TIERS,
   createItemRacer,
@@ -146,6 +147,7 @@ let boostTimer = 0; // seconds of player speed boost remaining (rocket start, sl
 let itemBoostGuide = 0; // steering-assist strength of the player's active item boost (mega guides, plain turbo is 0)
 let throttleHeldSince: number | null = null; // when the player committed to throttle pre-green
 let playerDraft = createDraft();
+let playerDriftBoost = createDriftBoost(); // slide long enough and the exit pays
 let playerRacer = createItemRacer(car); // the player's item-system view (spin/boost/held)
 let itemWorld: ItemWorld | null = null; // null = items off (solo mode)
 let itemRacers: ItemRacer[] = []; // [player, ...opponents]
@@ -283,6 +285,7 @@ function restartRace(): void {
   itemBoostGuide = 0;
   throttleHeldSince = null;
   playerDraft = createDraft();
+  playerDriftBoost = createDriftBoost();
   playerRacer = createItemRacer(car);
   if (opponents.length > 0) {
     itemWorld = createItemWorld(track, opponents.length + 1);
@@ -516,6 +519,18 @@ function loop(now: number): void {
       }
       car = stepCar(car, stepInput, stepTuning, query.surfaceAt(car.x, car.y), PHYSICS_DT);
       playerRacer.car = car;
+      // Drift boost: charge banks while the car slides and cashes out the step
+      // it hooks back up, so the kick lands on the corner exit. Not gated on
+      // racing — it's half the feel of the car, so it works in calibration too.
+      if (playerRacer.spin > 0) {
+        playerDriftBoost = createDriftBoost(); // a spin isn't a drift: no free kick on recovery
+      } else if (
+        stepDriftBoost(playerDriftBoost, car.drifting, PHYSICS_DT, raceTuning.driftChargeSeconds)
+      ) {
+        boostTimer = Math.max(boostTimer, raceTuning.driftBoostSeconds);
+        scene.slipstreamBurst(car);
+        audio.driftBoost();
+      }
       if (racing) {
         stepOpponents(
           opponents,
@@ -622,7 +637,8 @@ function loop(now: number): void {
     ghostPose,
     racerPoses,
     boostTimer > 0 || playerRacer.boost > 0,
-    mode === "racing" || mode === "countdown" ? itemWorld : null
+    mode === "racing" || mode === "countdown" ? itemWorld : null,
+    driftChargeFrac(playerDriftBoost, raceTuning.driftChargeSeconds)
   );
   if (mode === "racing" || mode === "countdown" || mode === "calibrating") {
     minimap.render(car, opponents.map((o) => o.car));

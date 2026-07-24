@@ -36,6 +36,8 @@ const COLORS = {
   checkerLight: "#f6efdc",
   dust: "#e3d3ae",
   boost: "#fff6df",
+  driftWarm: "#ff9d3d", // drift smoke catching fire — charge is building
+  driftSpark: "#ffe98a", // charge banked, the exit will pay
   skid: "rgba(58, 43, 32, 0.35)",
   shadow: "rgba(42, 32, 20, 0.2)",
   marker: "#ffd23f", // "this one's you" chevron
@@ -144,14 +146,15 @@ export class Scene {
     ghost: GhostPose | null = null,
     racers: RacerPose[] = [],
     boosting = false,
-    items: ItemWorld | null = null
+    items: ItemWorld | null = null,
+    driftCharge = 0
   ): void {
     if (!this.ready) this.resize();
     if (!this.ready) return; // still no layout — skip this frame
     this.setViewHeight(tuning.desktopZoomWorldHeight);
     this.clock += dt;
     this.updateCamera(dt, car, tuning);
-    this.updateEffects(dt, car, boosting);
+    this.updateEffects(dt, car, boosting, driftCharge);
     this.draw(car, ghost, racers, items);
   }
 
@@ -202,7 +205,7 @@ export class Scene {
     this.cam.y = clamp(this.cam.y, hh, this.track.worldHeight - hh);
   }
 
-  private updateEffects(dt: number, car: CarState, boosting = false): void {
+  private updateEffects(dt: number, car: CarState, boosting = false, driftCharge = 0): void {
     if (boosting && this.particles.length < 120) {
       // speed streaks trailing off the tail while a boost is live
       const bfx = Math.cos(car.heading);
@@ -228,12 +231,22 @@ export class Scene {
         this.skidCtx.fillRect(Math.round(wx) - 1, Math.round(wy) - 1, 2, 2);
       }
       if (this.particles.length < 80) {
+        // Tire smoke heats up as the drift banks charge — dust, then embers,
+        // then full sparks once the boost is ready to cash. That color ramp is
+        // the only tell the player gets that the exit is about to pay.
+        const heat =
+          driftCharge >= 1
+            ? COLORS.driftSpark
+            : driftCharge > 0.55
+              ? COLORS.driftWarm
+              : undefined;
         this.particles.push({
           x: car.x - fx * 6 + (Math.random() - 0.5) * 6,
           y: car.y - fy * 6 + (Math.random() - 0.5) * 6,
           vx: -car.vx * 0.1 + (Math.random() - 0.5) * 20,
           vy: -car.vy * 0.1 + (Math.random() - 0.5) * 20,
           life: 0.5 + Math.random() * 0.3,
+          color: heat,
         });
       }
     }

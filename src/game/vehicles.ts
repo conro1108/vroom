@@ -28,22 +28,38 @@ export interface Vehicle {
   values: Record<VehicleKey, number>;
 }
 
+// The field is tuned tight. Slot Car and Go-Kart are the reference points at
+// the grippy end and Drift King is the reference at the loose end; everything
+// else is placed between them. "Loose" means low grip and an early break-point,
+// never vague steering — every car here gets quick steer response and modest
+// turn falloff, because a car that doesn't go where you point it isn't a
+// personality, it's a bad car.
+//
+// Low grip is a real choice, not a handicap, because a slide banks a drift
+// boost (game/driftboost.ts): an early driftThreshold breaks the tail loose
+// often and the corner exits pay it back. The balance sim bears this out — the
+// cars that can't slide have to buy their pace with grip, brakes and accel
+// instead, and the totals land within a few percent of each other either way.
+//
+// Watch the middle ground when retuning: a car with too much grip to slide
+// usefully but not enough to stay planted is the one place that measures badly
+// in imperfect hands. Commit to one end or the other.
 export const VEHICLES: Vehicle[] = [
   {
     id: "classic",
     name: "Classic",
-    blurb: "the house blend — loose but friendly",
+    blurb: "the house blend — loose enough to slide",
     values: {
-      maxSpeed: 140,
-      accel: 180,
-      brake: 300,
+      maxSpeed: 142,
+      accel: 195,
+      brake: 320,
       drag: 55,
-      turnRate: 3.4,
-      speedTurnFalloff: 0.15,
-      steerResponse: 12,
-      lateralGrip: 6,
-      driftGrip: 2.4,
-      driftThreshold: 55,
+      turnRate: 3.7,
+      speedTurnFalloff: 0.12,
+      steerResponse: 13.5,
+      lateralGrip: 6.5,
+      driftGrip: 2.6,
+      driftThreshold: 46,
     },
   },
   {
@@ -51,16 +67,16 @@ export const VEHICLES: Vehicle[] = [
     name: "Slot Car",
     blurb: "glued to the road, point and shoot",
     values: {
-      maxSpeed: 138,
-      accel: 215,
-      brake: 380,
+      maxSpeed: 140,
+      accel: 225,
+      brake: 390,
       drag: 60,
-      turnRate: 3.3,
-      speedTurnFalloff: 0.18,
-      steerResponse: 16,
-      lateralGrip: 11,
+      turnRate: 3.6,
+      speedTurnFalloff: 0.12,
+      steerResponse: 17,
+      lateralGrip: 12,
       driftGrip: 6,
-      driftThreshold: 90,
+      driftThreshold: 95,
     },
   },
   {
@@ -68,16 +84,16 @@ export const VEHICLES: Vehicle[] = [
     name: "Drift King",
     blurb: "corners are for going sideways",
     values: {
-      maxSpeed: 147,
-      accel: 185,
-      brake: 280,
-      drag: 50,
-      turnRate: 3.9,
+      maxSpeed: 142,
+      accel: 178,
+      brake: 285,
+      drag: 52,
+      turnRate: 3.8,
       speedTurnFalloff: 0.08,
-      steerResponse: 11,
-      lateralGrip: 4.5,
-      driftGrip: 2.5,
-      driftThreshold: 40,
+      steerResponse: 12,
+      lateralGrip: 5,
+      driftGrip: 2.6,
+      driftThreshold: 42,
     },
   },
   {
@@ -85,50 +101,50 @@ export const VEHICLES: Vehicle[] = [
     name: "Go-Kart",
     blurb: "darty and instant, wins the hairpins",
     values: {
-      maxSpeed: 136,
-      accel: 280,
+      maxSpeed: 140,
+      accel: 285,
       brake: 430,
-      drag: 70,
-      turnRate: 4.6,
-      speedTurnFalloff: 0.03,
+      drag: 58,
+      turnRate: 4.2,
+      speedTurnFalloff: 0.2,
       steerResponse: 18,
-      lateralGrip: 8.5,
-      driftGrip: 3,
-      driftThreshold: 60,
+      lateralGrip: 9.5,
+      driftGrip: 3.2,
+      driftThreshold: 62,
     },
   },
   {
     id: "muscle",
     name: "Muscle",
-    blurb: "huge top end, a handful at speed",
+    blurb: "biggest top end, slowest to wind up",
     values: {
-      maxSpeed: 151,
-      accel: 135,
-      brake: 270,
-      drag: 40,
-      turnRate: 2.9,
-      speedTurnFalloff: 0.32,
-      steerResponse: 7.5,
-      lateralGrip: 5.5,
-      driftGrip: 2.2,
-      driftThreshold: 55,
+      maxSpeed: 148,
+      accel: 175,
+      brake: 350,
+      drag: 50,
+      turnRate: 4,
+      speedTurnFalloff: 0.1,
+      steerResponse: 12.5,
+      lateralGrip: 6.8,
+      driftGrip: 2.6,
+      driftThreshold: 48,
     },
   },
   {
     id: "cruiser",
     name: "Cruiser",
-    blurb: "smooth and floaty, carries speed",
+    blurb: "coasts forever, carries speed everywhere",
     values: {
-      maxSpeed: 144,
-      accel: 160,
-      brake: 260,
-      drag: 30,
-      turnRate: 3.0,
-      speedTurnFalloff: 0.18,
-      steerResponse: 6.5,
+      maxSpeed: 145,
+      accel: 205,
+      brake: 350,
+      drag: 36,
+      turnRate: 3.8,
+      speedTurnFalloff: 0.09,
+      steerResponse: 12.5,
       lateralGrip: 7,
-      driftGrip: 3,
-      driftThreshold: 70,
+      driftGrip: 2.8,
+      driftThreshold: 48,
     },
   },
 ];

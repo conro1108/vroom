@@ -12,6 +12,9 @@ export interface Tuning {
   lateralGrip: number; // 1/s exponential decay of sideways velocity
   driftGrip: number; // grip once sliding past driftThreshold
   driftThreshold: number; // px/s of sideways velocity where drift begins
+  driftTurnBonus: number; // extra turn rate (fraction) while sliding — a drift rotates tighter than grip can
+  driftChargeSeconds: number; // continuous sliding needed to bank a drift boost
+  driftBoostSeconds: number; // how long the kick lasts when a banked drift cashes out
   offroadMaxSpeed: number; // fraction of maxSpeed on grass
   offroadFriction: number; // drag multiplier on grass
   boostOffroad: number; // 0..1, how much a live boost negates the grass penalty (1 = grass drives like road)
@@ -40,17 +43,22 @@ export interface Tuning {
   vroomSeconds: number; // how drawn-out the doppler vroom past a trackside listener is
 }
 
+// The handling block below is Classic's, verbatim (vehicles.ts) — a fresh
+// install boots into the house car and the menu shows it as active.
 export const DEFAULT_TUNING: Tuning = {
-  maxSpeed: 140,
-  accel: 180,
-  brake: 300,
+  maxSpeed: 142,
+  accel: 195,
+  brake: 320,
   drag: 55,
-  turnRate: 3.4,
-  speedTurnFalloff: 0.15,
-  steerResponse: 12,
-  lateralGrip: 6,
-  driftGrip: 2.4,
-  driftThreshold: 55,
+  turnRate: 3.7,
+  speedTurnFalloff: 0.12,
+  steerResponse: 13.5,
+  lateralGrip: 6.5,
+  driftGrip: 2.6,
+  driftThreshold: 46,
+  driftTurnBonus: 0.15,
+  driftChargeSeconds: 0.8,
+  driftBoostSeconds: 0.6,
   offroadMaxSpeed: 0.55,
   offroadFriction: 1.6,
   boostOffroad: 0.8,
@@ -83,13 +91,29 @@ export const DEFAULT_TUNING: Tuning = {
 // the whole saved object on a bump (which would wipe every value the player
 // tuned on-device), we migrate the previous version forward and only reset the
 // specific keys whose default actually moved — see MIGRATIONS below.
-const STORAGE_KEY = "vroom.tuning.v4";
+const STORAGE_KEY = "vroom.tuning.v5";
+
+// v4 → v5 retuned the whole field tighter, so every handling default moved. A
+// v4 save is holding the old loose numbers for a car that no longer exists.
+const V5_HANDLING: (keyof Tuning)[] = [
+  "maxSpeed",
+  "accel",
+  "brake",
+  "turnRate",
+  "speedTurnFalloff",
+  "steerResponse",
+  "lateralGrip",
+  "driftGrip",
+  "driftThreshold",
+];
 
 // Older keys, newest-first, tried in order when the current key is empty. Each
-// lists the keys whose default changed in the step up to the *next* version, so
-// a migrated save takes the new default there instead of masking it.
+// entry lists every key whose default has moved between that version and the
+// current one — cumulative, not per-step, since only the matched entry's list
+// is applied.
 const MIGRATIONS: { key: string; resetKeys: (keyof Tuning)[] }[] = [
-  { key: "vroom.tuning.v3", resetKeys: ["fenceMarginPx"] },
+  { key: "vroom.tuning.v4", resetKeys: V5_HANDLING },
+  { key: "vroom.tuning.v3", resetKeys: [...V5_HANDLING, "fenceMarginPx"] },
 ];
 
 export function loadTuning(): Tuning {

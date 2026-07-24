@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { simulateLap, type LapResult } from "./botdriver";
+import { CLEAN_DRIVER, DRIVER_SPREAD, simulateLap, type LapResult } from "./botdriver";
 import { TRACKS } from "./tracks";
 import { DEFAULT_TUNING, type Tuning } from "./tuning";
 import {
@@ -67,29 +67,41 @@ describe("custom vehicle", () => {
   });
 });
 
-// Every vehicle must stay raceable and competitive: the bot driver stands in
-// for an equally skilled player in each seat. If a rebalance makes one
-// vehicle dominant or hopeless, these bounds catch it.
+// Every vehicle must stay raceable and competitive — and stay that way in
+// imperfect hands. Each car laps every track once per driver in DRIVER_SPREAD
+// (sloppy lines, wobbly steering, blown braking points, laggy reactions), so a
+// vehicle can't pass balance by being fast down one razor-thin robot line.
 describe("vehicle balance", () => {
-  const laps = new Map<string, LapResult[]>(
-    VEHICLES.map((v) => [
-      v.id,
-      TRACKS.map((t) => simulateLap(t, { ...DEFAULT_TUNING, ...v.values })),
-    ])
+  const DRIVERS = [CLEAN_DRIVER, ...DRIVER_SPREAD];
+
+  // One sim pass covers everything below: per vehicle, per track, the clean
+  // reference lap plus one lap for each imperfect driver.
+  const laps = new Map<string, LapResult[][]>(
+    VEHICLES.map((v) => {
+      const tuning = { ...DEFAULT_TUNING, ...v.values };
+      return [v.id, TRACKS.map((t) => DRIVERS.map((d) => simulateLap(t, tuning, 2, d)))];
+    })
   );
 
-  it("every vehicle finishes every track without living on the grass", () => {
-    for (const [id, results] of laps) {
-      results.forEach((r, i) => {
-        expect(r.lapMs, `${id} on ${TRACKS[i]!.id}`).not.toBeNull();
-        expect(r.offroadFrac, `${id} offroad on ${TRACKS[i]!.id}`).toBeLessThan(0.15);
+  /** Runs by the imperfect drivers (index 0 is the clean reference). */
+  const noisy = (byDriver: LapResult[]) => byDriver.slice(1);
+  /** Every noisy (track, driver) run for one vehicle, flattened. */
+  const runs = (id: string) => laps.get(id)!.flatMap(noisy);
+
+  it("every vehicle finishes every track, in every driver's hands, without living on the grass", () => {
+    for (const [id, byTrack] of laps) {
+      byTrack.forEach((byDriver, i) => {
+        byDriver.forEach((r, d) => {
+          expect(r.lapMs, `${id} on ${TRACKS[i]!.id}, driver ${d}`).not.toBeNull();
+          expect(r.offroadFrac, `${id} offroad on ${TRACKS[i]!.id}, driver ${d}`).toBeLessThan(0.2);
+        });
       });
     }
   });
 
-  it("total time across all tracks stays within 8% of the best vehicle", () => {
+  it("total time across every track and driver stays within 8% of the best vehicle", () => {
     const totals = new Map(
-      [...laps].map(([id, results]) => [id, results.reduce((s, r) => s + r.lapMs!, 0)])
+      [...laps.keys()].map((id) => [id, runs(id).reduce((s, r) => s + r.lapMs!, 0)])
     );
     const best = Math.min(...totals.values());
     for (const [id, total] of totals) {
@@ -97,13 +109,52 @@ describe("vehicle balance", () => {
     }
   });
 
-  it("no vehicle is more than 20% behind the winner on any single track", () => {
+  // Per-track spread is deliberately looser than the overall bound: a car
+  // having a circuit that doesn't suit it is the point of picking a car, and
+  // noisy drivers widen single-track variance more than a clean lap does. The
+  // 8% total above is what actually guarantees nobody's stuck with a dud.
+  it("no vehicle is hopeless on any single track", () => {
     TRACKS.forEach((track, i) => {
-      const times = [...laps.values()].map((results) => results[i]!.lapMs!);
-      const best = Math.min(...times);
+      // average across drivers, so one unlucky sloppy run doesn't decide it
+      const means = [...laps.values()].map((byTrack) => mean(noisy(byTrack[i]!).map((r) => r.lapMs!)));
+      const best = Math.min(...means);
       [...laps.keys()].forEach((id, k) => {
-        expect(times[k]! / best, `${id} on ${track.id}`).toBeLessThan(1.2);
+        expect(means[k]! / best, `${id} on ${track.id}`).toBeLessThan(1.3);
       });
     });
   });
+
+  // The point of the noisy spread: a car that only works when driven perfectly
+  // is a car with one narrow path through it, and that isn't fun. Measure how
+  // much each vehicle degrades from clean hands to the sloppiest driver — no
+  // car should be dramatically more punishing about it than the rest.
+  it("no vehicle punishes sloppy driving far harder than the others do", () => {
+    const penalties = VEHICLES.map((v) => {
+      const byTrack = laps.get(v.id)!;
+      const clean = byTrack.map((byDriver) => byDriver[0]!.lapMs!);
+      const messy = byTrack.map((byDriver) => mean(noisy(byDriver).map((r) => r.lapMs!)));
+      return { id: v.id, ratio: sum(messy) / sum(clean) };
+    });
+    const gentlest = Math.min(...penalties.map((p) => p.ratio));
+    for (const p of penalties) {
+      // every car loses time in bad hands; none may lose 15% more of it than
+      // the most forgiving car does
+      expect(p.ratio / gentlest, `${p.id} sloppiness penalty`).toBeLessThan(1.15);
+    }
+  });
+
+  it("the drift car actually lives off its drift boosts", () => {
+    const earned = (id: string) => sum(runs(id).map((r) => r.driftBoosts));
+    // Drift King breaks loose early and often; the rails car barely slides at
+    // all. If this inverts, the drift upside has stopped being an upside.
+    expect(earned("driftking")).toBeGreaterThan(earned("slotcar"));
+    expect(earned("driftking")).toBeGreaterThan(0);
+  });
 });
+
+function sum(xs: number[]): number {
+  return xs.reduce((s, x) => s + x, 0);
+}
+function mean(xs: number[]): number {
+  return sum(xs) / xs.length;
+}

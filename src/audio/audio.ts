@@ -211,6 +211,8 @@ export interface GameAudio {
   spun(): void;
   /** Air-rush swell when a slipstream charge pays off into a boost. */
   slipstream(): void;
+  /** The snap of tires hooking up as a banked drift cashes out into a kick. */
+  driftBoost(): void;
   /** Louder engine-flavored doppler vroom, fired as you rip past an observer;
    *  pan points toward the listener (-1 left .. 1 right), strength 0..1,
    *  seconds sets how drawn-out the flyby is. */
@@ -525,6 +527,42 @@ export function createAudio(volume: number): GameAudio {
       o.start(now);
       o.stop(now + 0.4);
     },
+    driftBoost() {
+      if (master <= 0) return;
+      resume();
+      const now = ctx.currentTime;
+      // The opposite shape to slipstream's slow airy swell: this one is all
+      // snap. The screech cuts off as the tires bite (a fast downward chirp),
+      // and a bright rising tone fires out of it — grip, then go.
+      chirp(ctx, noise, masterGain, now, 0.09, 0.34);
+      const o = ctx.createOscillator();
+      o.type = "square";
+      o.frequency.setValueAtTime(260, now);
+      o.frequency.exponentialRampToValueAtTime(1180, now + 0.13);
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.Q.value = 1.6;
+      bp.frequency.value = 1500;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.26, now + 0.03); // near-instant attack
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.26);
+      o.connect(bp).connect(g).connect(masterGain);
+      o.start(now);
+      o.stop(now + 0.3);
+      // a low thump under it so the kick has weight in the chest
+      const sub = ctx.createOscillator();
+      sub.type = "sine";
+      sub.frequency.setValueAtTime(180, now);
+      sub.frequency.exponentialRampToValueAtTime(70, now + 0.2);
+      const sg = ctx.createGain();
+      sg.gain.setValueAtTime(0.0001, now);
+      sg.gain.exponentialRampToValueAtTime(0.2, now + 0.03);
+      sg.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+      sub.connect(sg).connect(masterGain);
+      sub.start(now);
+      sub.stop(now + 0.32);
+    },
     vroom(pan, strength, seconds) {
       if (master <= 0 || strength <= 0) return;
       resume();
@@ -684,6 +722,7 @@ function noopAudio(): GameAudio {
     item() {},
     spun() {},
     slipstream() {},
+    driftBoost() {},
     vroom() {},
     setVolume() {},
     resume() {},

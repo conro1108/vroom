@@ -41,7 +41,14 @@ export function stepCar(
   const rise = Math.min(1, speedFrac / 0.15);
   const falloff = 1 - t.speedTurnFalloff * speedFrac;
   const reverseSign = oldFwd < 0 ? -1 : 1;
-  const heading = normalizeAngle(s.heading + steer * t.turnRate * rise * falloff * reverseSign * dt);
+  // A car already sliding rotates faster than grip alone allows — that extra
+  // rotation is what lets a drift point through a hairpin the grippy cars have
+  // to arc around. Uses last step's drift flag, since this step's depends on
+  // the heading we're computing; one step of lag at 120Hz is imperceptible.
+  const driftTurn = s.drifting ? 1 + t.driftTurnBonus : 1;
+  const heading = normalizeAngle(
+    s.heading + steer * t.turnRate * rise * falloff * driftTurn * reverseSign * dt
+  );
 
   const fx = Math.cos(heading);
   const fy = Math.sin(heading);

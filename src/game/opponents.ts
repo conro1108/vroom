@@ -5,6 +5,7 @@
 import { createBot, type BotPersonality } from "./botdriver";
 import type { RosterEntry } from "./cups";
 import { createDraft, inSlipstream, stepDraft, type DraftState } from "./draft";
+import { createDriftBoost, stepDriftBoost, type DriftBoostState } from "./driftboost";
 import { SPIN_INPUT, spinCar, type ItemRacer } from "./items";
 import { createCarState, stepCar, type CarInput, type CarState } from "./physics";
 import { applySpeedClass, RACE_LAPS, type SpeedClass } from "./progression";
@@ -62,7 +63,8 @@ export interface Opponent extends ItemRacer {
   tuning: Tuning;
   bot: (car: CarState) => CarInput;
   draft: DraftState;
-  /** Seconds of speed boost remaining (earned from slipstreaming). */
+  driftBoost: DriftBoostState;
+  /** Seconds of speed boost remaining (earned from slipstreaming or a drift). */
   boostTimer: number;
   /** Seconds until this bot uses the item it's holding. */
   itemUseDelay: number;
@@ -127,9 +129,10 @@ export function createOpponents(
     // human rather than just detuned.
     const sloppy = baseTuning.botSloppiness;
     const personality: BotPersonality = {
-      line: (rng() - 0.5) * track.roadWidth * 0.4,
+      lineFrac: (rng() - 0.5) * 0.4,
       wobble: sloppy * (1.25 - skill),
       mistakeRate: sloppy * (1.3 - skill) * 8,
+      reactionSeconds: sloppy * (1.3 - skill) * 0.35,
       seed: rng() * 1000,
     };
     const pos = gridSlot(track, gridIndices?.[i] ?? i, columns);
@@ -141,6 +144,7 @@ export function createOpponents(
       tuning,
       bot: createBot(track, query, tuning, personality),
       draft: createDraft(),
+      driftBoost: createDriftBoost(),
       boostTimer: 0,
       itemUseDelay: 0,
       position: i + 1,
@@ -200,6 +204,13 @@ export function stepOpponents(
         );
       if (stepDraft(o.draft, drafting, dt, o.tuning.draftChargeSeconds)) {
         o.boostTimer = o.tuning.draftBoostSeconds;
+      }
+      // Bots cash drift boosts on the same terms the player does, so a drifty
+      // car in bot hands is as quick as it is in yours. A spin isn't a drift.
+      if (spinning) {
+        o.driftBoost = createDriftBoost();
+      } else if (stepDriftBoost(o.driftBoost, o.car.drifting, dt, o.tuning.driftChargeSeconds)) {
+        o.boostTimer = Math.max(o.boostTimer, o.tuning.driftBoostSeconds);
       }
       if (o.boostTimer > 0) o.boostTimer = Math.max(0, o.boostTimer - dt);
       // o.boost is the item turbo, ticked down by the item system
