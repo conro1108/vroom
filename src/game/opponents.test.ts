@@ -72,12 +72,12 @@ describe("opponent field", () => {
     expect(Math.hypot(player.x - bot.x, player.y - bot.y)).toBeGreaterThan(10);
   });
 
-  it("widens the grid for a bigger squad but never past 4 columns", () => {
+  it("widens the grid for a bigger squad but never past 3 columns", () => {
     expect(gridColumns(4)).toBe(2);
     expect(gridColumns(6)).toBe(2);
     expect(gridColumns(9)).toBe(3);
-    expect(gridColumns(12)).toBe(4);
-    expect(gridColumns(40)).toBe(4);
+    expect(gridColumns(12)).toBe(3);
+    expect(gridColumns(40)).toBe(3);
   });
 
   it("keeps a wide grid on the road, all slots distinct", () => {
@@ -89,6 +89,22 @@ describe("opponent field", () => {
       if (i < 2 * columns) expect(query.surfaceAt(pos.x, pos.y)).toBe("road");
       for (const s of seen) expect(Math.hypot(pos.x - s.x, pos.y - s.y)).toBeGreaterThan(5);
       seen.push(pos);
+    }
+  });
+
+  it("spawns a full field with no two cars closer than the separation minDist", () => {
+    // Regression: a 4-wide grid packed columns closer than minDist on narrow
+    // tracks, so cars spawned overlapping and got spat off the road. Grid
+    // geometry only depends on roadWidth, so the narrowest track is worst case.
+    const narrowest = TRACKS.reduce((a, b) => (a.roadWidth <= b.roadWidth ? a : b));
+    const t = createTrack(narrowest);
+    const columns = gridColumns(12);
+    const slots = Array.from({ length: 12 }, (_, i) => gridSlot(t, i, columns));
+    for (let i = 0; i < slots.length; i++) {
+      for (let j = i + 1; j < slots.length; j++) {
+        const d = Math.hypot(slots[i]!.x - slots[j]!.x, slots[i]!.y - slots[j]!.y);
+        expect(d).toBeGreaterThanOrEqual(12); // separateCars minDist
+      }
     }
   });
 

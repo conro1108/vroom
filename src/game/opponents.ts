@@ -39,14 +39,17 @@ export function skillSpread(count: number): number[] {
 // Grid layout in world px behind the start line: cars fill a row of `columns`
 // slots, then step back a row. A wider squad gets a wider grid so it doesn't
 // string out into an absurdly long single-file queue behind the line.
-const GRID_FIRST_ROW = 16;
-const GRID_ROW_GAP = 18;
-const GRID_LANE_FRAC = 0.28; // outermost column sits at this fraction of the road out from center
+const GRID_FIRST_ROW = 18;
+const GRID_ROW_GAP = 22;
+const GRID_LANE_FRAC = 0.3; // outermost column sits at this fraction of the road out from center
 
 /** How many columns the grid uses for a field this size: 2 for a small pack,
- * up to 4 once the squad gets big. */
+ * up to 3 once the squad gets big. Never 4 — on the narrower tracks a 4-wide
+ * row packs columns closer than the car-separation minDist, so cars spawn
+ * overlapping and the separation impulse spits the pack off the road. At 3
+ * columns the lateral spacing (GRID_LANE_FRAC * roadWidth) stays clear of it. */
 export function gridColumns(fieldSize: number): number {
-  return Math.max(2, Math.min(4, Math.ceil(fieldSize / 3)));
+  return Math.max(2, Math.min(3, Math.ceil(fieldSize / 4)));
 }
 
 /** Opponents satisfy ItemRacer, so the item system treats bots and the
