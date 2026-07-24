@@ -174,8 +174,6 @@ export function createMenu(
   };
 
   const render = () => {
-    // the vehicle row scrolls sideways; keep its position across re-renders
-    const vehicleScroll = root.querySelector(".vehicle-row")?.scrollLeft ?? 0;
     root.innerHTML = "";
 
     // A phone-width column so the menu stays a tidy centered strip on a wide
@@ -290,7 +288,6 @@ export function createMenu(
     vehicleRow.appendChild(customWrap);
 
     inner.appendChild(vehicleRow);
-    vehicleRow.scrollLeft = vehicleScroll;
 
     // solo (ghost) vs group (AI opponents): a binary switch, not two
     // independent toggles. Only group cups count toward placement-gated

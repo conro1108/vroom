@@ -578,27 +578,20 @@ body {
   color: var(--cream-light);
 }
 
-/* --- vehicle picker: a sideways-scrolling garage --- */
+/* --- vehicle picker: a wrapping garage grid, every car in view --- */
 
 .vehicle-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
+  justify-content: center;
   padding: 4px 4px 10px;
-  margin: 0 -8px 12px;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.vehicle-row::-webkit-scrollbar {
-  display: none;
+  margin: 0 0 12px;
 }
 
 .vehicle-tile {
   flex: 0 0 auto;
   width: 108px;
-  scroll-snap-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -642,7 +635,6 @@ body {
   position: relative;
   flex: 0 0 auto;
   width: 108px;
-  scroll-snap-align: center;
 }
 
 .vehicle-tile-wrap .vehicle-tile {
