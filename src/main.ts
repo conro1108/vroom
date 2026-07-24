@@ -663,7 +663,7 @@ function stepItemWorld(): void {
         audio.pickup();
       } else opponents[ev.racer - 1]!.itemUseDelay = 0.8 + Math.random() * 2.2;
     } else if (ev.racer === 0) {
-      hud.toast(ev.by === "oil" ? "slicked!" : ev.by === "crown" ? "dethroned!" : "rocketed!");
+      // no toast — the spin-out and its sound already make it obvious you got hit
       audio.spun();
     }
   }
