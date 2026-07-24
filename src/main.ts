@@ -49,6 +49,7 @@ import {
 import { boostGuideSteer, createCarState, forwardSpeedOf, stepCar } from "./game/physics";
 import {
   createAudio,
+  engineVoice,
   observerPoints,
   panForOffset,
   passStrength,
@@ -479,7 +480,7 @@ function loop(now: number): void {
         boostTimer = raceTuning.boostSeconds;
         hud.toast("rocket start!");
       }
-      audio.launch(rocket);
+      audio.launch(rocket, engineVoice(progress.lastVehicle));
       hud.countdown("go!");
       window.setTimeout(() => mode !== "countdown" && hud.countdown(null), GO_FLASH_MS);
     } else {
@@ -587,6 +588,7 @@ function loop(now: number): void {
     throttle: engineThrottle,
     lateralSpeed: -car.vx * Math.sin(h) + car.vy * Math.cos(h),
     driftThreshold: raceTuning.driftThreshold,
+    voice: engineVoice(progress.lastVehicle),
   });
   // The loud, fun voice: a doppler roar only at the marquee moments — ripping
   // past the start/finish line or through a tight corner — scaled by how fast
@@ -599,7 +601,7 @@ function loop(now: number): void {
       const dy = observers[i]!.y - car.y;
       const dist = Math.hypot(dx, dy);
       if (dist < obsRadius && obsArmed[i] && speedFrac > 0.25) {
-        audio.vroom(panForOffset(dx, dy, h), strength, tuning.vroomSeconds);
+        audio.vroom(panForOffset(dx, dy, h), strength, tuning.vroomSeconds, engineVoice(progress.lastVehicle));
         obsArmed[i] = false;
       } else if (dist > obsRadius * 1.7) {
         obsArmed[i] = true; // left the zone: ready to vroom on the next lap
@@ -770,6 +772,15 @@ if (import.meta.env.DEV) {
     slipstream() {
       scene?.slipstreamBurst(car);
       audio.slipstream();
+    },
+    // drift-boost state, so a verification pass can tell a slide that banked a
+    // kick from one that just scrubbed speed
+    get drift() {
+      return {
+        drifting: car.drifting,
+        charge: driftChargeFrac(playerDriftBoost, tuning.driftChargeSeconds),
+        boostTimer,
+      };
     },
   };
 }

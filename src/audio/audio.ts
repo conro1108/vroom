@@ -11,6 +11,50 @@
 
 import type { ItemKind } from "../game/items";
 
+// ---- per-vehicle engine voices ----
+
+/**
+ * What makes one car's motor sound unlike another's. These are multipliers on
+ * the shared engine model below, not a separate synth per car — a kart and a
+ * V8 are the same three oscillators pitched, detuned and filtered differently,
+ * which is how they stay recognisably the same *game's* engine while being
+ * unmistakable from each other with your eyes shut.
+ *
+ * They cluster into weight classes on their own: karts and slot cars sit high
+ * and buzzy with no low end, the muscle car and cruiser sit an octave down with
+ * a lazy chug and a lot of body, and the mid-weights fill the middle.
+ */
+export interface EngineVoice {
+  pitch: number; // scales the whole rev range — small motors sing, big ones rumble
+  grind: number; // detune (cents) between the saw layers: more = rougher, angrier
+  chug: number; // tremolo-rate multiplier — the tempo of the piston chug
+  bright: number; // lowpass multiplier: raspy and open vs. dark and muffled
+  body: number; // level of the sub octave — how much chest the motor has
+}
+
+/** The house voice: Classic's, and the fallback for anything unrecognised
+ *  (the custom car, or a vehicle added without a voice of its own). */
+export const DEFAULT_VOICE: EngineVoice = { pitch: 1, grind: 26, chug: 1, bright: 1, body: 0.5 };
+
+const VOICES: Record<string, EngineVoice> = {
+  classic: DEFAULT_VOICE,
+  // an electric slot car: a smooth high whine, almost no combustion roughness
+  slotcar: { pitch: 1.35, grind: 7, chug: 1.55, bright: 1.35, body: 0.18 },
+  // a raspy tuner four-pot, all induction noise and vibration
+  driftking: { pitch: 1.18, grind: 42, chug: 1.2, bright: 1.2, body: 0.34 },
+  // a screaming two-stroke: the highest, angriest, thinnest voice in the field
+  gokart: { pitch: 1.62, grind: 34, chug: 1.85, bright: 1.5, body: 0.1 },
+  // a big lazy V8 — an octave down, slow lopey chug, all chest
+  muscle: { pitch: 0.6, grind: 19, chug: 0.5, bright: 0.72, body: 1 },
+  // a smooth big six: low and unhurried like the muscle car, but refined
+  cruiser: { pitch: 0.76, grind: 11, chug: 0.68, bright: 0.86, body: 0.72 },
+};
+
+/** The engine voice for a vehicle id, falling back to the house voice. */
+export function engineVoice(vehicleId: string): EngineVoice {
+  return VOICES[vehicleId] ?? DEFAULT_VOICE;
+}
+
 // ---- pure mappings (unit-tested; no WebAudio needed) ----
 
 const IDLE_HZ = 44; // engine pitch at a dead stop — low for a growly rumble
@@ -18,9 +62,14 @@ const REV_HZ = 150; // extra pitch at full speed
 const THROTTLE_HZ = 28; // extra pitch from flooring it (revs before speed builds)
 
 /** Engine oscillator pitch (Hz) from how fast we're going and how hard we're on it. */
-export function engineFreq(forwardSpeed: number, maxSpeed: number, throttle: number): number {
+export function engineFreq(
+  forwardSpeed: number,
+  maxSpeed: number,
+  throttle: number,
+  voice: EngineVoice = DEFAULT_VOICE
+): number {
   const frac = clamp01(forwardSpeed / Math.max(1, maxSpeed));
-  return IDLE_HZ + frac * REV_HZ + clamp01(throttle) * THROTTLE_HZ;
+  return (IDLE_HZ + frac * REV_HZ + clamp01(throttle) * THROTTLE_HZ) * voice.pitch;
 }
 
 /** Base engine loudness (0..1, pre master-volume). A present, growly rumble now
@@ -34,17 +83,26 @@ export function engineGain(forwardSpeed: number, maxSpeed: number, throttle: num
 /** Tremolo rate (Hz) of the grumble: a slow lopey chug at idle that smooths
  *  into a fast buzz at speed. Deep at idle so it reads as pistons firing —
  *  the mechanical chug, not a smooth hum. */
-export function engineTremolo(forwardSpeed: number, maxSpeed: number): { rate: number; depth: number } {
+export function engineTremolo(
+  forwardSpeed: number,
+  maxSpeed: number,
+  voice: EngineVoice = DEFAULT_VOICE
+): { rate: number; depth: number } {
   const frac = clamp01(forwardSpeed / Math.max(1, maxSpeed));
-  return { rate: 7 + frac * 32, depth: 0.11 * (1 - frac * 0.55) };
+  return { rate: (7 + frac * 32) * voice.chug, depth: 0.11 * (1 - frac * 0.55) };
 }
 
 /** Lowpass cutoff (Hz) for the engine. Opens up more than the old hum did so
  *  the sawtooth's harmonics come through as a mechanical buzz/growl, but stays
  *  low enough at idle to keep a throaty low end rather than a thin whine. */
-export function engineCutoff(forwardSpeed: number, maxSpeed: number, throttle: number): number {
+export function engineCutoff(
+  forwardSpeed: number,
+  maxSpeed: number,
+  throttle: number,
+  voice: EngineVoice = DEFAULT_VOICE
+): number {
   const frac = clamp01(forwardSpeed / Math.max(1, maxSpeed));
-  return 340 + frac * 900 + clamp01(throttle) * 260;
+  return (340 + frac * 900 + clamp01(throttle) * 260) * voice.bright;
 }
 
 /** Tire-screech loudness (0..1) from how much the car is sliding sideways.
@@ -194,13 +252,14 @@ export interface EngineFrame {
   throttle: number; // 0..1
   lateralSpeed: number; // px/s sideways
   driftThreshold: number; // px/s of slide where this tuning breaks into a drift
+  voice: EngineVoice; // the motor this car is fitted with
 }
 
 export interface GameAudio {
   /** Feed the continuous voices (engine + drift) once per rendered frame. */
   update(f: EngineFrame): void;
   /** One-shot rev off the line; rocket start gets extra pitch and sparkle. */
-  launch(rocket: boolean): void;
+  launch(rocket: boolean, voice?: EngineVoice): void;
   /** One-shot doppler swipe as an opponent passes; pan -1..1, strength 0..1. */
   whoosh(pan: number, strength: number): void;
   /** Cheery "get" when you grab an item box. */
@@ -216,7 +275,7 @@ export interface GameAudio {
   /** Louder engine-flavored doppler vroom, fired as you rip past an observer;
    *  pan points toward the listener (-1 left .. 1 right), strength 0..1,
    *  seconds sets how drawn-out the flyby is. */
-  vroom(pan: number, strength: number, seconds: number): void;
+  vroom(pan: number, strength: number, seconds: number, voice?: EngineVoice): void;
   /** Master volume, 0..1 (0 mutes). Comes from Tuning.soundVolume. */
   setVolume(v: number): void;
   /** Resume the context from a user gesture (mobile autoplay unlock). */
@@ -265,9 +324,11 @@ export function createAudio(volume: number): GameAudio {
   engOsc.type = "sawtooth";
   const engOsc2 = ctx.createOscillator(); // a detuned twin so it grinds/beats
   engOsc2.type = "sawtooth";
-  engOsc2.detune.value = 26; // a touch sharp — the roughness that reads as gears
+  engOsc2.detune.value = DEFAULT_VOICE.grind; // sharp by the voice's grind — the roughness that reads as gears
   const engSub = ctx.createOscillator(); // an octave down for a little body
   engSub.type = "sine";
+  const engSubGain = ctx.createGain(); // how much chest this motor has
+  engSubGain.gain.value = DEFAULT_VOICE.body;
   const engFilter = ctx.createBiquadFilter();
   engFilter.type = "lowpass";
   engFilter.frequency.value = 500;
@@ -281,7 +342,7 @@ export function createAudio(volume: number): GameAudio {
   lfo.connect(lfoDepth).connect(engGain.gain);
   engOsc.connect(engFilter);
   engOsc2.connect(engFilter);
-  engSub.connect(engFilter);
+  engSub.connect(engSubGain).connect(engFilter);
   engFilter.connect(engGain).connect(masterGain);
   engOsc.start();
   engOsc2.start();
@@ -314,14 +375,23 @@ export function createAudio(volume: number): GameAudio {
     update(f) {
       if (master <= 0) return;
       const now = ctx.currentTime;
+      const voice = f.voice ?? DEFAULT_VOICE;
       const targetEng = f.active ? engineGain(f.forwardSpeed, f.maxSpeed, f.throttle) : 0;
-      const freq = engineFreq(f.forwardSpeed, f.maxSpeed, f.throttle);
-      const trem = engineTremolo(f.forwardSpeed, f.maxSpeed);
-      // ~30ms smoothing so parameter changes glide instead of zippering
+      const freq = engineFreq(f.forwardSpeed, f.maxSpeed, f.throttle, voice);
+      const trem = engineTremolo(f.forwardSpeed, f.maxSpeed, voice);
+      // ~30ms smoothing so parameter changes glide instead of zippering. The
+      // voice knobs glide too, so swapping cars between races swells into the
+      // new motor rather than clicking.
       engOsc.frequency.setTargetAtTime(freq, now, 0.03);
       engOsc2.frequency.setTargetAtTime(freq, now, 0.03);
+      engOsc2.detune.setTargetAtTime(voice.grind, now, 0.05);
       engSub.frequency.setTargetAtTime(freq / 2, now, 0.03);
-      engFilter.frequency.setTargetAtTime(engineCutoff(f.forwardSpeed, f.maxSpeed, f.throttle), now, 0.03);
+      engSubGain.gain.setTargetAtTime(voice.body, now, 0.05);
+      engFilter.frequency.setTargetAtTime(
+        engineCutoff(f.forwardSpeed, f.maxSpeed, f.throttle, voice),
+        now,
+        0.03
+      );
       engGain.gain.setTargetAtTime(targetEng, now, 0.05);
       lfo.frequency.setTargetAtTime(trem.rate, now, 0.05);
       lfoDepth.gain.setTargetAtTime(f.active ? trem.depth * targetEng * 6 : 0, now, 0.05);
@@ -337,22 +407,24 @@ export function createAudio(volume: number): GameAudio {
         0.04
       );
     },
-    launch(rocket) {
+    launch(rocket, voice = DEFAULT_VOICE) {
       if (master <= 0) return;
       resume();
       const now = ctx.currentTime;
-      const top = rocket ? 340 : 210; // lower top for a growlier pull-off
+      // The rev off the line is the same motor as the idle, so it takes the
+      // car's pitch: the kart shrieks away, the muscle car heaves.
+      const top = (rocket ? 340 : 210) * voice.pitch;
       // rev sweep
       const osc = ctx.createOscillator();
       osc.type = "sawtooth";
       const filt = ctx.createBiquadFilter();
       filt.type = "lowpass";
-      filt.frequency.value = 1900; // a touch darker to match the lower rev
+      filt.frequency.value = 1900 * voice.bright;
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, now);
       g.gain.exponentialRampToValueAtTime(0.52, now + 0.05); // louder off the line
       g.gain.exponentialRampToValueAtTime(0.0001, now + (rocket ? 0.5 : 0.38));
-      osc.frequency.setValueAtTime(70, now);
+      osc.frequency.setValueAtTime(70 * voice.pitch, now);
       osc.frequency.exponentialRampToValueAtTime(top, now + (rocket ? 0.4 : 0.3));
       osc.connect(filt).connect(g).connect(masterGain);
       osc.start(now);
@@ -563,7 +635,7 @@ export function createAudio(volume: number): GameAudio {
       sub.start(now);
       sub.stop(now + 0.32);
     },
-    vroom(pan, strength, seconds) {
+    vroom(pan, strength, seconds, voice = DEFAULT_VOICE) {
       if (master <= 0 || strength <= 0) return;
       resume();
       const now = ctx.currentTime;
@@ -583,7 +655,9 @@ export function createAudio(volume: number): GameAudio {
       const peak = 1.0 * s; // the loud crack at the pass
       // Doppler pitch: elevated approaching, depressed receding. The snap-down
       // happens over `dropDur` centred on the pass — tighter = a sharper zip-by.
-      const baseHz = 150 + s * 50; // a screaming fundamental (F1, not muscle car)
+      // Pitched by the car's own voice, so the flyby is recognisably *your*
+      // motor tearing past the listener — a kart shriek or a V8 bellow.
+      const baseHz = (150 + s * 50) * voice.pitch;
       const approachHz = baseHz * 3.6; // a high wail bearing down — wider swing
       const recedeHz = baseHz * 0.2; // and a deeper drop as it tears away
       const dropDur = clamp(d * 0.13, 0.05, 0.22); // sharp, so the pass really cracks

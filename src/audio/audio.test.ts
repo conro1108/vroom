@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { VEHICLES } from "../game/vehicles";
 import {
   createAudio,
+  DEFAULT_VOICE,
   driftGain,
   engineCutoff,
   engineFreq,
   engineGain,
   engineTremolo,
+  engineVoice,
   observerPoints,
   panForOffset,
   PASS_RADIUS,
@@ -201,6 +204,45 @@ describe("observerPoints", () => {
   });
 });
 
+describe("engineVoice", () => {
+  it("gives every vehicle a voice, and unknown cars the house one", () => {
+    for (const v of VEHICLES) expect(engineVoice(v.id)).toBeDefined();
+    expect(engineVoice("custom")).toBe(DEFAULT_VOICE);
+    expect(engineVoice("no-such-car")).toBe(DEFAULT_VOICE);
+  });
+
+  it("makes every vehicle sound different from every other", () => {
+    // The whole point: two cars must never be indistinguishable by ear. Compare
+    // each voice's full parameter set — any pair sharing all five is a bug.
+    const keys = ["pitch", "grind", "chug", "bright", "body"] as const;
+    const fingerprints = VEHICLES.map((v) => keys.map((k) => engineVoice(v.id)[k]).join("/"));
+    expect(new Set(fingerprints).size).toBe(VEHICLES.length);
+  });
+
+  it("sorts into weight classes: karts sing, muscle rumbles", () => {
+    expect(engineVoice("gokart").pitch).toBeGreaterThan(engineVoice("classic").pitch);
+    expect(engineVoice("muscle").pitch).toBeLessThan(engineVoice("classic").pitch);
+    // heavy cars have chest and lope; light ones are thin and buzzy
+    expect(engineVoice("muscle").body).toBeGreaterThan(engineVoice("gokart").body);
+    expect(engineVoice("muscle").chug).toBeLessThan(engineVoice("gokart").chug);
+    // the electric slot car is the smoothest thing out there
+    expect(engineVoice("slotcar").grind).toBeLessThan(engineVoice("driftking").grind);
+  });
+
+  it("carries the voice through pitch, chug and brightness", () => {
+    const kart = engineVoice("gokart");
+    const v8 = engineVoice("muscle");
+    expect(engineFreq(100, 140, 1, kart)).toBeGreaterThan(engineFreq(100, 140, 1, v8));
+    expect(engineTremolo(100, 140, kart).rate).toBeGreaterThan(engineTremolo(100, 140, v8).rate);
+    expect(engineCutoff(100, 140, 1, kart)).toBeGreaterThan(engineCutoff(100, 140, 1, v8));
+  });
+
+  it("defaults to the house voice when none is passed", () => {
+    expect(engineFreq(100, 140, 1)).toBe(engineFreq(100, 140, 1, DEFAULT_VOICE));
+    expect(engineCutoff(100, 140, 1)).toBe(engineCutoff(100, 140, 1, DEFAULT_VOICE));
+  });
+});
+
 describe("createAudio", () => {
   it("returns a working no-op when WebAudio is unavailable (node/jsdom)", () => {
     const a = createAudio(0.7);
@@ -212,8 +254,10 @@ describe("createAudio", () => {
         throttle: 1,
         lateralSpeed: 80,
         driftThreshold: 55,
+        voice: engineVoice("gokart"),
       });
       a.launch(true);
+      a.driftBoost();
       a.whoosh(0.5, 0.8);
       a.pickup();
       a.item("turbo");
