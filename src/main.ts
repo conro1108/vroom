@@ -51,6 +51,7 @@ import {
   observerPoints,
   panForOffset,
   passStrength,
+  vroomStrength,
   PASS_RADIUS,
   type Observer,
 } from "./audio/audio";
@@ -572,15 +573,18 @@ function loop(now: number): void {
     lateralSpeed: -car.vx * Math.sin(h) + car.vy * Math.cos(h),
     driftThreshold: raceTuning.driftThreshold,
   });
-  // The loud, fun voice: an engine doppler as you rip past a trackside listener.
+  // The loud, fun voice: a doppler roar only at the marquee moments — ripping
+  // past the start/finish line or through a tight corner — scaled by how fast
+  // you're going and how hard you're cranking the wheel.
   if (mode === "racing" || mode === "calibrating") {
     const speedFrac = Math.min(1, fwd / raceTuning.maxSpeed);
+    const strength = vroomStrength(speedFrac, Math.abs(car.steer));
     for (let i = 0; i < observers.length; i++) {
       const dx = observers[i]!.x - car.x;
       const dy = observers[i]!.y - car.y;
       const dist = Math.hypot(dx, dy);
       if (dist < obsRadius && obsArmed[i] && speedFrac > 0.25) {
-        audio.vroom(panForOffset(dx, dy, h), 0.45 + speedFrac * 0.55, tuning.vroomSeconds);
+        audio.vroom(panForOffset(dx, dy, h), strength, tuning.vroomSeconds);
         obsArmed[i] = false;
       } else if (dist > obsRadius * 1.7) {
         obsArmed[i] = true; // left the zone: ready to vroom on the next lap
@@ -700,14 +704,21 @@ function corridorPx(): number {
   return (track ? track.roadWidth / 2 : 0) + tuning.fenceMarginPx;
 }
 
-/** Scatter the stationary doppler listeners around the current track. */
+/** Place the stationary doppler listeners: one always at the start/finish line,
+ *  plus one at each of the track's tightest corners. Nowhere bland. */
 function setupObservers(): void {
   if (!track) {
     observers = [];
     obsArmed = [];
     return;
   }
-  observers = observerPoints(track.samples, 3, track.roadWidth / 2 + 20);
+  const off = track.roadWidth / 2 + 20;
+  // A spectator just off the start/finish line — the vroom you always hear as
+  // you cross to start another lap. Stand them to the driver's-right of the line.
+  const nx = -Math.sin(track.startHeading);
+  const ny = Math.cos(track.startHeading);
+  const startLine: Observer = { x: track.start.x + nx * off, y: track.start.y + ny * off };
+  observers = [startLine, ...observerPoints(track.samples, 2, off)];
   obsArmed = observers.map(() => true);
   obsRadius = track.roadWidth * 0.5 + 55;
 }

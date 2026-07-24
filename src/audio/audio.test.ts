@@ -10,6 +10,7 @@ import {
   panForOffset,
   PASS_RADIUS,
   passStrength,
+  vroomStrength,
   type Observer,
 } from "./audio";
 
@@ -106,24 +107,59 @@ describe("passStrength", () => {
   });
 });
 
+describe("vroomStrength", () => {
+  it("is near-silent at a crawl no matter how hard you turn", () => {
+    expect(vroomStrength(0, 1)).toBe(0);
+    expect(vroomStrength(0.1, 1)).toBeLessThan(0.2);
+  });
+  it("gets louder the faster you go", () => {
+    expect(vroomStrength(1, 0)).toBeGreaterThan(vroomStrength(0.5, 0));
+  });
+  it("gets louder the harder you corner at a given speed", () => {
+    expect(vroomStrength(1, 1)).toBeGreaterThan(vroomStrength(1, 0));
+  });
+  it("peaks at a flat-out, hard-cornered apex and stays within 0..1", () => {
+    expect(vroomStrength(1, 1)).toBe(1);
+    expect(vroomStrength(2, 2)).toBe(1); // clamps out-of-range inputs
+  });
+  it("crossing the line dead straight at speed is a solid mid-level roar", () => {
+    const straightAtSpeed = vroomStrength(1, 0);
+    expect(straightAtSpeed).toBeGreaterThan(0.3);
+    expect(straightAtSpeed).toBeLessThan(vroomStrength(1, 1));
+  });
+});
+
 describe("observerPoints", () => {
-  const square: Observer[] = [
-    { x: 0, y: 0 },
-    { x: 100, y: 0 },
-    { x: 100, y: 100 },
-    { x: 0, y: 100 },
-  ];
+  // A smooth loop with three sharp inward notches — three distinct tight
+  // corners with gentle sweeps between them, the shape real tracks have.
+  const N = 120;
+  const R = 100;
+  const notched: Observer[] = Array.from({ length: N }, (_, k) => {
+    const a = (k / N) * 2 * Math.PI;
+    return { x: Math.cos(a) * R, y: Math.sin(a) * R };
+  });
+  for (const i of [0, 40, 80]) {
+    const a = (i / N) * 2 * Math.PI;
+    notched[i] = { x: Math.cos(a) * 40, y: Math.sin(a) * 40 };
+  }
 
   it("returns the requested number of listeners", () => {
-    expect(observerPoints(square, 3, 10)).toHaveLength(3);
+    expect(observerPoints(notched, 3, 10)).toHaveLength(3);
   });
   it("degrades to empty on a too-small path or zero count", () => {
     expect(observerPoints([{ x: 0, y: 0 }], 3, 10)).toEqual([]);
-    expect(observerPoints(square, 0, 10)).toEqual([]);
+    expect(observerPoints(notched, 0, 10)).toEqual([]);
+  });
+  it("plants no listener on a bland, cornerless loop (a circle)", () => {
+    const circle: Observer[] = Array.from({ length: N }, (_, k) => {
+      const a = (k / N) * 2 * Math.PI;
+      return { x: Math.cos(a) * R, y: Math.sin(a) * R };
+    });
+    expect(observerPoints(circle, 3, 10)).toEqual([]);
   });
   it("sits each listener off to the side, ~offset from the road", () => {
-    for (const o of observerPoints(square, 2, 15)) {
-      const nearest = Math.min(...square.map((s) => Math.hypot(o.x - s.x, o.y - s.y)));
+    for (const o of observerPoints(notched, 3, 15)) {
+      const nearest = Math.min(...notched.map((s) => Math.hypot(o.x - s.x, o.y - s.y)));
       expect(nearest).toBeGreaterThan(0); // not on the centerline
       expect(nearest).toBeLessThanOrEqual(15 + 1e-6); // but only just off it
     }

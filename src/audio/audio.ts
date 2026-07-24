@@ -71,16 +71,27 @@ export function passStrength(distPx: number, relSpeed: number): number {
   return clamp01(near * 0.7 + fast * 0.6);
 }
 
+/** How loud a fly-by vroom should be (0..1) from how fast you're going and how
+ *  hard you're cornering (|steer|, 0..1). Loud is earned: you have to be moving
+ *  to vroom at all, and a flat-out slide through a tight apex is the loudest —
+ *  crossing the line dead straight is a solid mid-level roar, and a slow crawl
+ *  past barely registers. */
+export function vroomStrength(speedFrac: number, turnMag: number): number {
+  const s = clamp01(speedFrac);
+  const t = clamp01(turnMag);
+  return clamp01(s * (0.5 + 0.7 * t));
+}
+
 export interface Observer {
   x: number;
   y: number;
 }
 
-/** Place a few stationary "listeners" at the *dramatic* spots on the loop —
- *  the apex of a tight corner, or the middle of a long straight where you're
- *  flat-out — sitting just off the road (alternating sides). Crossing near one
- *  fires the doppler vroom, like a spectator hearing you rip past the place
- *  where the racing is tensest. Falls back to even spacing on a shapeless loop. */
+/** Place a few stationary "listeners" at the loop's tightest corners — the apex
+ *  of each hard bend — sitting just off the road (alternating sides). Crossing
+ *  near one fires the doppler vroom, like a spectator hearing you rip past the
+ *  place where the racing is tensest. Only genuine tight corners get one; a
+ *  bland, cornerless loop gets none (the caller adds the start/finish listener). */
 export function observerPoints(samples: Observer[], count: number, offset: number): Observer[] {
   const n = samples.length;
   if (n < 2 || count < 1) return [];
@@ -130,12 +141,11 @@ function dramaticIndices(samples: Observer[], count: number): number[] {
   const maxTurn = Math.max(1e-6, ...turn);
 
   // Uniformly-curved loop (a circle, or a square that's all corners and no
-  // straights): there are no distinct bends to single out, so fall back to
-  // even spacing so it still gets its full set of listeners.
+  // straights): there are no distinct bends to single out. Rather than park a
+  // listener somewhere bland, plant none — a cornerless loop gets no tight-turn
+  // vrooms (the start/finish listener, added by the caller, still fires).
   const tight = turn.map((t) => t >= TIGHT_FRAC * maxTurn);
-  if (tight.every(Boolean)) {
-    return Array.from({ length: count }, (_, k) => Math.floor((k * n) / count));
-  }
+  if (tight.every(Boolean)) return [];
 
   // Group the loop's contiguous "tight" stretches into runs (one per bend,
   // wrapping across the start/end seam), keeping each run's apex — the single
