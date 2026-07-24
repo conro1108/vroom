@@ -3,7 +3,17 @@
 // self-overlapping road) is enforced by tracks.test.ts, so new layouts can
 // be sketched against the tests. `unlock` on a def is legacy (cup unlocking
 // replaced it) and intentionally absent from newer tracks.
-import type { TrackDef } from "./track";
+//
+// These are big, long courses on purpose: the fun is in having room to
+// actually drive a corner sequence, not thread a wiggly ribbon. The archetypes
+// that carry the catalog:
+//   - serpentine(): the Switchback Pass shape — long straights joined by hard
+//     hairpins, then a return leg. The most "driveable" layout we have.
+//   - circuit(): a road course authored as a ring of corners in polar form.
+//     Big angle gaps read as sweeps; low radii bite inward as hairpins.
+//   - gear(): a star/clover of sharp lobes.
+//   - hand-drawn point lists for the speed ovals and the hero courses.
+import type { TrackDef, TrackPoint } from "./track";
 
 function gear(cx: number, cy: number, outer: number, inner: number, lobes: number) {
   const pts = [];
@@ -35,189 +45,249 @@ function ring(
   return out;
 }
 
+/**
+ * A road course authored as a ring of corners in polar form. Each entry is
+ * `[angleDeg, radiusFraction]` around center (cx,cy) on an rx×ry ellipse, in
+ * increasing angle. Big angle gaps become long sweeps; low radius fractions
+ * bite inward as hairpins. This buys the shape variety of freehand points with
+ * far less pinch risk, since everything stays inside one ellipse band.
+ */
+function circuit(
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  corners: readonly (readonly [number, number])[]
+): TrackPoint[] {
+  return corners.map(([deg, rf]) => {
+    const a = (deg * Math.PI) / 180;
+    return { x: Math.round(cx + Math.cos(a) * rx * rf), y: Math.round(cy + Math.sin(a) * ry * rf) };
+  });
+}
+
+/**
+ * A switchback course — `rows` (odd) horizontal straights stacked top→down,
+ * joined by hard hairpins on alternating ends, then a return leg that hugs the
+ * outer right side and top back to the start. The Switchback Pass archetype,
+ * generalized to fill a W×H world: straights you can attack, punctuated by real
+ * hairpins. `mirror` flips it left-for-right so reused instances don't all curve
+ * the same way. `rows` must be odd so the last straight ends on the return side.
+ * Keep straights modest (W ≲ 1800) and hairpins wide — a car that reaches top
+ * speed on a long straight can't scrub enough for the 180° that follows.
+ */
+function serpentine(W: number, H: number, rows: number, mirror = false): TrackPoint[] {
+  // Margins are generous because Catmull-Rom overshoots corners outward by a
+  // good margin — the road has to stay clear of the world edge through the
+  // overshoot, not just at the control points.
+  const m = 240; // world margin
+  const topReturn = m; // the return straight runs along the top
+  const y0 = m + 210; // first zig-zag row
+  const yN = H - m - 40; // last zig-zag row
+  const dy = (yN - y0) / (rows - 1); // row spacing == hairpin diameter
+  const bulge = 0.8 * dy; // how far a hairpin loops past the straight; > dy/2
+  // makes the apex a gentle-enough 180° that the car isn't asked to turn
+  // sharper than it physically can.
+  const corridorGap = 110; // clear space between a right hairpin apex and the return leg
+  const xL = m + bulge + 40; // left straight ends (leaves room for left hairpins)
+  const xR = W - m - bulge - corridorGap; // right straight ends
+  const xRet = W - m; // return leg up the right edge
+  const xMid = (xL + xR) / 2;
+  const pts: TrackPoint[] = [];
+  const P = (x: number, y: number) =>
+    pts.push({ x: Math.round(mirror ? W - x : x), y: Math.round(y) });
+  // A rounded (slightly elongated) U connecting the two straight ends dy apart,
+  // as three points along a half-ellipse — a real hairpin, not a cusp.
+  const hairpin = (xEnd: number, yr: number, dir: 1 | -1) => {
+    P(xEnd + dir * bulge * 0.71, yr + dy * 0.146);
+    P(xEnd + dir * bulge, yr + dy * 0.5);
+    P(xEnd + dir * bulge * 0.71, yr + dy * 0.854);
+  };
+  // Start mid top-straight, not at a corner: the bot (and a real player) needs
+  // clean runway either side of the line, or a twitchy car spins on the spot.
+  P(xMid, y0);
+  P(xR, y0);
+  if (rows > 1) hairpin(xR, y0, 1); // first hairpin down on the right
+  for (let r = 1; r < rows; r++) {
+    const yr = y0 + r * dy;
+    if (r % 2 === 0) {
+      P(xL, yr);
+      P(xR, yr);
+      if (r < rows - 1) hairpin(xR, yr, 1); // hairpin down on the right
+    } else {
+      P(xR, yr);
+      P(xL, yr);
+      if (r < rows - 1) hairpin(xL, yr, -1); // hairpin down on the left
+    }
+  }
+  // return: chamfer the bottom-right corner (a sharp 90° here overshoots the
+  // world edge badly), run up the right edge, chamfer the top-right corner,
+  // across the top and down the left edge to the top row's left end — the
+  // closing span then runs along the top straight back through the start.
+  P(xRet, yN - 60);
+  P(xRet, topReturn + 60);
+  P(xL, topReturn);
+  P(xL, y0);
+  return pts;
+}
+
 export const TRACKS: TrackDef[] = [
   {
     id: "meadow",
     name: "Meadow Loop",
-    roadWidth: 62,
-    worldWidth: 1400,
-    worldHeight: 1000,
+    roadWidth: 66,
+    worldWidth: 2000,
+    worldHeight: 1400,
     points: [
-      { x: 320, y: 210 },
-      { x: 700, y: 150 },
-      { x: 1060, y: 230 },
-      { x: 1185, y: 460 },
-      { x: 1090, y: 720 },
-      { x: 860, y: 790 },
-      { x: 700, y: 620 },
-      { x: 540, y: 780 },
-      { x: 300, y: 830 },
-      { x: 170, y: 600 },
-      { x: 210, y: 380 },
+      { x: 460, y: 320 },
+      { x: 1020, y: 240 },
+      { x: 1540, y: 340 },
+      { x: 1720, y: 680 },
+      { x: 1560, y: 1060 },
+      { x: 1200, y: 1160 },
+      { x: 980, y: 900 },
+      { x: 720, y: 1160 },
+      { x: 420, y: 1180 },
+      { x: 240, y: 840 },
+      { x: 320, y: 520 },
     ],
   },
   {
-    // A true oval: two long straights joined by wide sweeping ends, no
-    // inward pinch — distinct from meadow's looping shape, built for speed.
+    // A long speed oval with a gentle chicane broken into the bottom straight,
+    // so the lap has one place to think and everywhere else to hold it flat.
     id: "speedway",
     unlock: { track: "meadow", result: "podium" },
     name: "Sunny Speedway",
-    roadWidth: 74,
-    worldWidth: 1600,
-    worldHeight: 1000,
+    roadWidth: 78,
+    worldWidth: 2400,
+    worldHeight: 1400,
     points: [
-      { x: 420, y: 260 },
-      { x: 610, y: 260 },
-      { x: 800, y: 260 },
-      { x: 990, y: 260 },
-      { x: 1180, y: 260 },
-      { x: 1350, y: 330 },
-      { x: 1420, y: 500 },
-      { x: 1350, y: 670 },
-      { x: 1180, y: 740 },
-      { x: 990, y: 740 },
-      { x: 800, y: 740 },
-      { x: 610, y: 740 },
-      { x: 420, y: 740 },
-      { x: 250, y: 670 },
-      { x: 180, y: 500 },
-      { x: 250, y: 330 },
+      { x: 560, y: 360 },
+      { x: 900, y: 340 },
+      { x: 1300, y: 340 },
+      { x: 1700, y: 360 },
+      { x: 1960, y: 470 },
+      { x: 2080, y: 720 },
+      { x: 1960, y: 970 },
+      { x: 1700, y: 1050 },
+      { x: 1420, y: 1030 },
+      { x: 1240, y: 1130 },
+      { x: 1060, y: 1030 },
+      { x: 760, y: 1050 },
+      { x: 460, y: 960 },
+      { x: 340, y: 700 },
+      { x: 440, y: 470 },
     ],
   },
   {
+    // A snake of hairpins and sweeps around a wide ellipse — direction changes
+    // with room to breathe between them.
     id: "serpent",
     unlock: { track: "speedway", result: "podium" },
     name: "Serpent Run",
-    roadWidth: 58,
-    worldWidth: 1550,
-    worldHeight: 850,
-    points: [
-      { x: 220, y: 260 },
-      { x: 420, y: 160 },
-      { x: 650, y: 300 },
-      { x: 880, y: 160 },
-      { x: 1110, y: 300 },
-      { x: 1330, y: 180 },
-      { x: 1460, y: 330 },
-      { x: 1380, y: 540 },
-      { x: 1250, y: 680 },
-      { x: 1000, y: 590 },
-      { x: 750, y: 700 },
-      { x: 500, y: 590 },
-      { x: 300, y: 700 },
-      { x: 150, y: 520 },
-    ],
+    roadWidth: 60,
+    worldWidth: 2300,
+    worldHeight: 1300,
+    points: circuit(1150, 650, 950, 500, [
+      [5, 0.94],
+      [30, 0.9],
+      [70, 0.56],
+      [108, 0.92],
+      [140, 0.9],
+      [180, 0.56],
+      [218, 0.92],
+      [250, 0.9],
+      [292, 0.56],
+      [330, 0.93],
+    ]),
   },
   {
     id: "switchback",
     unlock: { track: "serpent", result: "podium" },
     name: "Switchback Pass",
-    roadWidth: 56,
-    worldWidth: 1420,
-    worldHeight: 1000,
-    points: [
-      { x: 340, y: 200 },
-      { x: 700, y: 180 },
-      { x: 1020, y: 200 },
-      { x: 1160, y: 340 },
-      { x: 1020, y: 480 },
-      { x: 700, y: 500 },
-      { x: 380, y: 480 },
-      { x: 250, y: 620 },
-      { x: 380, y: 760 },
-      { x: 700, y: 740 },
-      { x: 1020, y: 760 },
-      { x: 1240, y: 800 },
-      { x: 1330, y: 540 },
-      { x: 1300, y: 240 },
-      { x: 1140, y: 100 },
-      { x: 700, y: 80 },
-      { x: 330, y: 90 },
-      { x: 210, y: 130 },
-    ],
+    roadWidth: 60,
+    worldWidth: 1700,
+    worldHeight: 1500,
+    points: serpentine(1700, 1500, 3),
   },
   {
     id: "knot",
     unlock: { track: "switchback", result: "podium" },
     name: "Clover Knot",
     roadWidth: 50,
-    worldWidth: 1120,
-    worldHeight: 1120,
-    points: gear(560, 560, 410, 260, 6),
+    worldWidth: 1700,
+    worldHeight: 1700,
+    points: gear(850, 850, 640, 400, 6),
   },
   {
     id: "gauntlet",
     unlock: { track: "knot", result: "podium" },
     name: "The Gauntlet",
-    roadWidth: 60,
-    worldWidth: 1800,
-    worldHeight: 1200,
+    roadWidth: 76,
+    worldWidth: 2520,
+    worldHeight: 1680,
     points: [
-      { x: 250, y: 180 },
-      { x: 800, y: 130 },
-      { x: 1350, y: 170 },
-      { x: 1660, y: 380 },
-      { x: 1580, y: 660 },
-      { x: 1320, y: 740 },
-      { x: 1180, y: 580 },
-      { x: 1000, y: 540 },
-      { x: 880, y: 700 },
-      { x: 1000, y: 900 },
-      { x: 650, y: 980 },
-      { x: 350, y: 1000 },
-      { x: 150, y: 780 },
-      { x: 220, y: 560 },
-      { x: 140, y: 340 },
+      { x: 348, y: 250 },
+      { x: 1112, y: 181 },
+      { x: 1877, y: 236 },
+      { x: 2307, y: 528 },
+      { x: 2196, y: 917 },
+      { x: 1835, y: 1029 },
+      { x: 1640, y: 806 },
+      { x: 1390, y: 751 },
+      { x: 1223, y: 973 },
+      { x: 1390, y: 1251 },
+      { x: 904, y: 1362 },
+      { x: 487, y: 1390 },
+      { x: 209, y: 1084 },
+      { x: 306, y: 778 },
+      { x: 195, y: 473 },
     ],
   },
   {
-    // Bonus branch: a wide kidney-bean lagoon with one soft inward bay —
-    // flowing and fast, the reward for a first win on the oval.
+    // Bonus branch: a wide lagoon that flows fast until one hard inward bay,
+    // the reward for a first win on the oval.
     id: "lagoon",
     unlock: { track: "speedway", result: "win" },
     name: "Lost Lagoon",
-    roadWidth: 64,
-    worldWidth: 1300,
-    worldHeight: 1000,
-    points: [
-      { x: 200, y: 500 },
-      { x: 280, y: 300 },
-      { x: 450, y: 190 },
-      { x: 650, y: 280 },
-      { x: 850, y: 190 },
-      { x: 1020, y: 300 },
-      { x: 1100, y: 500 },
-      { x: 1010, y: 700 },
-      { x: 830, y: 800 },
-      { x: 650, y: 830 },
-      { x: 470, y: 800 },
-      { x: 290, y: 700 },
-    ],
+    roadWidth: 70,
+    worldWidth: 2000,
+    worldHeight: 1500,
+    points: circuit(1000, 750, 800, 600, [
+      [10, 0.95],
+      [45, 0.92],
+      [95, 0.68],
+      [135, 0.94],
+      [180, 0.5],
+      [225, 0.9],
+      [270, 0.95],
+      [315, 0.7],
+      [345, 0.92],
+    ]),
   },
   {
-    // Bonus branch: chicane wiggles across the top, one flat-out straight
+    // Bonus branch: a chicane strung across the top, one flat-out straight
     // home — the victory lap for conquering The Gauntlet.
     id: "rally",
     unlock: { track: "gauntlet", result: "win" },
     name: "Rally Ridge",
-    roadWidth: 54,
-    worldWidth: 1700,
-    worldHeight: 900,
+    roadWidth: 60,
+    worldWidth: 2400,
+    worldHeight: 1300,
     points: [
-      { x: 250, y: 220 },
-      { x: 450, y: 160 },
-      { x: 650, y: 260 },
-      { x: 850, y: 160 },
-      { x: 1050, y: 260 },
-      { x: 1250, y: 160 },
-      { x: 1450, y: 240 },
-      { x: 1550, y: 420 },
-      { x: 1480, y: 620 },
-      { x: 1250, y: 700 },
-      { x: 850, y: 720 },
-      { x: 450, y: 700 },
-      { x: 220, y: 620 },
-      { x: 150, y: 420 },
+      { x: 360, y: 320 },
+      { x: 620, y: 240 },
+      { x: 860, y: 360 },
+      { x: 1120, y: 240 },
+      { x: 1380, y: 360 },
+      { x: 1640, y: 240 },
+      { x: 1900, y: 340 },
+      { x: 2080, y: 560 },
+      { x: 1980, y: 820 },
+      { x: 1640, y: 940 },
+      { x: 1120, y: 960 },
+      { x: 620, y: 940 },
+      { x: 320, y: 840 },
+      { x: 220, y: 560 },
     ],
   },
 
@@ -226,134 +296,210 @@ export const TRACKS: TrackDef[] = [
     // Gentle five-petal flower: wide, forgiving, teaches flowing lines.
     id: "daisy",
     name: "Daisy Ring",
-    roadWidth: 60,
-    worldWidth: 1400,
-    worldHeight: 1000,
-    points: ring(700, 490, 470, 330, 15, 5, 0.12),
+    roadWidth: 62,
+    worldWidth: 2000,
+    worldHeight: 1400,
+    points: ring(1000, 700, 660, 470, 15, 5, 0.12),
   },
 
   // --- Dune Cup ---
   {
-    // A shimmering near-oval with a lazy lean — flat out almost everywhere.
+    // A big lazy oval that leans through the heat — flat out almost everywhere.
     id: "mirage",
     name: "Mirage Oval",
-    roadWidth: 70,
-    worldWidth: 1600,
-    worldHeight: 900,
-    points: ring(800, 445, 590, 290, 14, 2, 0.06, 0.9),
+    roadWidth: 82,
+    worldWidth: 2400,
+    worldHeight: 1300,
+    points: [
+      { x: 600, y: 420 },
+      { x: 1040, y: 360 },
+      { x: 1500, y: 360 },
+      { x: 1900, y: 440 },
+      { x: 2080, y: 660 },
+      { x: 1900, y: 900 },
+      { x: 1480, y: 960 },
+      { x: 1020, y: 960 },
+      { x: 620, y: 880 },
+      { x: 400, y: 660 },
+      { x: 480, y: 470 },
+    ],
   },
   {
-    // Seven quick flicks strung around the ring, like a snake's track in sand.
+    // A long technical circuit — a chain of tight hairpins strung around the
+    // dunes like a snake's track in the sand.
     id: "sidewinder",
     name: "Sidewinder",
-    roadWidth: 54,
-    worldWidth: 1450,
-    worldHeight: 920,
-    points: ring(725, 460, 500, 300, 21, 7, 0.13),
+    roadWidth: 56,
+    worldWidth: 2200,
+    worldHeight: 1500,
+    points: circuit(1100, 760, 940, 560, [
+      [0, 0.9],
+      [35, 0.5],
+      [70, 0.92],
+      [105, 0.5],
+      [150, 0.9],
+      [185, 0.52],
+      [220, 0.92],
+      [260, 0.5],
+      [300, 0.9],
+      [335, 0.52],
+    ]),
   },
   {
     // Four hard lobes of scorched hardpan — a blunter, faster clover.
     id: "scorch",
     name: "Scorch Flats",
     roadWidth: 58,
-    worldWidth: 1250,
-    worldHeight: 1250,
-    points: gear(625, 625, 480, 330, 4),
+    worldWidth: 1900,
+    worldHeight: 1900,
+    points: gear(950, 950, 720, 480, 4),
   },
 
   // --- Tide Cup ---
   {
-    // Three soft bays around a headland — rhythm track by the sea.
+    // Three bays around a headland — a long rhythm track by the sea.
     id: "cove",
     name: "Sandy Cove",
-    roadWidth: 62,
-    worldWidth: 1400,
-    worldHeight: 1050,
-    points: ring(700, 520, 460, 335, 12, 3, 0.16, 0.5),
+    roadWidth: 68,
+    worldWidth: 2000,
+    worldHeight: 1500,
+    points: circuit(1000, 760, 820, 600, [
+      [15, 0.95],
+      [55, 0.9],
+      [95, 0.55],
+      [150, 0.95],
+      [200, 0.55],
+      [255, 0.95],
+      [300, 0.9],
+      [335, 0.55],
+    ]),
   },
   {
     // Two long plank straights joined by round piers — pure speed.
     id: "boardwalk",
     name: "Boardwalk Sprint",
-    roadWidth: 66,
-    worldWidth: 1700,
-    worldHeight: 820,
+    roadWidth: 84,
+    worldWidth: 2400,
+    worldHeight: 1300,
     points: [
-      { x: 420, y: 220 },
-      { x: 650, y: 220 },
-      { x: 880, y: 220 },
-      { x: 1110, y: 220 },
-      { x: 1340, y: 240 },
-      { x: 1500, y: 330 },
-      { x: 1550, y: 450 },
-      { x: 1480, y: 560 },
-      { x: 1300, y: 610 },
-      { x: 1060, y: 610 },
-      { x: 820, y: 610 },
-      { x: 580, y: 610 },
-      { x: 360, y: 590 },
-      { x: 210, y: 500 },
-      { x: 160, y: 400 },
-      { x: 240, y: 290 },
+      { x: 620, y: 320 },
+      { x: 1020, y: 300 },
+      { x: 1420, y: 300 },
+      { x: 1820, y: 320 },
+      { x: 2040, y: 430 },
+      { x: 2140, y: 620 },
+      { x: 2040, y: 810 },
+      { x: 1820, y: 900 },
+      { x: 1420, y: 920 },
+      { x: 1020, y: 920 },
+      { x: 620, y: 900 },
+      { x: 380, y: 810 },
+      { x: 280, y: 620 },
+      { x: 380, y: 430 },
     ],
   },
   {
-    // Six ripples over the reef shelf — busy but shallow angles.
+    // A big looping reef shelf — sweeps into six deep hairpin bays.
     id: "reef",
     name: "Reef Loop",
-    roadWidth: 56,
-    worldWidth: 1440,
-    worldHeight: 1000,
-    points: ring(720, 500, 480, 330, 18, 6, 0.1),
+    roadWidth: 62,
+    worldWidth: 2200,
+    worldHeight: 1500,
+    points: circuit(1100, 760, 940, 560, [
+      [15, 0.95],
+      [60, 0.55],
+      [110, 0.92],
+      [160, 0.55],
+      [210, 0.95],
+      [255, 0.55],
+      [300, 0.92],
+      [345, 0.6],
+    ]),
   },
   {
     // A pinched peanut around the point break — two bowls, one waist.
     id: "breaker",
     name: "Breaker Bay",
-    roadWidth: 60,
-    worldWidth: 1550,
-    worldHeight: 900,
-    points: ring(775, 450, 530, 300, 14, 2, 0.17, Math.PI / 2),
+    roadWidth: 76,
+    worldWidth: 2200,
+    worldHeight: 1400,
+    points: circuit(1100, 700, 900, 520, [
+      [0, 0.97],
+      [40, 0.82],
+      [90, 0.52],
+      [140, 0.82],
+      [180, 0.97],
+      [220, 0.82],
+      [270, 0.52],
+      [320, 0.82],
+    ]),
   },
 
   // --- Frost Cup extras ---
   {
-    // Four sweeping bends carved by old ice — long, committed corners.
+    // Four long committed sweepers carved by old ice.
     id: "glacier",
     name: "Glacier Run",
-    roadWidth: 58,
-    worldWidth: 1450,
-    worldHeight: 1000,
-    points: ring(725, 500, 490, 325, 16, 4, 0.13, 0.6),
+    roadWidth: 74,
+    worldWidth: 2200,
+    worldHeight: 1600,
+    points: circuit(1100, 800, 880, 640, [
+      [10, 0.95],
+      [60, 0.74],
+      [100, 0.95],
+      [150, 0.74],
+      [200, 0.95],
+      [250, 0.72],
+      [300, 0.95],
+      [345, 0.72],
+    ]),
   },
   {
     // A five-point star of frozen spears — the knot's colder cousin.
     id: "icicle",
     name: "Icicle Knot",
     roadWidth: 50,
-    worldWidth: 1150,
-    worldHeight: 1150,
-    points: gear(575, 575, 430, 290, 5),
+    worldWidth: 1800,
+    worldHeight: 1800,
+    points: gear(900, 900, 680, 440, 5),
   },
   {
-    // Three long drops with heavy compressions between them.
+    // Long drops into heavy hairpins — a technical plunge down the mountain.
     id: "avalanche",
     name: "Avalanche Drop",
-    roadWidth: 54,
-    worldWidth: 1400,
-    worldHeight: 1020,
-    points: ring(700, 510, 470, 335, 12, 3, 0.19, Math.PI / 3),
+    roadWidth: 58,
+    worldWidth: 2000,
+    worldHeight: 1600,
+    points: circuit(1000, 820, 850, 640, [
+      [10, 0.9],
+      [50, 0.52],
+      [95, 0.9],
+      [140, 0.5],
+      [190, 0.9],
+      [235, 0.52],
+      [285, 0.9],
+      [330, 0.55],
+    ]),
   },
 
   // --- Dusk Cup extras ---
   {
-    // Eight shallow kinks under the stars — high speed, never straight.
+    // Eight quick kinks under the stars — high speed, never straight.
     id: "starlight",
     name: "Starlight Circuit",
-    roadWidth: 52,
-    worldWidth: 1500,
-    worldHeight: 1000,
-    points: ring(750, 500, 520, 340, 24, 8, 0.09),
+    roadWidth: 66,
+    worldWidth: 2400,
+    worldHeight: 1500,
+    points: circuit(1200, 750, 1000, 600, [
+      [0, 0.94],
+      [45, 0.82],
+      [90, 0.94],
+      [135, 0.82],
+      [180, 0.94],
+      [225, 0.82],
+      [270, 0.94],
+      [315, 0.82],
+    ]),
   },
 ];
 
