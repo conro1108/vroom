@@ -94,13 +94,14 @@ const OIL_DROP_BACK_PX = 16;
 /**
  * The speed-boost item tiers. Every tier hits with the same force (boostPower);
  * a higher tier just lasts longer, so it carries you *farther*. `guide` is how
- * much of the tuning steering-assist it applies (0 = the common base turbo,
- * with no help staying on the line; 1 = the full assist). The owner
- * (main.ts / opponents.ts) reads `guide` when it steps a boosted car — that's
- * where the track tangent lives; here we only own the tier shape.
+ * much of the tuning steering-assist it applies: the common turbo gets a gentle
+ * half-strength nudge onto the line, the mega the full assist — so a longer
+ * boost also keeps you in line more. The owner (main.ts / opponents.ts) reads
+ * `guide` when it steps a boosted car — that's where the track tangent lives;
+ * here we only own the tier shape.
  */
 export const BOOST_TIERS: Record<"turbo" | "megaturbo", { seconds: number; guide: number }> = {
-  turbo: { seconds: TURBO_SECONDS, guide: 0 },
+  turbo: { seconds: TURBO_SECONDS, guide: 0.5 },
   megaturbo: { seconds: 2.8, guide: 1 },
 };
 
