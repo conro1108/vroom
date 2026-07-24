@@ -71,11 +71,21 @@ function circuit(
  * outer right side and top back to the start. The Switchback Pass archetype,
  * generalized to fill a W×H world: straights you can attack, punctuated by real
  * hairpins. `mirror` flips it left-for-right so reused instances don't all curve
- * the same way. `rows` must be odd so the last straight ends on the return side.
+ * the same way. `rows` must be odd and ≥ 3, so the last straight ends on the
+ * return side with at least one hairpin between.
+ *
  * Keep straights modest (W ≲ 1800) and hairpins wide — a car that reaches top
- * speed on a long straight can't scrub enough for the 180° that follows.
+ * speed on a long straight can't scrub enough for the 180° that follows. Note
+ * hairpin width (`bulge`) is driven by row spacing, i.e. by H and `rows`, not by
+ * W: a tall world or few rows makes fat hairpins that eat the straights. The
+ * guards below fail loud if `rows` is invalid or the straights would invert into
+ * a self-crossing pinch, rather than leaving the next author a cryptic geometry
+ * test failure.
  */
 function serpentine(W: number, H: number, rows: number, mirror = false): TrackPoint[] {
+  if (rows < 3 || rows % 2 === 0) {
+    throw new Error(`serpentine: rows must be odd and >= 3, got ${rows}`);
+  }
   // Margins are generous because Catmull-Rom overshoots corners outward by a
   // good margin — the road has to stay clear of the world edge through the
   // overshoot, not just at the control points.
@@ -90,6 +100,12 @@ function serpentine(W: number, H: number, rows: number, mirror = false): TrackPo
   const corridorGap = 110; // clear space between a right hairpin apex and the return leg
   const xL = m + bulge + 40; // left straight ends (leaves room for left hairpins)
   const xR = W - m - bulge - corridorGap; // right straight ends
+  if (xL >= xR) {
+    throw new Error(
+      `serpentine: hairpins (bulge ${bulge.toFixed(0)}) leave no straight in a ` +
+        `${W}×${H} world — widen W, or lower H / raise rows to shrink row spacing`
+    );
+  }
   const xRet = W - m; // return leg up the right edge
   const xMid = (xL + xR) / 2;
   const pts: TrackPoint[] = [];
