@@ -12,8 +12,12 @@ import { applySpeedClass, RACE_LAPS, type SpeedClass } from "./progression";
 import {
   createLapTracker,
   fenceCar,
+  outOfBounds,
+  rescueCar,
+  safeSpotAt,
   updateLap,
   type LapTracker,
+  type SafeSpot,
   type Track,
   type TrackQuery,
 } from "./track";
@@ -70,6 +74,8 @@ export interface Opponent extends ItemRacer {
   itemUseDelay: number;
   /** 1-based order in which this bot finished the race, or null if racing. */
   finishOrder: number | null;
+  /** Last spot on the road this bot was safely on, for an out-of-bounds rescue. */
+  lastSafe: SafeSpot | null;
 }
 
 export function gridSlot(track: Track, index: number, columns = 2): { x: number; y: number } {
@@ -155,6 +161,7 @@ export function createOpponents(
       boost: 0,
       finished: false,
       finishOrder: null,
+      lastSafe: { x: pos.x, y: pos.y, heading: track.startHeading },
     };
   });
 }
@@ -183,7 +190,8 @@ export function stepOpponents(
   dt: number,
   live: boolean,
   player: PlayerContext | null = null,
-  corridorPx: number | null = null
+  corridorPx: number | null = null,
+  rescuePx: number | null = null
 ): void {
   let finished = opponents.filter((o) => o.finishOrder !== null).length;
   for (const o of opponents) {
@@ -223,6 +231,18 @@ export function stepOpponents(
     if (boosting) tuning = boostTuning(tuning);
     o.car = stepCar(o.car, input, tuning, query.surfaceAt(o.car.x, o.car.y), dt);
     if (corridorPx !== null) fenceCar(o.car, query, corridorPx);
+    // A bot that slid off an open stretch gets the same marshal treatment the
+    // player does — dropped back on the line where it went out.
+    if (rescuePx !== null && outOfBounds(o.car, query, rescuePx)) {
+      const spot = o.lastSafe ?? safeSpotAt(o.car.x, o.car.y, query);
+      if (spot) {
+        rescueCar(o.car, spot);
+        o.car.steer = 0;
+        o.car.drifting = false;
+      }
+    } else if (corridorPx !== null && query.distanceToRoad(o.car.x, o.car.y) <= corridorPx) {
+      o.lastSafe = safeSpotAt(o.car.x, o.car.y, query) ?? o.lastSafe;
+    }
     const p = query.progressAt(o.car.x, o.car.y);
     if (p !== null && updateLap(o.tracker, p).completed) {
       if (o.tracker.lap > RACE_LAPS && o.finishOrder === null) {

@@ -29,7 +29,9 @@ export interface Tuning {
   draftRangePx: number; // how close behind a car the slipstream reaches
   draftChargeSeconds: number; // continuous drafting needed to earn a boost
   draftBoostSeconds: number; // how long a slipstream boost lasts
-  fenceMarginPx: number; // grass runoff between road edge and the fence
+  fenceMarginPx: number; // grass runoff between road edge and the fence (where there is one)
+  rescueMarginPx: number; // extra grass past the fence line you may roam on unfenced stretches before a marshal collects you
+  rescueStallSeconds: number; // how long you sit stopped after being put back on track — the price of the excursion
   cameraLerp: number; // 1/s camera chase
   lookAhead: number; // seconds of velocity the camera leads by
   desktopZoomWorldHeight: number; // wide-screen zoom: world-px kept visible vertically so you still see ahead (phones stay width-driven)
@@ -73,7 +75,9 @@ export const DEFAULT_TUNING: Tuning = {
   draftRangePx: 55,
   draftChargeSeconds: 1.0,
   draftBoostSeconds: 0.8,
-  fenceMarginPx: 34,
+  fenceMarginPx: 56,
+  rescueMarginPx: 150,
+  rescueStallSeconds: 1.1,
   cameraLerp: 5,
   lookAhead: 0.35,
   desktopZoomWorldHeight: 190,
@@ -91,7 +95,7 @@ export const DEFAULT_TUNING: Tuning = {
 // the whole saved object on a bump (which would wipe every value the player
 // tuned on-device), we migrate the previous version forward and only reset the
 // specific keys whose default actually moved — see MIGRATIONS below.
-const STORAGE_KEY = "vroom.tuning.v5";
+const STORAGE_KEY = "vroom.tuning.v6";
 
 // v4 → v5 retuned the whole field tighter, so every handling default moved. A
 // v4 save is holding the old loose numbers for a car that no longer exists.
@@ -112,7 +116,10 @@ const V5_HANDLING: (keyof Tuning)[] = [
 // current one — cumulative, not per-step, since only the matched entry's list
 // is applied.
 const MIGRATIONS: { key: string; resetKeys: (keyof Tuning)[] }[] = [
-  { key: "vroom.tuning.v4", resetKeys: V5_HANDLING },
+  // v5 → v6 widened the corridor to go with the wider roads and the new
+  // out-of-bounds rescue; an old narrow runoff would fence you in again.
+  { key: "vroom.tuning.v5", resetKeys: ["fenceMarginPx"] },
+  { key: "vroom.tuning.v4", resetKeys: [...V5_HANDLING, "fenceMarginPx"] },
   { key: "vroom.tuning.v3", resetKeys: [...V5_HANDLING, "fenceMarginPx"] },
 ];
 

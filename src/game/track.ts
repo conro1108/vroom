@@ -28,6 +28,7 @@ export interface Track {
   name: string;
   samples: TrackPoint[]; // dense polyline around the loop
   progress: number[]; // arc-length fraction 0..1 at each sample
+  fenced: boolean[]; // per sample: is this stretch physically walled in?
   roadWidth: number;
   worldWidth: number;
   worldHeight: number;
@@ -69,12 +70,68 @@ export function createTrack(def: TrackDef): Track {
     name: def.name,
     samples,
     progress,
+    fenced: fencedSamples(samples, progress, total, def),
     roadWidth: def.roadWidth,
     worldWidth: def.worldWidth,
     worldHeight: def.worldHeight,
     start,
     startHeading: Math.atan2(next.y - start.y, next.x - start.x),
   };
+}
+
+/**
+ * Which stretches of the loop actually need a fence.
+ *
+ * Fencing the whole lap is what made running wide feel like hitting a wall, so
+ * a fence now only goes up where the runoff itself is the problem: where
+ * another part of the loop is close enough that sliding off lands you on the
+ * wrong road (head-on, or a chunk of lap further along), and where the world
+ * edge is near enough that there's nowhere to run out to. Everywhere else the
+ * grass is open — you can run way off, and the rescue in main.ts picks you up
+ * and puts you back where you left, which costs time without trapping you.
+ */
+function fencedSamples(
+  samples: TrackPoint[],
+  progress: number[],
+  lapLength: number,
+  def: TrackDef
+): boolean[] {
+  const n = samples.length;
+  const keepout = def.roadWidth * 3.2; // ribbons closer than this share their runoff
+  const edge = def.roadWidth * 3; // no room to run off against the world wall
+  // Two spots only count as separate ribbons once they're this far apart along
+  // the road — otherwise every corner (where the road curves back near itself
+  // within a few car lengths) would read as a pinch and fence the whole lap.
+  const minArc = keepout * 3;
+  const fenced = samples.map(
+    (p) =>
+      p.x < edge || p.y < edge || p.x > def.worldWidth - edge || p.y > def.worldHeight - edge
+  );
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (fenced[i] && fenced[j]) continue;
+      const arc = Math.abs(progress[j]! - progress[i]!);
+      if (Math.min(arc, 1 - arc) * lapLength < minArc) continue; // same stretch of road
+      const a = samples[i]!;
+      const b = samples[j]!;
+      if (Math.hypot(b.x - a.x, b.y - a.y) < keepout) {
+        fenced[i] = true;
+        fenced[j] = true;
+      }
+    }
+  }
+  return spread(fenced, Math.ceil(n / 60)); // pad each run so fences end past the pinch
+}
+
+/** Widen every true run in a cyclic boolean array by `w` samples each way. */
+function spread(flags: boolean[], w: number): boolean[] {
+  const n = flags.length;
+  const out = flags.slice();
+  for (let i = 0; i < n; i++) {
+    if (!flags[i]) continue;
+    for (let k = -w; k <= w; k++) out[(i + k + n) % n] = true;
+  }
+  return out;
 }
 
 function catmullRom(p0: TrackPoint, p1: TrackPoint, p2: TrackPoint, p3: TrackPoint, t: number): TrackPoint {
@@ -90,8 +147,9 @@ export interface TrackQuery {
   surfaceAt(x: number, y: number): "road" | "offroad";
   /** Arc-length fraction 0..1 of the nearest centerline point, or null when far off track. */
   progressAt(x: number, y: number): number | null;
-  /** Closest centerline point and its distance, or null when far off track. */
-  nearestOnRoad(x: number, y: number): { x: number; y: number; dist: number } | null;
+  /** Closest centerline point, its distance, and whether that stretch is
+   *  fenced. Null only when nothing is anywhere near (deep in the void). */
+  nearestOnRoad(x: number, y: number): { x: number; y: number; dist: number; fenced: boolean } | null;
   /** Unit vector of the racing direction at the nearest centerline point
    *  (points the way progress increases), or null when far off track. */
   tangentAt(x: number, y: number): { x: number; y: number } | null;
@@ -100,7 +158,11 @@ export interface TrackQuery {
 export function createTrackQuery(track: Track): TrackQuery {
   const grid = new Map<string, number[]>();
   const n = track.samples.length;
-  const reach = track.roadWidth * 3;
+  // How far off the road the grid still answers questions. Generous, because
+  // an unfenced runoff has to stay measurable all the way out to the rescue
+  // distance — past `reach` the car is simply "gone", which triggers a rescue
+  // too, just without a distance to report.
+  const reach = track.roadWidth * 2 + 240;
   for (let i = 0; i < n; i++) {
     const a = track.samples[i]!;
     const b = track.samples[(i + 1) % n]!;
@@ -160,6 +222,7 @@ export function createTrackQuery(track: Track): TrackQuery {
         x: a.x + (b.x - a.x) * hit.t,
         y: a.y + (b.y - a.y) * hit.t,
         dist: hit.dist,
+        fenced: track.fenced[hit.index]!,
       };
     },
     tangentAt(x, y) {
@@ -178,8 +241,11 @@ export function createTrackQuery(track: Track): TrackQuery {
 /**
  * Keep a car inside the fenced corridor around the road: past `corridor` px
  * from the centerline it's placed back on the fence line and the outward
- * velocity component is bounced. This is what makes lap boundaries physical —
- * you can run wide onto the grass, but not cut across the middle of the map.
+ * velocity component is bounced.
+ *
+ * Only the stretches flagged `fenced` (see fencedSamples) actually have a
+ * fence — off an open stretch the car sails on into the grass and `rescueCar`
+ * eventually collects it.
  */
 // Minimum inward exit speed off the fence. Turn authority scales with speed,
 // so a car nosing into the fence at a crawl could otherwise pin itself there,
@@ -195,7 +261,7 @@ export function fenceCar(
   restitution = 0.3
 ): void {
   const hit = query.nearestOnRoad(car.x, car.y);
-  if (!hit || hit.dist <= corridor) return;
+  if (!hit || hit.dist <= corridor || !hit.fenced) return;
   const nx = (car.x - hit.x) / hit.dist;
   const ny = (car.y - hit.y) / hit.dist;
   car.x = hit.x + nx * corridor;
@@ -210,6 +276,47 @@ export function fenceCar(
     car.vx -= (FENCE_KICK - inward) * nx;
     car.vy -= (FENCE_KICK - inward) * ny;
   }
+}
+
+// --- out-of-bounds rescue ---
+//
+// The counterpart to dropping most of the fencing: run far enough off an open
+// stretch and a marshal picks the car up and puts it back on the road. The
+// anchor is where you *left* the road, not where you ended up, so a long
+// excursion across the infield can never gain ground — it only costs the time
+// spent out there plus the stall on the way back.
+
+export interface SafeSpot {
+  x: number;
+  y: number;
+  heading: number;
+}
+
+/** Positioned things a rescue can move (the player's car, or a bot's). */
+type Placeable = { x: number; y: number; heading: number; vx: number; vy: number };
+
+/** True once a car has strayed further than `limit` from the centerline —
+ *  including "off the map entirely", where there's no distance left to read. */
+export function outOfBounds(car: { x: number; y: number }, query: TrackQuery, limit: number): boolean {
+  return query.distanceToRoad(car.x, car.y) > limit;
+}
+
+/** Where a car at (x,y) would be put back down: its own spot snapped to the
+ *  centerline, pointing down the road. Null when it's nowhere near the track. */
+export function safeSpotAt(x: number, y: number, query: TrackQuery): SafeSpot | null {
+  const hit = query.nearestOnRoad(x, y);
+  const tan = query.tangentAt(x, y);
+  if (!hit || !tan) return null;
+  return { x: hit.x, y: hit.y, heading: Math.atan2(tan.y, tan.x) };
+}
+
+/** Plop a car down at `spot`, stopped and facing the right way. */
+export function rescueCar(car: Placeable, spot: SafeSpot): void {
+  car.x = spot.x;
+  car.y = spot.y;
+  car.heading = spot.heading;
+  car.vx = 0;
+  car.vy = 0;
 }
 
 // Lap detection: accumulate signed progress deltas; a full +1.0 of net travel

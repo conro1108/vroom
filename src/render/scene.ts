@@ -44,6 +44,10 @@ const COLORS = {
   markerEdge: "#2a2014",
 };
 
+// Finish-line confetti: the HUD palette, so the celebration looks like it came
+// out of the same box of crayons as the rest of the game.
+const CONFETTI = ["#e0532f", "#ffd23f", "#58b558", "#f9f1e0", "#5ab6e0"];
+
 const TARGET_BUFFER_WIDTH = 210;
 
 interface Particle {
@@ -178,6 +182,25 @@ export class Scene {
         vy: car.vy - fy * 190 + ly * side * 2,
         life: 0.45 + Math.random() * 0.3,
         color: COLORS.boost,
+      });
+    }
+  }
+
+  /**
+   * Confetti raining over the car — call it every frame through the finish
+   * celebration and it tops itself up rather than dumping the lot at once.
+   * The bits drift down the screen (+y) so they read as falling, not exploding.
+   */
+  confetti(car: CarState): void {
+    for (let i = 0; i < 3 && this.particles.length < 220; i++) {
+      const spread = this.buffer.width * 1.2; // wider than the view, so no bare edges
+      this.particles.push({
+        x: car.x + (Math.random() - 0.5) * spread,
+        y: car.y - this.buffer.height / 2 - Math.random() * 20, // in from above the view
+        vx: (Math.random() - 0.5) * 30,
+        vy: 55 + Math.random() * 50,
+        life: 1.6 + Math.random() * 0.8,
+        color: CONFETTI[Math.floor(Math.random() * CONFETTI.length)]!,
       });
     }
   }
@@ -392,9 +415,11 @@ export class Scene {
 
 /**
  * Fence posts along both corridor edges, so the physical boundary the cars
- * bounce off reads on screen. Posts that fall inside another road section's
- * corridor are skipped, which naturally merges the fencing where two parts
- * of the track run close together.
+ * bounce off reads on screen. Only the stretches the track flagged as fenced
+ * get posts — the open sections are meant to look open, because running off
+ * them is a legal (if slow) excursion rather than a wall. Posts that fall
+ * inside another road section's corridor are skipped, which naturally merges
+ * the fencing where two parts of the track run close together.
  */
 function paintTrackFence(
   ctx: CanvasRenderingContext2D,
@@ -415,6 +440,10 @@ function paintTrackFence(
       acc += segLen;
       if (acc < spacing) continue;
       acc = 0;
+      if (!track.fenced[i]) {
+        prev = null; // open runoff: no fence here, and no rail into the next post
+        continue;
+      }
       const nx = -(b.y - a.y) / segLen;
       const ny = (b.x - a.x) / segLen;
       const px = a.x + nx * corridor * side;

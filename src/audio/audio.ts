@@ -1,9 +1,12 @@
 // All game sound is synthesized live with WebAudio — no audio assets, so it
-// stays tiny and matches the pixel-art / chiptune vibe. Four voices:
+// stays tiny and matches the pixel-art / chiptune vibe. The continuous voices:
 //   - engine: a continuous grumbling putter that revs up with speed/throttle
-//   - launch: a one-shot rev off the line (extra sparkle on a rocket start)
 //   - drift:  a filtered-noise tire screech that swells with sideways slide
-//   - whoosh: a stereo doppler swipe when an opponent zips past you
+//   - rumble: what the tires are running over — road hum, or a grass roar
+//   - wind:   air rush, so a flat-out straight sounds unlike a slow hairpin
+//   - crowd:  spectator hubbub that rises near the grandstands and on lap 3
+// and the one-shots: launch, whoosh, vroom, pickup, item, spun, slipstream,
+// driftBoost, rescue, finalLap, finish.
 //
 // The synth constants below are sound-design values (like the sprite palette in
 // input.ts), not gameplay feel — the one player-facing feel knob, master
@@ -115,6 +118,38 @@ export function driftGain(lateralSpeed: number, driftThreshold: number): number 
   const floor = driftThreshold * 0.45; // squeal begins here, below the break-point
   const full = driftThreshold * 2; // deep into a drift = full screech
   return clamp01((slip - floor) / Math.max(1, full - floor));
+}
+
+// ---- the ambient bed: what makes one corner sound unlike another ----
+//
+// The engine alone is the same noise everywhere on the lap, which is what made
+// a race sound flat from green to flag. These three continuous voices give the
+// lap somewhere to go: what you're driving *on*, how fast the air is going by,
+// and who's watching. All three are quiet on their own and only add up to
+// something at the loud moments — flat out past a grandstand on the last lap.
+
+/** Tire rumble (0..1): the road hum under the engine, and the much louder,
+ *  gritty roar of running across the grass. This is the biggest single tell
+ *  that you've left the road — you hear the mistake before you see the time. */
+export function rumbleGain(offroad: boolean, speedFrac: number): number {
+  const s = clamp01(speedFrac);
+  return (offroad ? 0.34 : 0.07) * (0.25 + 0.75 * s);
+}
+
+/** Wind rush (0..1) past the car: nothing at a crawl, a real airy hiss flat
+ *  out, so a long straight sounds different from a slow hairpin. */
+export function windGain(speedFrac: number): number {
+  const s = clamp01(speedFrac);
+  return s * s * 0.2; // squared: only the top of the speed range really whooshes
+}
+
+/** Crowd hubbub (0..1) from how close the nearest trackside listener is and
+ *  how hot the race is (`intensity`, 1 on the final lap). Spectators cluster at
+ *  the start/finish line and the tight corners, so the noise floor rises and
+ *  falls around the lap instead of sitting flat. */
+export function crowdGain(distPx: number, radius: number, intensity: number): number {
+  const near = 1 - clamp01(distPx / Math.max(1, radius * 2.5));
+  return clamp01(near * near * (0.45 + 0.55 * clamp01(intensity)));
 }
 
 export const PASS_RADIUS = 72; // px: how close a car has to be to whoosh
@@ -253,6 +288,10 @@ export interface EngineFrame {
   lateralSpeed: number; // px/s sideways
   driftThreshold: number; // px/s of slide where this tuning breaks into a drift
   voice: EngineVoice; // the motor this car is fitted with
+  offroad: boolean; // on the grass: the rumble turns to a roar
+  crowdDist: number; // px to the nearest trackside listener (Infinity = nobody near)
+  crowdRadius: number; // how far a listener's noise carries on this track
+  intensity: number; // 0..1 race heat — 1 on the final lap, so the crowd is up
 }
 
 export interface GameAudio {
@@ -272,6 +311,13 @@ export interface GameAudio {
   slipstream(): void;
   /** The snap of tires hooking up as a banked drift cashes out into a kick. */
   driftBoost(): void;
+  /** The marshal's whistle-and-drop when an off-track excursion is collected. */
+  rescue(): void;
+  /** The bell that rings you onto the last lap: three rising strikes. */
+  finalLap(): void;
+  /** The chequered flag. A win gets the full fanfare; a midfield finish gets a
+   *  shorter, flatter version of it, so the sound tells you how you did. */
+  finish(placement: number): void;
   /** Louder engine-flavored doppler vroom, fired as you rip past an observer;
    *  pan points toward the listener (-1 left .. 1 right), strength 0..1,
    *  seconds sets how drawn-out the flyby is. */
@@ -362,8 +408,78 @@ export function createAudio(volume: number): GameAudio {
   driftSrc.connect(driftFilter).connect(driftGainNode).connect(masterGain);
   driftSrc.start();
 
+  // --- persistent ambient voices: surface rumble, wind, crowd ---
+  // All three are the same noise buffer through different filters, which is
+  // cheap and keeps them sitting in the same "world" as the rest of the mix.
+  const bed = (type: BiquadFilterType, hz: number, q: number) => {
+    const src = ctx.createBufferSource();
+    src.buffer = noise;
+    src.loop = true;
+    const filt = ctx.createBiquadFilter();
+    filt.type = type;
+    filt.frequency.value = hz;
+    filt.Q.value = q;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    src.connect(filt).connect(gain).connect(masterGain);
+    src.start();
+    return { filt, gain };
+  };
+  const rumble = bed("lowpass", 260, 0.8); // what the tires are running over
+  const wind = bed("highpass", 1400, 0.7); // air going by the helmet
+  const crowd = bed("bandpass", 700, 0.9); // a distant wash of people
+  // A slow wobble on the crowd so it breathes like a grandstand rather than
+  // sitting there as flat hiss.
+  const crowdLfo = ctx.createOscillator();
+  crowdLfo.type = "sine";
+  crowdLfo.frequency.value = 0.7;
+  const crowdLfoDepth = ctx.createGain();
+  crowdLfoDepth.gain.value = 0;
+  crowdLfo.connect(crowdLfoDepth).connect(crowd.gain.gain);
+  crowdLfo.start();
+
   const resume = () => {
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
+  };
+
+  /** A single soft-attack tone — the building block of the fanfares. */
+  const tone = (
+    at: number,
+    hz: number,
+    level: number,
+    dur: number,
+    type: OscillatorType = "square"
+  ) => {
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.setValueAtTime(hz, at);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(level, at + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(g).connect(masterGain);
+    o.start(at);
+    o.stop(at + dur + 0.05);
+  };
+
+  /** A swell of applause: noise that rushes up and falls away. */
+  const cheer = (at: number, level: number, dur: number) => {
+    const src = ctx.createBufferSource();
+    src.buffer = noise;
+    src.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.Q.value = 0.8;
+    bp.frequency.setValueAtTime(600, at);
+    bp.frequency.exponentialRampToValueAtTime(1500, at + dur * 0.4);
+    bp.frequency.exponentialRampToValueAtTime(700, at + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(level, at + dur * 0.25);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    src.connect(bp).connect(g).connect(masterGain);
+    src.start(at);
+    src.stop(at + dur + 0.05);
   };
 
   return {
@@ -406,6 +522,19 @@ export function createAudio(volume: number): GameAudio {
         now,
         0.04
       );
+
+      // The ambient bed. Slower smoothing than the engine (~0.1s) so crossing
+      // onto grass swells rather than clicks, and so the crowd fades up as you
+      // come down the straight toward them.
+      const speedFrac = clamp01(f.forwardSpeed / Math.max(1, f.maxSpeed));
+      const on = f.active ? 1 : 0;
+      rumble.gain.gain.setTargetAtTime(on * rumbleGain(f.offroad, speedFrac), now, 0.08);
+      // Grass is coarser as well as louder — open the filter up so it grates.
+      rumble.filt.frequency.setTargetAtTime(f.offroad ? 900 : 260, now, 0.08);
+      wind.gain.gain.setTargetAtTime(on * windGain(speedFrac), now, 0.08);
+      const cheerLevel = on * crowdGain(f.crowdDist, f.crowdRadius, f.intensity) * 0.22;
+      crowd.gain.gain.setTargetAtTime(cheerLevel, now, 0.12);
+      crowdLfoDepth.gain.setTargetAtTime(cheerLevel * 0.5, now, 0.12);
     },
     launch(rocket, voice = DEFAULT_VOICE) {
       if (master <= 0) return;
@@ -635,6 +764,81 @@ export function createAudio(volume: number): GameAudio {
       sub.start(now);
       sub.stop(now + 0.32);
     },
+    rescue() {
+      if (master <= 0) return;
+      resume();
+      const now = ctx.currentTime;
+      // Two short marshal whistle-blasts, then a soft thud as the car is set
+      // down. Deliberately un-triumphant: this is a favour, and it cost you.
+      for (const at of [now, now + 0.16]) {
+        const o = ctx.createOscillator();
+        o.type = "sine";
+        o.frequency.setValueAtTime(1500, at);
+        o.frequency.linearRampToValueAtTime(1750, at + 0.11);
+        const trill = ctx.createOscillator(); // the pea rattling in the whistle
+        trill.type = "sine";
+        trill.frequency.value = 38;
+        const trillDepth = ctx.createGain();
+        trillDepth.gain.value = 110;
+        trill.connect(trillDepth).connect(o.frequency);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.exponentialRampToValueAtTime(0.15, at + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.13);
+        o.connect(g).connect(masterGain);
+        o.start(at);
+        trill.start(at);
+        o.stop(at + 0.15);
+        trill.stop(at + 0.15);
+      }
+      const thud = ctx.createOscillator();
+      thud.type = "sine";
+      thud.frequency.setValueAtTime(140, now + 0.34);
+      thud.frequency.exponentialRampToValueAtTime(55, now + 0.5);
+      const tg = ctx.createGain();
+      tg.gain.setValueAtTime(0.0001, now + 0.34);
+      tg.gain.exponentialRampToValueAtTime(0.2, now + 0.37);
+      tg.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+      thud.connect(tg).connect(masterGain);
+      thud.start(now + 0.34);
+      thud.stop(now + 0.6);
+    },
+    finalLap() {
+      if (master <= 0) return;
+      resume();
+      const now = ctx.currentTime;
+      // Three rising bell strikes and the crowd getting to its feet. The bell
+      // tones are sine + a fifth above so they ring rather than beep.
+      [784, 988, 1319].forEach((hz, i) => {
+        const at = now + i * 0.17;
+        tone(at, hz, 0.24, 0.5, "sine");
+        tone(at, hz * 1.5, 0.09, 0.42, "sine");
+      });
+      cheer(now + 0.15, 0.16, 1.4);
+    },
+    finish(placement) {
+      if (master <= 0) return;
+      resume();
+      const now = ctx.currentTime;
+      const won = placement <= 1;
+      const podium = placement <= 3;
+      // A rising major arpeggio for the win, the same shape but shorter and
+      // lower for a podium, and a flat two-note shrug for the rest.
+      const notes = won
+        ? [523, 659, 784, 1047, 1319]
+        : podium
+          ? [523, 659, 784, 1047]
+          : [440, 523];
+      notes.forEach((hz, i) => {
+        const at = now + i * (won ? 0.11 : 0.14);
+        tone(at, hz, won ? 0.26 : 0.18, won ? 0.34 : 0.26);
+        if (won) tone(at, hz * 2, 0.08, 0.3, "sine"); // sparkle on top of a win
+      });
+      // and the last note rings out long
+      const last = now + notes.length * (won ? 0.11 : 0.14);
+      tone(last, notes[notes.length - 1]!, won ? 0.3 : 0.16, won ? 1.1 : 0.6, won ? "square" : "sine");
+      cheer(now, won ? 0.3 : podium ? 0.2 : 0.11, won ? 2.2 : 1.4);
+    },
     vroom(pan, strength, seconds, voice = DEFAULT_VOICE) {
       if (master <= 0 || strength <= 0) return;
       resume();
@@ -797,6 +1001,9 @@ function noopAudio(): GameAudio {
     spun() {},
     slipstream() {},
     driftBoost() {},
+    rescue() {},
+    finalLap() {},
+    finish() {},
     vroom() {},
     setVolume() {},
     resume() {},

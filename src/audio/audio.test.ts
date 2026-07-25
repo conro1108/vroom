@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { VEHICLES } from "../game/vehicles";
 import {
   createAudio,
+  crowdGain,
   DEFAULT_VOICE,
   driftGain,
+  rumbleGain,
+  windGain,
   engineCutoff,
   engineFreq,
   engineGain,
@@ -243,6 +246,31 @@ describe("engineVoice", () => {
   });
 });
 
+describe("the ambient bed", () => {
+  it("grass roars much louder than the road hums", () => {
+    expect(rumbleGain(true, 0.8)).toBeGreaterThan(rumbleGain(false, 0.8) * 3);
+  });
+
+  it("rumble and wind both grow with speed, and neither shouts at a standstill", () => {
+    expect(rumbleGain(false, 1)).toBeGreaterThan(rumbleGain(false, 0));
+    expect(windGain(1)).toBeGreaterThan(windGain(0.5));
+    expect(windGain(0)).toBe(0);
+    expect(rumbleGain(true, 1)).toBeLessThanOrEqual(1);
+  });
+
+  it("the crowd swells as you close on them and dies away down the road", () => {
+    const near = crowdGain(10, 90, 0.5);
+    const mid = crowdGain(120, 90, 0.5);
+    expect(near).toBeGreaterThan(mid);
+    expect(mid).toBeGreaterThan(crowdGain(400, 90, 0.5));
+    expect(crowdGain(1e9, 90, 1)).toBe(0);
+  });
+
+  it("the final lap is louder than the ones before it", () => {
+    expect(crowdGain(30, 90, 1)).toBeGreaterThan(crowdGain(30, 90, 0.35));
+  });
+});
+
 describe("createAudio", () => {
   it("returns a working no-op when WebAudio is unavailable (node/jsdom)", () => {
     const a = createAudio(0.7);
@@ -255,9 +283,17 @@ describe("createAudio", () => {
         lateralSpeed: 80,
         driftThreshold: 55,
         voice: engineVoice("gokart"),
+        offroad: true,
+        crowdDist: 40,
+        crowdRadius: 90,
+        intensity: 1,
       });
       a.launch(true);
       a.driftBoost();
+      a.rescue();
+      a.finalLap();
+      a.finish(1);
+      a.finish(5);
       a.whoosh(0.5, 0.8);
       a.pickup();
       a.item("turbo");

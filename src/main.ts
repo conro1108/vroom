@@ -74,8 +74,12 @@ import {
   createTrack,
   createTrackQuery,
   fenceCar,
+  outOfBounds,
+  rescueCar,
+  safeSpotAt,
   updateLap,
   type LapTracker,
+  type SafeSpot,
   type Track,
   type TrackQuery,
 } from "./game/track";
@@ -86,7 +90,7 @@ import { Scene, type RacerPose } from "./render/scene";
 import { themeById } from "./render/themes";
 import { createCalibrateUi } from "./ui/calibrate";
 import { createDevPanel } from "./ui/devpanel";
-import { createHud } from "./ui/hud";
+import { createHud, ordinal } from "./ui/hud";
 import { createInput } from "./ui/input";
 import { createMenu } from "./ui/menu";
 import { createMinimap } from "./ui/minimap";
@@ -97,7 +101,8 @@ const WALL_MARGIN = 14;
 const WALL_BOUNCE = -0.3;
 const COUNTDOWN_BEAT_MS = 800; // 3 · 2 · 1 · go
 const GO_FLASH_MS = 650;
-const FINISH_HOLD_MS = 600; // let the car visibly cross the line before results pop
+const FINISH_HOLD_MS = 2200; // the celebration lap-out: confetti and a fanfare before results pop
+const STOPPED_INPUT = { steer: 0, throttle: 0, brake: 0 }; // hands off the car (used during a rescue stall)
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const tuning = loadTuning();
@@ -147,6 +152,8 @@ let countdownEnd = 0;
 let boostTimer = 0; // seconds of player speed boost remaining (rocket start, slipstream)
 let itemBoostGuide = 0; // steering-assist strength of the player's active item boost (mega guides, plain turbo is 0)
 let throttleHeldSince: number | null = null; // when the player committed to throttle pre-green
+let lastSafe: SafeSpot | null = null; // where the marshals put you back if you sail off
+let rescueStall = 0; // seconds of "engine off" after a rescue
 let playerDraft = createDraft();
 let playerDriftBoost = createDriftBoost(); // slide long enough and the exit pays
 let playerRacer = createItemRacer(car); // the player's item-system view (spin/boost/held)
@@ -218,6 +225,8 @@ function startCalibration(): void {
   scene = new Scene(track, query, canvas, progress.lastVehicle, corridorPx());
   minimap.setTrack(track);
   car = createCarState(track.start.x, track.start.y, track.startHeading);
+  lastSafe = { x: track.start.x, y: track.start.y, heading: track.startHeading };
+  rescueStall = 0;
   opponents = [];
   cal = createCalibration(tuning);
   calVariant = "a";
@@ -285,6 +294,8 @@ function restartRace(): void {
   boostTimer = 0;
   itemBoostGuide = 0;
   throttleHeldSince = null;
+  lastSafe = { x: slot.x, y: slot.y, heading: track.startHeading };
+  rescueStall = 0;
   playerDraft = createDraft();
   playerDriftBoost = createDriftBoost();
   playerRacer = createItemRacer(car);
@@ -343,9 +354,23 @@ function onLapCompleted(now: number): void {
       playerRacer.finished = true; // out of the item game once across the line
       hud.setItem(null);
       finishAt = now + FINISH_HOLD_MS;
+      // The chequered flag: a banner, a fanfare pitched to how you did, and
+      // confetti over the slowing-down lap until the results card takes over.
+      const solo = opponents.length === 0;
+      const won = playerFinishPlace === 1;
+      hud.banner(
+        solo ? "finish!" : won ? "winner!" : `${ordinal(playerFinishPlace)} place!`,
+        won && !solo ? "win" : "finish",
+        FINISH_HOLD_MS - 200
+      );
+      audio.finish(solo ? 2 : playerFinishPlace);
     }
   } else {
     hud.setLap(race.lap, RACE_LAPS);
+    if (race.lap >= RACE_LAPS) {
+      hud.banner("final lap", "final");
+      audio.finalLap();
+    }
   }
 }
 
@@ -500,7 +525,14 @@ function loop(now: number): void {
         stepTuning = boostTuning(raceTuning);
       }
       let stepInput = carInput;
-      if (playerRacer.spin > 0) {
+      if (rescueStall > 0) {
+        // Set back down by the marshals: engine off, wheels straight, and the
+        // car pinned still for a beat. That stillness *is* the time penalty.
+        rescueStall = Math.max(0, rescueStall - PHYSICS_DT);
+        stepInput = STOPPED_INPUT;
+        car.vx = 0;
+        car.vy = 0;
+      } else if (playerRacer.spin > 0) {
         stepInput = SPIN_INPUT;
         spinCar(car, PHYSICS_DT);
       } else if (playerRacer.boost > 0 && itemBoostGuide > 0) {
@@ -539,7 +571,8 @@ function loop(now: number): void {
           PHYSICS_DT,
           true,
           { distance: raceDistance(lapTracker), car },
-          corridorPx()
+          corridorPx(),
+          rescuePx()
         );
         separateCars([car, ...opponents.map((o) => o.car)]);
         const drafting = opponents.some((o) =>
@@ -554,6 +587,7 @@ function loop(now: number): void {
       }
       applyWalls();
       fenceCar(car, query, corridorPx());
+      updateRescue();
       if (!racing) continue;
       recordGhostSample(ghostRec, now - lapStart, car);
 
@@ -589,6 +623,12 @@ function loop(now: number): void {
     lateralSpeed: -car.vx * Math.sin(h) + car.vy * Math.cos(h),
     driftThreshold: raceTuning.driftThreshold,
     voice: engineVoice(progress.lastVehicle),
+    offroad: query.surfaceAt(car.x, car.y) === "offroad",
+    crowdDist: nearestObserverDist(),
+    crowdRadius: obsRadius,
+    // The last lap is the loud one — the crowd is up for it either way, and
+    // louder still if you're in the fight at the front.
+    intensity: onFinalLap() ? (playerRacer.position <= 2 ? 1 : 0.75) : 0.35,
   });
   // The loud, fun voice: a doppler roar only at the marquee moments — ripping
   // past the start/finish line or through a tight corner — scaled by how fast
@@ -625,6 +665,8 @@ function loop(now: number): void {
       }
     }
   }
+
+  if (finishPending) scene.confetti(car); // rains for the whole slowing-down lap
 
   const ghostPose =
     mode === "racing" && progress.raceMode === "solo" && ghost ? ghostAt(ghost, now - lapStart) : null;
@@ -720,6 +762,48 @@ window.addEventListener("keydown", (e) => {
 /** How far from the centerline the fence sits on the current track. */
 function corridorPx(): number {
   return (track ? track.roadWidth / 2 : 0) + tuning.fenceMarginPx;
+}
+
+/** How far you may roam off an unfenced stretch before a marshal collects you. */
+function rescuePx(): number {
+  return corridorPx() + tuning.rescueMarginPx;
+}
+
+/**
+ * The open-grass safety net. Most of the track has no fence now, so instead of
+ * bouncing you the moment you run wide it lets you sail off — and if you go so
+ * far that you're lost in the void, picks you up and sets you back down where
+ * you left the road, facing the right way, stopped for a beat.
+ */
+function updateRescue(): void {
+  if (!query || rescueStall > 0) return;
+  if (outOfBounds(car, query, rescuePx())) {
+    const spot = lastSafe ?? safeSpotAt(car.x, car.y, query);
+    if (!spot) return;
+    rescueCar(car, spot);
+    car.steer = 0;
+    car.drifting = false;
+    rescueStall = tuning.rescueStallSeconds;
+    boostTimer = 0;
+    playerDriftBoost = createDriftBoost();
+    hud.toast("back on track");
+    audio.rescue();
+  } else if (query.distanceToRoad(car.x, car.y) <= corridorPx()) {
+    lastSafe = safeSpotAt(car.x, car.y, query) ?? lastSafe;
+  }
+}
+
+/** Distance to the nearest trackside listener — the crowd bed follows it, so
+ *  the lap gets louder as you bear down on a grandstand and quiets between. */
+function nearestObserverDist(): number {
+  let best = Infinity;
+  for (const o of observers) best = Math.min(best, Math.hypot(o.x - car.x, o.y - car.y));
+  return best;
+}
+
+/** Is the player on the last lap of the race? */
+function onFinalLap(): boolean {
+  return mode === "racing" && race.lap >= RACE_LAPS;
 }
 
 /** Place the stationary doppler listeners: one always at the start/finish line,

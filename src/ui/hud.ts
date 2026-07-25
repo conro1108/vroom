@@ -38,6 +38,9 @@ export interface Hud {
   setItem(item: ItemKind | null): void;
   /** Big center-screen text for the start countdown; null hides it. */
   countdown(text: string | null): void;
+  /** The race's headline moments — final lap, chequered flag — as a big swiping
+   *  banner across the middle of the screen. `kind` picks its colour scheme. */
+  banner(text: string, kind: "final" | "finish" | "win", ms?: number): void;
   toast(text: string): void;
 }
 
@@ -49,13 +52,19 @@ export function createHud(): Hud {
   const countdownEl = document.getElementById("countdown")!;
   const toastEl = document.getElementById("toast")!;
   const itemEl = document.getElementById("item-bubble")!;
+  const bannerEl = document.getElementById("banner")!;
+  let bannerTimer = 0;
 
   return {
     setLapTime(ms) {
       lapTimeEl.textContent = formatTime(ms);
     },
     setLap(lap, totalLaps) {
-      lapCountEl.textContent = `lap ${lap}/${totalLaps}`;
+      const last = lap >= totalLaps;
+      lapCountEl.textContent = last ? "final lap" : `lap ${lap}/${totalLaps}`;
+      // the counter itself stays lit for the whole last lap, long after the
+      // banner has swiped away — a glance up tells you it's the one that counts
+      lapCountEl.classList.toggle("final", last);
     },
     setPosition(pos, racers) {
       posEl.textContent = racers <= 1 ? "solo" : `${ordinal(pos)}/${racers}`;
@@ -90,6 +99,21 @@ export function createHud(): Hud {
         void countdownEl.offsetWidth;
         countdownEl.style.animation = "";
       }
+    },
+    banner(text, kind, ms = 1800) {
+      // the text lives in its own span so the chequered win banner can put a
+      // solid plate behind it — black-and-white checks eat plain text
+      const label = document.createElement("span");
+      label.textContent = text;
+      bannerEl.replaceChildren(label);
+      bannerEl.className = `banner-${kind}`;
+      bannerEl.hidden = false;
+      // restart the swipe animation even if a banner is already up
+      bannerEl.style.animation = "none";
+      void bannerEl.offsetWidth;
+      bannerEl.style.animation = "";
+      window.clearTimeout(bannerTimer);
+      bannerTimer = window.setTimeout(() => (bannerEl.hidden = true), ms);
     },
     toast(text) {
       toastEl.textContent = text;

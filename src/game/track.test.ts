@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { createLapTracker, createTrack, createTrackQuery, fenceCar, updateLap } from "./track";
+import {
+  createLapTracker,
+  createTrack,
+  createTrackQuery,
+  fenceCar,
+  outOfBounds,
+  rescueCar,
+  safeSpotAt,
+  updateLap,
+} from "./track";
 import { TRACKS } from "./tracks";
 
 const track = createTrack(TRACKS[0]!);
@@ -27,9 +36,12 @@ describe("surface queries", () => {
 
 describe("fencing", () => {
   const corridor = track.roadWidth / 2 + 26;
+  // Only some stretches are fenced now, so the fence tests have to stand on one
+  // that is — the open stretches are covered by the rescue tests below.
+  const fencedIndex = track.fenced.findIndex(Boolean);
 
   it("leaves a car inside the corridor alone", () => {
-    const p = track.samples[40]!;
+    const p = track.samples[fencedIndex]!;
     const car = { x: p.x, y: p.y, vx: 50, vy: 0 };
     fenceCar(car, query, corridor);
     expect(car).toEqual({ x: p.x, y: p.y, vx: 50, vy: 0 });
@@ -37,7 +49,7 @@ describe("fencing", () => {
 
   it("pushes an escaped car back to the fence line and bounces outward velocity", () => {
     // walk outward from a centerline point until past the fence
-    const p = track.samples[40]!;
+    const p = track.samples[fencedIndex]!;
     const hit = query.nearestOnRoad(p.x + 1, p.y + 1)!;
     const nx = (p.x + 1 - hit.x) / hit.dist;
     const ny = (p.y + 1 - hit.y) / hit.dist;
@@ -56,7 +68,7 @@ describe("fencing", () => {
   });
 
   it("kicks a crawling head-on car back inward so it can't pin itself", () => {
-    const p = track.samples[40]!;
+    const p = track.samples[fencedIndex]!;
     const hit = query.nearestOnRoad(p.x + 1, p.y + 1)!;
     const nx = (p.x + 1 - hit.x) / hit.dist;
     const ny = (p.y + 1 - hit.y) / hit.dist;
@@ -76,6 +88,55 @@ describe("fencing", () => {
     const p = track.samples[10]!;
     const hit = query.nearestOnRoad(p.x + 30, p.y)!;
     expect(Math.hypot(p.x + 30 - hit.x, p.y - hit.y)).toBeCloseTo(hit.dist, 5);
+  });
+});
+
+describe("open runoff and rescue", () => {
+  const corridor = track.roadWidth / 2 + 26;
+  const openIndex = track.fenced.findIndex((f) => !f);
+
+  /** A point `out` px straight off the road from sample `i`. */
+  const offRoad = (i: number, out: number) => {
+    const a = track.samples[i]!;
+    const b = track.samples[(i + 1) % track.samples.length]!;
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    return { x: a.x - ((b.y - a.y) / len) * out, y: a.y + ((b.x - a.x) / len) * out };
+  };
+
+  it("every track has both fenced and open stretches to drive", () => {
+    // A lap fenced end to end is the old behaviour; a lap with no fence at all
+    // means the pinch/edge detection has gone blind. Both are regressions.
+    expect(track.fenced.some(Boolean)).toBe(true);
+    expect(track.fenced.some((f) => !f)).toBe(true);
+  });
+
+  it("lets a car sail off an unfenced stretch", () => {
+    const p = offRoad(openIndex, corridor + 40);
+    const car = { x: p.x, y: p.y, vx: 60, vy: 60 };
+    fenceCar(car, query, corridor);
+    expect(car).toEqual({ x: p.x, y: p.y, vx: 60, vy: 60 });
+  });
+
+  it("only calls for a rescue once the car is well past the runoff", () => {
+    const near = offRoad(openIndex, corridor + 20);
+    const far = offRoad(openIndex, corridor + 400);
+    const limit = corridor + 150;
+    expect(outOfBounds(near, query, limit)).toBe(false);
+    expect(outOfBounds(far, query, limit)).toBe(true);
+  });
+
+  it("puts the car back where it left the road, not where it ended up", () => {
+    const left = track.samples[openIndex]!;
+    const spot = safeSpotAt(left.x, left.y, query)!;
+    const car = { x: 20, y: 20, heading: 0, vx: 300, vy: -120 };
+    rescueCar(car, spot);
+    expect(query.surfaceAt(car.x, car.y)).toBe("road");
+    // dropped at the exit point, stopped, pointing down the road
+    expect(Math.hypot(car.x - left.x, car.y - left.y)).toBeLessThan(track.roadWidth);
+    expect(car.vx).toBe(0);
+    expect(car.vy).toBe(0);
+    const tan = query.tangentAt(left.x, left.y)!;
+    expect(car.heading).toBeCloseTo(Math.atan2(tan.y, tan.x), 5);
   });
 });
 

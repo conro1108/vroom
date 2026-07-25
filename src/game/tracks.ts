@@ -150,7 +150,7 @@ export const TRACKS: TrackDef[] = [
   {
     id: "meadow",
     name: "Meadow Loop",
-    roadWidth: 66,
+    roadWidth: 82,
     worldWidth: 2000,
     worldHeight: 1400,
     points: [
@@ -173,7 +173,7 @@ export const TRACKS: TrackDef[] = [
     id: "speedway",
     unlock: { track: "meadow", result: "podium" },
     name: "Sunny Speedway",
-    roadWidth: 78,
+    roadWidth: 98,
     worldWidth: 2400,
     worldHeight: 1400,
     points: [
@@ -200,7 +200,7 @@ export const TRACKS: TrackDef[] = [
     id: "serpent",
     unlock: { track: "speedway", result: "podium" },
     name: "Serpent Run",
-    roadWidth: 60,
+    roadWidth: 75,
     worldWidth: 2300,
     worldHeight: 1300,
     points: circuit(1150, 650, 950, 500, [
@@ -220,7 +220,7 @@ export const TRACKS: TrackDef[] = [
     id: "switchback",
     unlock: { track: "serpent", result: "podium" },
     name: "Switchback Pass",
-    roadWidth: 60,
+    roadWidth: 75,
     worldWidth: 1700,
     worldHeight: 1500,
     points: serpentine(1700, 1500, 3),
@@ -229,7 +229,7 @@ export const TRACKS: TrackDef[] = [
     id: "knot",
     unlock: { track: "switchback", result: "podium" },
     name: "Clover Knot",
-    roadWidth: 50,
+    roadWidth: 62,
     worldWidth: 1700,
     worldHeight: 1700,
     points: gear(850, 850, 640, 400, 6),
@@ -238,7 +238,7 @@ export const TRACKS: TrackDef[] = [
     id: "gauntlet",
     unlock: { track: "knot", result: "podium" },
     name: "The Gauntlet",
-    roadWidth: 76,
+    roadWidth: 95,
     worldWidth: 2520,
     worldHeight: 1680,
     points: [
@@ -265,7 +265,7 @@ export const TRACKS: TrackDef[] = [
     id: "lagoon",
     unlock: { track: "speedway", result: "win" },
     name: "Lost Lagoon",
-    roadWidth: 70,
+    roadWidth: 88,
     worldWidth: 2000,
     worldHeight: 1500,
     points: circuit(1000, 750, 800, 600, [
@@ -286,7 +286,7 @@ export const TRACKS: TrackDef[] = [
     id: "rally",
     unlock: { track: "gauntlet", result: "win" },
     name: "Rally Ridge",
-    roadWidth: 60,
+    roadWidth: 75,
     worldWidth: 2400,
     worldHeight: 1300,
     points: [
@@ -312,7 +312,7 @@ export const TRACKS: TrackDef[] = [
     // Gentle five-petal flower: wide, forgiving, teaches flowing lines.
     id: "daisy",
     name: "Daisy Ring",
-    roadWidth: 62,
+    roadWidth: 78,
     worldWidth: 2000,
     worldHeight: 1400,
     points: ring(1000, 700, 660, 470, 15, 5, 0.12),
@@ -323,7 +323,7 @@ export const TRACKS: TrackDef[] = [
     // A big lazy oval that leans through the heat — flat out almost everywhere.
     id: "mirage",
     name: "Mirage Oval",
-    roadWidth: 82,
+    roadWidth: 102,
     worldWidth: 2400,
     worldHeight: 1300,
     points: [
@@ -345,7 +345,7 @@ export const TRACKS: TrackDef[] = [
     // dunes like a snake's track in the sand.
     id: "sidewinder",
     name: "Sidewinder",
-    roadWidth: 56,
+    roadWidth: 70,
     worldWidth: 2200,
     worldHeight: 1500,
     points: circuit(1100, 760, 940, 560, [
@@ -365,7 +365,7 @@ export const TRACKS: TrackDef[] = [
     // Four hard lobes of scorched hardpan — a blunter, faster clover.
     id: "scorch",
     name: "Scorch Flats",
-    roadWidth: 58,
+    roadWidth: 72,
     worldWidth: 1900,
     worldHeight: 1900,
     points: gear(950, 950, 720, 480, 4),
@@ -376,7 +376,7 @@ export const TRACKS: TrackDef[] = [
     // Three bays around a headland — a long rhythm track by the sea.
     id: "cove",
     name: "Sandy Cove",
-    roadWidth: 68,
+    roadWidth: 85,
     worldWidth: 2000,
     worldHeight: 1500,
     points: circuit(1000, 760, 820, 600, [
@@ -394,7 +394,7 @@ export const TRACKS: TrackDef[] = [
     // Two long plank straights joined by round piers — pure speed.
     id: "boardwalk",
     name: "Boardwalk Sprint",
-    roadWidth: 84,
+    roadWidth: 105,
     worldWidth: 2400,
     worldHeight: 1300,
     points: [
@@ -418,7 +418,7 @@ export const TRACKS: TrackDef[] = [
     // A big looping reef shelf — sweeps into six deep hairpin bays.
     id: "reef",
     name: "Reef Loop",
-    roadWidth: 62,
+    roadWidth: 78,
     worldWidth: 2200,
     worldHeight: 1500,
     points: circuit(1100, 760, 940, 560, [
@@ -436,7 +436,7 @@ export const TRACKS: TrackDef[] = [
     // A pinched peanut around the point break — two bowls, one waist.
     id: "breaker",
     name: "Breaker Bay",
-    roadWidth: 76,
+    roadWidth: 95,
     worldWidth: 2200,
     worldHeight: 1400,
     points: circuit(1100, 700, 900, 520, [
@@ -456,7 +456,7 @@ export const TRACKS: TrackDef[] = [
     // Four long committed sweepers carved by old ice.
     id: "glacier",
     name: "Glacier Run",
-    roadWidth: 74,
+    roadWidth: 92,
     worldWidth: 2200,
     worldHeight: 1600,
     points: circuit(1100, 800, 880, 640, [
@@ -474,7 +474,7 @@ export const TRACKS: TrackDef[] = [
     // A five-point star of frozen spears — the knot's colder cousin.
     id: "icicle",
     name: "Icicle Knot",
-    roadWidth: 50,
+    roadWidth: 62,
     worldWidth: 1800,
     worldHeight: 1800,
     points: gear(900, 900, 680, 440, 5),
@@ -483,7 +483,7 @@ export const TRACKS: TrackDef[] = [
     // Long drops into heavy hairpins — a technical plunge down the mountain.
     id: "avalanche",
     name: "Avalanche Drop",
-    roadWidth: 58,
+    roadWidth: 72,
     worldWidth: 2000,
     worldHeight: 1600,
     points: circuit(1000, 820, 850, 640, [
@@ -503,7 +503,7 @@ export const TRACKS: TrackDef[] = [
     // Eight quick kinks under the stars — high speed, never straight.
     id: "starlight",
     name: "Starlight Circuit",
-    roadWidth: 66,
+    roadWidth: 82,
     worldWidth: 2400,
     worldHeight: 1500,
     points: circuit(1200, 750, 1000, 600, [
