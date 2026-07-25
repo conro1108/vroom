@@ -31,7 +31,8 @@ export type IconName =
   | "cactus"
   | "wave"
   | "snowflake"
-  | "moon";
+  | "moon"
+  | "planet";
 
 // medals share one shape — ribbon up top, shaded disc below
 const MEDAL_MAP: PixelMap = [
@@ -307,6 +308,23 @@ export const ICONS: Record<IconName, Icon> = {
       ".ww.wwww.ww.",
       "..w..ww..w..",
       ".....ww.....",
+    ],
+  },
+  planet: {
+    palette: { p: "#7159cf", P: "#b9a6ff", r: "#ffd23f", s: "#7ff0ff" },
+    map: [
+      "..........s.",
+      "...........s",
+      "....pppp....",
+      "...pPPPpp...",
+      "..pPPPpppp..",
+      "rrrpppppprrr",
+      "..pppppppp..",
+      "...pppppp...",
+      "....pppp....",
+      "............",
+      ".s..........",
+      "............",
     ],
   },
   moon: {

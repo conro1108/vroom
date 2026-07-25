@@ -33,8 +33,11 @@ export function createItemRacer(car: CarState): ItemRacer {
   return { car, position: 1, deficit: 0, held: null, spin: 0, spinFrom: 0, boost: 0, finished: false };
 }
 
-/** Being this many laps behind the leader maxes out the comeback-item roll. */
-export const ITEM_GAP_WINDOW = 0.5;
+/** Being this many laps behind the leader maxes out the comeback-item roll.
+ *  Deliberately short: a leader who has pulled a third of a lap has already
+ *  escaped, and the field needs its comeback tools while the gap is still
+ *  closeable, not once it's hopeless. */
+export const ITEM_GAP_WINDOW = 0.35;
 
 export interface ItemBox {
   x: number;
@@ -152,28 +155,37 @@ export function createItemWorld(track: Track, fieldSize = 4, rowsOverride?: numb
 }
 
 /**
- * Gap-weighted roll: how mean the roll is scales with how far behind the
- * leader you actually are (`deficit`, 0 = on the leader's tail, 1 = a full
- * gap window back), not your discrete rank — so a tight pack of chasers all
- * roll gently and only a car that's truly dropped off gets the big comeback
- * tools. Leaders mostly get oil to defend with; the plain straight rocket is
- * the common attack, the homing missile a rarer treat, the leader-chasing
- * crown rarer still. The speed boost comes in two tiers: the plain turbo is a
- * common roll anywhere in the field, and the longer, guided mega-turbo is a
- * rare back-of-field comeback you can actually hold through the corners.
- * Not full parity — a nudge toward it.
+ * Gap-weighted roll, driven by two gaps rather than your discrete rank.
+ * `deficit` is your own gap to the leader (0 = on their tail, 1 = a full
+ * ITEM_GAP_WINDOW back); `leaderGap` is the gap the leader has pulled on the
+ * whole field — 2nd place's deficit. The mean stuff keys off whichever is
+ * bigger, so a runaway leader arms the entire pack behind them, not just the
+ * one car that happened to drop off the back. Without that, a leader who
+ * escapes a tight peloton is gone: everyone still bunched rolls a 0-deficit
+ * (i.e. gentle) roll forever and nothing in the box can reach them.
+ *
+ * The leader themselves gets no shots (nothing ahead to aim at) and, all but
+ * never, a speed boost — a boost is exactly what a car already clear of the
+ * field doesn't need. They defend with oil instead. The plain straight rocket
+ * is the common attack, the homing missile the better one, the leader-chasing
+ * crown the prize at the bottom of the roll.
  */
 export function rollItem(
   deficit: number,
   leading: boolean, // true = running 1st, nothing ahead to shoot at
+  leaderGap = 0, // how far 1st has escaped 2nd, same 0..1 scale as deficit
   rng: () => number = Math.random
 ): ItemKind {
   const p = Math.max(0, Math.min(1, deficit));
-  const turbo = 0.25 + 0.35 * p; // the common boost — a solid slice at every position
-  const megaturbo = 0.4 * p * p * p; // the guided comeback tier — only near the very back
+  const g = Math.max(0, Math.min(1, leaderGap));
+  const chase = Math.max(p, g); // how stretched the race is, from here
+  // "basically never": ~5% of a leader's boxes, just enough that the leader's
+  // pickup isn't a guaranteed oil can
+  const turbo = leading ? 0.02 : 0.25 + 0.35 * p;
+  const megaturbo = leading ? 0 : 0.45 * chase * chase; // the guided comeback tier
   const rocket = leading ? 0 : 0.4 + 0.2 * p;
-  const missile = leading ? 0 : 0.85 * p * p; // the better shot — now a real slice of the roll
-  const crown = leading ? 0 : 0.32 * p * p * p; // rarest, but a fatter near-last comeback treat
+  const missile = leading ? 0 : 0.15 * chase + 0.9 * chase * chase;
+  const crown = leading ? 0 : 0.5 * chase * chase * chase + 0.1 * g; // the runaway-leader answer
   const oil = 0.35 - 0.3 * p; // slicks pulled well back — fewer of them across the board
   const roll = rng() * (turbo + megaturbo + rocket + missile + crown + oil);
   if (roll < turbo) return "turbo";
@@ -192,6 +204,10 @@ export function stepItems(
   rng: () => number = Math.random
 ): ItemEvent[] {
   const events: ItemEvent[] = [];
+  // The runner-up's gap to the leader *is* the leader's gap over the field,
+  // already in the caller's 0..1 window units — so the roll can read it
+  // without anyone having to pass it in.
+  const leaderGap = racers.find((r) => !r.finished && r.position === 2)?.deficit ?? 0;
 
   for (const box of world.boxes) {
     if (box.respawnIn > 0) {
@@ -202,7 +218,7 @@ export function stepItems(
       const r = racers[i]!;
       if (r.held !== null || r.finished) continue;
       if (Math.hypot(r.car.x - box.x, r.car.y - box.y) > PICKUP_RADIUS) continue;
-      r.held = rollItem(r.deficit, r.position === 1, rng);
+      r.held = rollItem(r.deficit, r.position === 1, leaderGap, rng);
       box.respawnIn = BOX_RESPAWN_SECONDS;
       events.push({ type: "pickup", racer: i, item: r.held });
       break;

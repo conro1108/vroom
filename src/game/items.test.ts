@@ -71,12 +71,12 @@ describe("item world", () => {
 describe("rollItem", () => {
   // exercise rollItem the way the game does: a rank maps to a gap deficit
   // (0 = on the leader, 1 = a field back) and a leading flag.
-  const rolls = (position: number, fieldSize: number) => {
+  const rolls = (position: number, fieldSize: number, leaderGap = 0) => {
     const deficit = fieldSize <= 1 ? 0 : (position - 1) / (fieldSize - 1);
     const leading = position === 1;
     const counts = { turbo: 0, megaturbo: 0, rocket: 0, missile: 0, crown: 0, oil: 0 };
     for (let i = 0; i < 400; i++) {
-      counts[rollItem(deficit, leading, () => (i + 0.5) / 400)]++;
+      counts[rollItem(deficit, leading, leaderGap, () => (i + 0.5) / 400)]++;
     }
     return counts;
   };
@@ -100,15 +100,19 @@ describe("rollItem", () => {
     expect(last.missile).toBeGreaterThan(midfield.missile);
   });
 
-  it("the plain turbo is common everywhere; the mega tier is a back-of-field comeback", () => {
+  it("the leader basically never rolls a speed boost", () => {
     const leader = rolls(1, 4);
     const midfield = rolls(2, 4);
+    expect(leader.megaturbo).toBe(0); // never the guided comeback tier
+    // a sliver of plain turbo keeps the leader's box from being a pure oil can,
+    // but it's a rounding error next to what the field behind them rolls
+    expect(leader.turbo / 400).toBeLessThan(0.06);
+    expect(leader.turbo).toBeLessThan(midfield.turbo / 4);
+  });
+
+  it("the mega tier is a comeback: none up front, climbing as you drop back", () => {
+    const midfield = rolls(2, 4);
     const last = rolls(4, 4);
-    // the base turbo shows up at every position, the leader included
-    expect(leader.turbo).toBeGreaterThan(0);
-    expect(last.turbo).toBeGreaterThan(0);
-    // the mega tier is pinned to the back: none up front, and it climbs as you drop
-    expect(leader.megaturbo).toBe(0);
     expect(last.megaturbo).toBeGreaterThan(midfield.megaturbo);
     // and even at the back the common turbo still out-rolls the rare mega
     expect(last.turbo).toBeGreaterThan(last.megaturbo);
@@ -118,6 +122,18 @@ describe("rollItem", () => {
     const last = rolls(4, 4);
     expect(last.crown).toBeGreaterThan(0); // it does show up at the back
     expect(last.crown).toBeLessThan(last.missile); // but rarer than the homing missile
+  });
+
+  it("a runaway leader arms the whole pack behind them, not just the last car", () => {
+    // 2nd place, glued to the pack but with the leader long gone: their own
+    // deficit is tiny, so only the leader gap can make this roll mean.
+    const bunched = rolls(2, 8, 0);
+    const leaderGone = rolls(2, 8, 1);
+    expect(leaderGone.crown).toBeGreaterThan(bunched.crown * 4);
+    expect(leaderGone.missile).toBeGreaterThan(bunched.missile * 3);
+    expect(leaderGone.megaturbo).toBeGreaterThan(bunched.megaturbo * 3);
+    // the escaped leader still gets nothing to run away harder with
+    expect(rolls(1, 8, 1).megaturbo).toBe(0);
   });
 });
 

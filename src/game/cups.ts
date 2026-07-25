@@ -75,6 +75,17 @@ export const CUPS: CupDef[] = [
     ],
     map: { x: 0.84, y: 0.14 },
   },
+  {
+    id: "rainbow",
+    name: "Rainbow Cup",
+    icon: "planet",
+    theme: "cosmos",
+    trackIds: ["comet", "pulsar", "nebula", "rainbow"],
+    // the one cup nothing converges on: you only get off the planet by
+    // actually winning the last cup on it
+    unlock: [{ cup: "dusk", result: "win" }],
+    map: { x: 0.2, y: 0.1 },
+  },
 ];
 
 export function cupById(id: string): CupDef {

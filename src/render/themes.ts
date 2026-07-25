@@ -64,6 +64,21 @@ export const THEMES: Record<string, WorldTheme> = {
     fencePost: "#6b4f33",
     fenceRail: "#5d4429",
   },
+  // The one place that isn't a landscape: the ground is empty space, so it goes
+  // near-black and the road is the brightest thing on screen. The "flowers"
+  // scattered on the void read as stars, and the fence rails glow.
+  cosmos: {
+    id: "cosmos",
+    grass: "#1b1330",
+    grassPatch: "#221838",
+    tuft: "#3a2a63",
+    roadEdge: "#d472ec",
+    road: "#7159cf",
+    speckle: "#8f74e8",
+    flowers: ["#ffe98a", "#7ff0ff", "#ff8ad4"],
+    fencePost: "#3f2f6b",
+    fenceRail: "#b57ce8",
+  },
   dusk: {
     id: "dusk",
     grass: "#3b4468",

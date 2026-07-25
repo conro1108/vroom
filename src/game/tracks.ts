@@ -517,6 +517,80 @@ export const TRACKS: TrackDef[] = [
       [315, 0.82],
     ]),
   },
+
+  // --- Rainbow Cup: the endgame. Every layout here is bigger and busier than
+  // anything in the earlier cups — longer laps, tighter road, more direction
+  // changes per lap. They're meant to be a handful at 200cc.
+  {
+    // The longest lap in the game: a huge ring rippled by ten quick lobes, so
+    // the car is never once pointed straight for long. (A serpentine was the
+    // obvious pick for "long", but past three rows its return leg has to
+    // squeeze past a second right-hand hairpin and the racing line there falls
+    // apart — see the note on serpentine().)
+    id: "comet",
+    name: "Comet Tail",
+    roadWidth: 64,
+    worldWidth: 2600,
+    worldHeight: 2000,
+    points: ring(1300, 1000, 1100, 780, 30, 10, 0.14),
+  },
+  {
+    // Eight spikes off a collapsed star: the Clover Knot with the dial past
+    // where the dial goes.
+    id: "pulsar",
+    name: "Pulsar Spin",
+    roadWidth: 58,
+    worldWidth: 2000,
+    worldHeight: 2000,
+    points: gear(1000, 1000, 800, 520, 8),
+  },
+  {
+    // Twelve alternating hairpins around one huge ellipse — no two corners the
+    // same way up, and never a moment to breathe.
+    id: "nebula",
+    name: "Nebula Drift",
+    roadWidth: 64,
+    worldWidth: 2500,
+    worldHeight: 1600,
+    points: circuit(1250, 800, 1080, 620, [
+      [0, 0.92],
+      [30, 0.48],
+      [60, 0.92],
+      [90, 0.48],
+      [120, 0.92],
+      [150, 0.48],
+      [180, 0.92],
+      [210, 0.48],
+      [240, 0.92],
+      [270, 0.48],
+      [300, 0.92],
+      [330, 0.48],
+    ]),
+  },
+  {
+    // The hero course. Deliberately irregular — long flat-out sweeps that dump
+    // you straight into a hairpin, so learning it is the whole point.
+    id: "rainbow",
+    name: "Rainbow Run",
+    roadWidth: 60,
+    worldWidth: 2800,
+    worldHeight: 2000,
+    points: circuit(1400, 1000, 1230, 850, [
+      [0, 0.97],
+      [24, 0.94],
+      [56, 0.5],
+      [86, 0.9],
+      [112, 0.56],
+      [148, 0.98],
+      [186, 0.93],
+      [206, 0.47],
+      [238, 0.9],
+      [268, 0.62],
+      [296, 0.97],
+      [320, 0.5],
+      [344, 0.93],
+    ]),
+  },
 ];
 
 export function trackDefById(id: string): TrackDef {

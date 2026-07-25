@@ -13,13 +13,15 @@ import {
 import { DEFAULT_TUNING } from "./tuning";
 
 describe("speed classes", () => {
-  it("baseline class leaves tuning untouched", () => {
-    const t = applySpeedClass({ ...DEFAULT_TUNING }, SPEED_CLASSES[0]!);
-    expect(t).toEqual(DEFAULT_TUNING);
+  it("offers 100/150/200, each faster than the last and all above the authored pace", () => {
+    expect(SPEED_CLASSES.map((c) => c.label)).toEqual(["100cc", "150cc", "200cc"]);
+    for (const [i, cls] of SPEED_CLASSES.entries()) {
+      expect(cls.mult).toBeGreaterThan(SPEED_CLASSES[i - 1]?.mult ?? 1);
+    }
   });
 
-  it("higher classes scale speed but not control preferences", () => {
-    const cls = speedClassById("150");
+  it("every class scales speed but not control preferences", () => {
+    const cls = speedClassById("200");
     const t = applySpeedClass({ ...DEFAULT_TUNING }, cls);
     expect(t.maxSpeed).toBeCloseTo(DEFAULT_TUNING.maxSpeed * cls.mult);
     expect(t.accel).toBeCloseTo(DEFAULT_TUNING.accel * cls.mult);
@@ -138,5 +140,18 @@ describe("saved progress", () => {
     const parsed = parseProgress(JSON.stringify({ completed: { "100": ["meadow"] } }));
     expect(isCupUnlocked(parsed, "100", "dune")).toBe(true);
     expect(isCupUnlocked(parsed, "100", "tide")).toBe(false); // podium ≠ win
+  });
+
+  it("folds the retired 50cc class onto 100cc, keeping the best of both", () => {
+    const parsed = parseProgress(
+      JSON.stringify({
+        cups: { "50": { sprout: 1, dune: 2 }, "100": { sprout: 4 } },
+        lastClass: "50",
+      })
+    );
+    expect(parsed.lastClass).toBe("100");
+    expect(parsed.cups["50"]).toBeUndefined();
+    expect(parsed.cups["100"]).toEqual({ sprout: 1, dune: 2 }); // the 50cc win survives
+    expect(isCupUnlocked(parsed, "100", "tide")).toBe(true);
   });
 });

@@ -15,10 +15,14 @@ export interface SpeedClass {
   mult: number;
 }
 
+// `mult` is relative to the authored tuning (DEFAULT_TUNING and the vehicle
+// stats), which is the pace the dev panel edits at — not a class you can race.
+// The old 50cc sat at 1 and was a snooze, so the slowest class you can pick is
+// now what used to be 100cc, and the ladder runs up from there.
 export const SPEED_CLASSES: SpeedClass[] = [
-  { id: "50", label: "50cc", mult: 1 },
   { id: "100", label: "100cc", mult: 1.4 },
   { id: "150", label: "150cc", mult: 1.75 },
+  { id: "200", label: "200cc", mult: 2.1 },
 ];
 
 export function speedClassById(id: string): SpeedClass {
@@ -97,6 +101,14 @@ export function recordCupResult(
 
 const STORAGE_KEY = "vroom.progress.v1";
 
+/** Classes that no longer exist fold onto the class that replaced them, so a
+ *  save from the 50cc days keeps every unlock it earned down there. */
+const RETIRED_CLASSES: Record<string, string> = { "50": "100" };
+
+function retireClass(id: string): string {
+  return RETIRED_CLASSES[id] ?? id;
+}
+
 /**
  * Parse a saved blob. Older shapes stored per-track placements (and before
  * that a finished-track list); both migrate onto the cup containing the
@@ -112,18 +124,20 @@ export function parseProgress(raw: string): Progress {
 
   const cupOfTrack = (trackId: string): string | null =>
     CUPS.find((c) => c.trackIds.includes(trackId))?.id ?? null;
+  const record = (classId: string, cupId: string, placement: number) => {
+    const byCup = (progress.cups[retireClass(classId)] ??= {});
+    byCup[cupId] = Math.min(byCup[cupId] ?? Infinity, placement);
+  };
   const migrate = (classId: string, trackId: string, placement: number) => {
     const cupId = cupOfTrack(trackId);
-    if (!cupId) return;
-    const byCup = (progress.cups[classId] ??= {});
-    byCup[cupId] = Math.min(byCup[cupId] ?? Infinity, placement);
+    if (cupId) record(classId, cupId, placement);
   };
 
   if (saved.cups && typeof saved.cups === "object") {
     for (const [cls, byCup] of Object.entries(saved.cups)) {
       if (!byCup || typeof byCup !== "object") continue;
       for (const [cupId, placement] of Object.entries(byCup)) {
-        if (typeof placement === "number") (progress.cups[cls] ??= {})[cupId] = placement;
+        if (typeof placement === "number") record(cls, cupId, placement);
       }
     }
   } else if (saved.placements && typeof saved.placements === "object") {
@@ -142,7 +156,7 @@ export function parseProgress(raw: string): Progress {
     }
   }
 
-  if (typeof saved.lastClass === "string") progress.lastClass = saved.lastClass;
+  if (typeof saved.lastClass === "string") progress.lastClass = retireClass(saved.lastClass);
   if (typeof saved.lastCup === "string") progress.lastCup = saved.lastCup;
   if (typeof saved.lastVehicle === "string") progress.lastVehicle = saved.lastVehicle;
   if (saved.raceMode === "solo" || saved.raceMode === "group") progress.raceMode = saved.raceMode;
