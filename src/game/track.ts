@@ -295,7 +295,11 @@ export function fenceCar(
 // stretch and a marshal picks the car up and puts it back on the road. The
 // anchor is where you *left* the road, not where you ended up, so a long
 // excursion across the infield can never gain ground — it only costs the time
-// spent out there plus the stall on the way back.
+// spent out there plus the tow back.
+//
+// The tow is the penalty, not a pause on top of it: the car is dragged from
+// where it went out to the anchor over rescueTowSeconds, engine off, and it's
+// driveable again the instant it lands.
 
 export interface SafeSpot {
   x: number;
@@ -328,6 +332,55 @@ export function rescueCar(car: Placeable, spot: SafeSpot): void {
   car.heading = spot.heading;
   car.vx = 0;
   car.vy = 0;
+}
+
+/** A car under tow: where the cable picked it up, where it's being put down,
+ *  and how far through the drag it is. */
+export interface RescueTow {
+  from: SafeSpot;
+  to: SafeSpot;
+  elapsed: number;
+  duration: number;
+}
+
+/** Hook a stranded car up: it stops dead and the drag home begins. */
+export function createTow(car: Placeable, spot: SafeSpot, seconds: number): RescueTow {
+  car.vx = 0;
+  car.vy = 0;
+  return {
+    from: { x: car.x, y: car.y, heading: car.heading },
+    to: spot,
+    elapsed: 0,
+    duration: Math.max(0.001, seconds),
+  };
+}
+
+/**
+ * Advance the drag by `dt` and write the car's new pose. Returns true on the
+ * step the tow finishes, with the car set down exactly on the anchor.
+ *
+ * Eased at both ends so the cable reads as taking up slack and then setting the
+ * car down, rather than sliding it at a constant machine speed. The car stays
+ * stopped throughout — the tow *is* the time penalty, so there's nothing to
+ * gain by being dragged and nothing to steer while it happens.
+ */
+export function stepTow(tow: RescueTow, car: Placeable, dt: number): boolean {
+  tow.elapsed += dt;
+  const u = Math.min(1, tow.elapsed / tow.duration);
+  const e = u * u * (3 - 2 * u); // smoothstep
+  car.x = tow.from.x + (tow.to.x - tow.from.x) * e;
+  car.y = tow.from.y + (tow.to.y - tow.from.y) * e;
+  // Shortest way round, so a car that spun backwards doesn't unwind the long way.
+  car.heading = normalizeAngle(tow.from.heading + normalizeAngle(tow.to.heading - tow.from.heading) * e);
+  car.vx = 0;
+  car.vy = 0;
+  return u >= 1;
+}
+
+function normalizeAngle(a: number): number {
+  while (a > Math.PI) a -= 2 * Math.PI;
+  while (a < -Math.PI) a += 2 * Math.PI;
+  return a;
 }
 
 // Lap detection: accumulate signed progress deltas; a full +1.0 of net travel

@@ -48,7 +48,7 @@ const SLIDERS: SliderSpec[] = [
   { key: "boostGuideMaxDeg", label: "boost guide angle°", min: 15, max: 90, step: 5 },
   { key: "fenceMarginPx", label: "fence runoff px", min: 12, max: 120, step: 2 },
   { key: "rescueMarginPx", label: "rescue distance px", min: 40, max: 320, step: 10 },
-  { key: "rescueStallSeconds", label: "rescue stall s", min: 0, max: 3, step: 0.1 },
+  { key: "rescueTowSeconds", label: "rescue tow s", min: 0.2, max: 3, step: 0.1 },
   { key: "draftRangePx", label: "slipstream range px", min: 25, max: 120, step: 5 },
   { key: "draftChargeSeconds", label: "slipstream charge s", min: 0.3, max: 3, step: 0.1 },
   { key: "draftBoostSeconds", label: "slipstream boost s", min: 0.2, max: 2, step: 0.1 },

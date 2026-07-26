@@ -33,7 +33,7 @@ export interface Tuning {
   draftBoostSeconds: number; // how long a slipstream boost lasts
   fenceMarginPx: number; // grass runoff between road edge and the fence (where there is one)
   rescueMarginPx: number; // extra grass past the fence line you may roam on unfenced stretches before a marshal collects you
-  rescueStallSeconds: number; // how long you sit stopped after being put back on track — the price of the excursion
+  rescueTowSeconds: number; // how long the marshals take to drag you back to the road — the price of the excursion
   cameraLerp: number; // 1/s camera chase
   lookAhead: number; // seconds of velocity the camera leads by
   desktopZoomWorldHeight: number; // wide-screen zoom: world-px kept visible vertically so you still see ahead (phones stay width-driven)
@@ -81,7 +81,7 @@ export const DEFAULT_TUNING: Tuning = {
   draftBoostSeconds: 0.8,
   fenceMarginPx: 56,
   rescueMarginPx: 150,
-  rescueStallSeconds: 1.1,
+  rescueTowSeconds: 1.1,
   cameraLerp: 5,
   lookAhead: 0.35,
   desktopZoomWorldHeight: 190,

@@ -73,12 +73,14 @@ import {
   createLapTracker,
   createTrack,
   createTrackQuery,
+  createTow,
   fenceCar,
   outOfBounds,
-  rescueCar,
   safeSpotAt,
+  stepTow,
   updateLap,
   type LapTracker,
+  type RescueTow,
   type SafeSpot,
   type Track,
   type TrackQuery,
@@ -102,7 +104,7 @@ const WALL_BOUNCE = -0.3;
 const COUNTDOWN_BEAT_MS = 800; // 3 · 2 · 1 · go
 const GO_FLASH_MS = 650;
 const FINISH_HOLD_MS = 2200; // the celebration lap-out: confetti and a fanfare before results pop
-const STOPPED_INPUT = { steer: 0, throttle: 0, brake: 0 }; // hands off the car (used during a rescue stall)
+const STOPPED_INPUT = { steer: 0, throttle: 0, brake: 0 }; // hands off the car (used while under tow)
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const tuning = loadTuning();
@@ -153,7 +155,7 @@ let boostTimer = 0; // seconds of player speed boost remaining (rocket start, sl
 let itemBoostGuide = 0; // steering-assist strength of the player's active item boost (mega guides, plain turbo is 0)
 let throttleHeldSince: number | null = null; // when the player committed to throttle pre-green
 let lastSafe: SafeSpot | null = null; // where the marshals put you back if you sail off
-let rescueStall = 0; // seconds of "engine off" after a rescue
+let tow: RescueTow | null = null; // the marshals dragging you home; null = driving
 let playerDraft = createDraft();
 let playerDriftBoost = createDriftBoost(); // slide long enough and the exit pays
 let playerRacer = createItemRacer(car); // the player's item-system view (spin/boost/held)
@@ -226,7 +228,7 @@ function startCalibration(): void {
   minimap.setTrack(track);
   car = createCarState(track.start.x, track.start.y, track.startHeading);
   lastSafe = { x: track.start.x, y: track.start.y, heading: track.startHeading };
-  rescueStall = 0;
+  tow = null;
   opponents = [];
   cal = createCalibration(tuning);
   calVariant = "a";
@@ -295,7 +297,7 @@ function restartRace(): void {
   itemBoostGuide = 0;
   throttleHeldSince = null;
   lastSafe = { x: slot.x, y: slot.y, heading: track.startHeading };
-  rescueStall = 0;
+  tow = null;
   playerDraft = createDraft();
   playerDriftBoost = createDriftBoost();
   playerRacer = createItemRacer(car);
@@ -527,13 +529,11 @@ function loop(now: number): void {
         stepTuning = boostTuning(raceTuning);
       }
       let stepInput = carInput;
-      if (rescueStall > 0) {
-        // Set back down by the marshals: engine off, wheels straight, and the
-        // car pinned still for a beat. That stillness *is* the time penalty.
-        rescueStall = Math.max(0, rescueStall - PHYSICS_DT);
+      if (tow) {
+        // Under tow: engine off, hands off, and the car dragged back to where
+        // it left the road. Watching the marshals reel you in *is* the time
+        // penalty — the clock runs the whole way.
         stepInput = STOPPED_INPUT;
-        car.vx = 0;
-        car.vy = 0;
       } else if (playerRacer.spin > 0) {
         stepInput = SPIN_INPUT;
         spinCar(car, PHYSICS_DT);
@@ -574,7 +574,8 @@ function loop(now: number): void {
           true,
           { distance: raceDistance(lapTracker), car },
           corridorPx(),
-          rescuePx()
+          rescuePx(),
+          tuning.rescueTowSeconds
         );
         separateCars([car, ...opponents.map((o) => o.car)]);
         const drafting = opponents.some((o) =>
@@ -587,9 +588,15 @@ function loop(now: number): void {
         }
         stepItemWorld();
       }
-      applyWalls();
-      fenceCar(car, query, corridorPx());
-      updateRescue();
+      if (tow) {
+        // The tow overrides physics outright: it writes the pose each step and
+        // the fence has no say over a car on a cable.
+        if (stepTow(tow, car, PHYSICS_DT)) tow = null;
+      } else {
+        applyWalls();
+        fenceCar(car, query, corridorPx());
+        updateRescue();
+      }
       if (!racing) continue;
       recordGhostSample(ghostRec, now - lapStart, car);
 
@@ -788,15 +795,14 @@ function rescuePx(): number {
  * you left the road, facing the right way, stopped for a beat.
  */
 function updateRescue(): void {
-  if (!query || rescueStall > 0) return;
+  if (!query || tow) return;
   if (outOfBounds(car, query, rescuePx())) {
     const spot = lastSafe ?? safeSpotAt(car.x, car.y, query);
     if (!spot) return;
     if (track?.voidRunoff) scene?.fallBurst(car);
-    rescueCar(car, spot);
+    tow = createTow(car, spot, tuning.rescueTowSeconds);
     car.steer = 0;
     car.drifting = false;
-    rescueStall = tuning.rescueStallSeconds;
     boostTimer = 0;
     playerDriftBoost = createDriftBoost();
     hud.toast(track?.voidRunoff ? "off the edge!" : "back on track");

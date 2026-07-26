@@ -3,10 +3,12 @@ import {
   createLapTracker,
   createTrack,
   createTrackQuery,
+  createTow,
   fenceCar,
   outOfBounds,
   rescueCar,
   safeSpotAt,
+  stepTow,
   updateLap,
 } from "./track";
 import { cupById } from "./cups";
@@ -124,6 +126,38 @@ describe("open runoff and rescue", () => {
     const limit = corridor + 150;
     expect(outOfBounds(near, query, limit)).toBe(false);
     expect(outOfBounds(far, query, limit)).toBe(true);
+  });
+
+  it("drags the car home over the tow, instead of teleporting and pausing", () => {
+    const left = track.samples[openIndex]!;
+    const spot = safeSpotAt(left.x, left.y, query)!;
+    const out = offRoad(openIndex, corridor + 300);
+    const car = { x: out.x, y: out.y, heading: spot.heading + 1, vx: 300, vy: -120 };
+    const tow = createTow(car, spot, 1);
+    expect(car).toMatchObject({ x: out.x, y: out.y, vx: 0, vy: 0 }); // hooked up, not moved
+
+    // halfway through, it's somewhere between the two — under way, not arrived
+    expect(stepTow(tow, car, 0.5)).toBe(false);
+    const toStart = Math.hypot(car.x - out.x, car.y - out.y);
+    const toEnd = Math.hypot(car.x - spot.x, car.y - spot.y);
+    expect(toStart).toBeGreaterThan(1);
+    expect(toEnd).toBeGreaterThan(1);
+    expect(car.vx).toBe(0);
+    expect(car.vy).toBe(0);
+
+    expect(stepTow(tow, car, 0.5)).toBe(true);
+    expect(car.x).toBeCloseTo(spot.x, 5);
+    expect(car.y).toBeCloseTo(spot.y, 5);
+    expect(car.heading).toBeCloseTo(spot.heading, 5);
+  });
+
+  it("tows the short way round when the car ended up facing backwards", () => {
+    const spot = { x: 0, y: 0, heading: -3 };
+    const car = { x: 0, y: 0, heading: 3, vx: 0, vy: 0 };
+    const tow = createTow(car, spot, 1);
+    stepTow(tow, car, 0.5);
+    // 3 → -3 the short way passes through ±π, never through 0
+    expect(Math.abs(car.heading)).toBeGreaterThan(3);
   });
 
   it("puts the car back where it left the road, not where it ended up", () => {

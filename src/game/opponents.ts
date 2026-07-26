@@ -11,12 +11,14 @@ import { createCarState, stepCar, type CarInput, type CarState } from "./physics
 import { applySpeedClass, RACE_LAPS, type SpeedClass } from "./progression";
 import {
   createLapTracker,
+  createTow,
   fenceCar,
   outOfBounds,
-  rescueCar,
   safeSpotAt,
+  stepTow,
   updateLap,
   type LapTracker,
+  type RescueTow,
   type SafeSpot,
   type Track,
   type TrackQuery,
@@ -76,6 +78,8 @@ export interface Opponent extends ItemRacer {
   finishOrder: number | null;
   /** Last spot on the road this bot was safely on, for an out-of-bounds rescue. */
   lastSafe: SafeSpot | null;
+  /** Non-null while the marshals are dragging this bot back to the road. */
+  tow: RescueTow | null;
 }
 
 export function gridSlot(track: Track, index: number, columns = 2): { x: number; y: number } {
@@ -165,6 +169,7 @@ export function createOpponents(
       boost: 0,
       finished: false,
       finishOrder: null,
+      tow: null,
       lastSafe: { x: pos.x, y: pos.y, heading: track.startHeading },
     };
   });
@@ -195,10 +200,17 @@ export function stepOpponents(
   live: boolean,
   player: PlayerContext | null = null,
   corridorPx: number | null = null,
-  rescuePx: number | null = null
+  rescuePx: number | null = null,
+  towSeconds = 0
 ): void {
   let finished = opponents.filter((o) => o.finishOrder !== null).length;
   for (const o of opponents) {
+    // Under tow the bot is cargo: no physics, no inputs, no lap progress until
+    // the marshals set it down. Same penalty the player serves.
+    if (o.tow) {
+      if (stepTow(o.tow, o.car, dt)) o.tow = null;
+      continue;
+    }
     const spinning = o.spin > 0;
     const input = !live ? { steer: 0, throttle: 0, brake: 0 } : spinning ? SPIN_INPUT : o.bot(o.car);
     if (spinning) spinCar(o.car, dt);
@@ -240,9 +252,11 @@ export function stepOpponents(
     if (rescuePx !== null && outOfBounds(o.car, query, rescuePx)) {
       const spot = o.lastSafe ?? safeSpotAt(o.car.x, o.car.y, query);
       if (spot) {
-        rescueCar(o.car, spot);
+        o.tow = createTow(o.car, spot, towSeconds);
         o.car.steer = 0;
         o.car.drifting = false;
+        o.boostTimer = 0;
+        o.driftBoost = createDriftBoost();
       }
     } else if (corridorPx !== null && query.distanceToRoad(o.car.x, o.car.y) <= corridorPx) {
       o.lastSafe = safeSpotAt(o.car.x, o.car.y, query) ?? o.lastSafe;
