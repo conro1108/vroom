@@ -48,6 +48,9 @@ const COLORS = {
 // out of the same box of crayons as the rest of the game.
 const CONFETTI = ["#e0532f", "#ffd23f", "#58b558", "#f9f1e0", "#5ab6e0"];
 
+// Sparks thrown off a car dropping off the edge of a void track.
+const FALL_SPARKS = ["#ffe98a", "#7ff0ff", "#ff8ad4", "#f9f1e0"];
+
 const TARGET_BUFFER_WIDTH = 210;
 
 interface Particle {
@@ -201,6 +204,24 @@ export class Scene {
         vy: 55 + Math.random() * 50,
         life: 1.6 + Math.random() * 0.8,
         color: CONFETTI[Math.floor(Math.random() * CONFETTI.length)]!,
+      });
+    }
+  }
+
+  /**
+   * Going over the edge of a void track: a scatter of sparks that keeps the
+   * car's momentum and spills *downward*, so the moment reads as falling away
+   * from the road rather than crashing on it.
+   */
+  fallBurst(car: CarState): void {
+    for (let i = 0; i < 26; i++) {
+      this.particles.push({
+        x: car.x + (Math.random() - 0.5) * 10,
+        y: car.y + (Math.random() - 0.5) * 10,
+        vx: car.vx * 0.35 + (Math.random() - 0.5) * 40,
+        vy: car.vy * 0.35 + 40 + Math.random() * 70,
+        life: 0.5 + Math.random() * 0.4,
+        color: FALL_SPARKS[Math.floor(Math.random() * FALL_SPARKS.length)]!,
       });
     }
   }

@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { boostTuning, DEFAULT_TUNING } from "./tuning";
+import { boostTuning, DEFAULT_TUNING, slickTuning } from "./tuning";
+
+describe("slickTuning", () => {
+  const s = slickTuning(DEFAULT_TUNING);
+
+  it("cuts grip and the break-point, so the tail lets go sooner and further", () => {
+    const g = DEFAULT_TUNING.slickGrip;
+    expect(g).toBeLessThan(1);
+    expect(s.lateralGrip).toBeCloseTo(DEFAULT_TUNING.lateralGrip * g);
+    expect(s.driftGrip).toBeCloseTo(DEFAULT_TUNING.driftGrip * g);
+    expect(s.driftThreshold).toBeCloseTo(DEFAULT_TUNING.driftThreshold * g);
+  });
+
+  it("leaves the rest of the car alone", () => {
+    expect(s.maxSpeed).toBe(DEFAULT_TUNING.maxSpeed);
+    expect(s.accel).toBe(DEFAULT_TUNING.accel);
+    expect(s.turnRate).toBe(DEFAULT_TUNING.turnRate);
+  });
+});
 
 describe("boostTuning", () => {
   it("scales top speed and accel by boostPower", () => {

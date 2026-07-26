@@ -519,8 +519,16 @@ export const TRACKS: TrackDef[] = [
   },
 
   // --- Rainbow Cup: the endgame. Every layout here is bigger and busier than
-  // anything in the earlier cups — longer laps, tighter road, more direction
-  // changes per lap. They're meant to be a handful at 200cc.
+  // anything in the earlier cups — longer laps, more direction changes, and
+  // they're meant to be a handful at 200cc.
+  //
+  // Up here the deal is different: the road is *wider* than anywhere else and
+  // slick (`slick`), so there's room to slide but the car keeps wanting to
+  // leave — and there's no grass to catch it (`voidRunoff`). Run off in space
+  // and you fall, which costs the same rescue stall a long grass excursion
+  // does, only instantly. Wide + slippery + no runoff is the whole character
+  // of the cup; the radii below shrank to buy the extra road width without
+  // pushing a lap into the world edge.
   {
     // The longest lap in the game: a huge ring rippled by ten quick lobes, so
     // the car is never once pointed straight for long. (A serpentine was the
@@ -529,42 +537,48 @@ export const TRACKS: TrackDef[] = [
     // apart — see the note on serpentine().)
     id: "comet",
     name: "Comet Tail",
-    roadWidth: 64,
+    roadWidth: 92,
+    slick: true,
+    voidRunoff: true,
     worldWidth: 2600,
     worldHeight: 2000,
-    points: ring(1300, 1000, 1100, 780, 30, 10, 0.14),
+    points: ring(1300, 1000, 1000, 690, 30, 10, 0.14),
   },
   {
     // Eight spikes off a collapsed star: the Clover Knot with the dial past
     // where the dial goes.
     id: "pulsar",
     name: "Pulsar Spin",
-    roadWidth: 58,
+    roadWidth: 84,
+    slick: true,
+    voidRunoff: true,
     worldWidth: 2000,
     worldHeight: 2000,
-    points: gear(1000, 1000, 800, 520, 8),
+    points: gear(1000, 1000, 780, 540, 8),
   },
   {
     // Twelve alternating hairpins around one huge ellipse — no two corners the
     // same way up, and never a moment to breathe.
     id: "nebula",
     name: "Nebula Drift",
-    roadWidth: 64,
+    roadWidth: 92,
+    slick: true,
+    voidRunoff: true,
     worldWidth: 2500,
     worldHeight: 1600,
-    points: circuit(1250, 800, 1080, 620, [
-      [0, 0.92],
-      [30, 0.48],
-      [60, 0.92],
-      [90, 0.48],
-      [120, 0.92],
-      [150, 0.48],
-      [180, 0.92],
-      [210, 0.48],
-      [240, 0.92],
-      [270, 0.48],
-      [300, 0.92],
-      [330, 0.48],
+    points: circuit(1250, 800, 1090, 640, [
+      [0, 0.9],
+      [30, 0.53],
+      [60, 0.9],
+      [90, 0.53],
+      [120, 0.9],
+      [150, 0.53],
+      [180, 0.9],
+      [210, 0.53],
+      [240, 0.9],
+      [270, 0.53],
+      [300, 0.9],
+      [330, 0.53],
     ]),
   },
   {
@@ -572,7 +586,9 @@ export const TRACKS: TrackDef[] = [
     // you straight into a hairpin, so learning it is the whole point.
     id: "rainbow",
     name: "Rainbow Run",
-    roadWidth: 60,
+    roadWidth: 88,
+    slick: true,
+    voidRunoff: true,
     worldWidth: 2800,
     worldHeight: 2000,
     points: circuit(1400, 1000, 1230, 850, [

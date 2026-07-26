@@ -84,7 +84,7 @@ import {
   type TrackQuery,
 } from "./game/track";
 import { trackDefById, TRACKS } from "./game/tracks";
-import { boostTuning, loadTuning, saveTuning } from "./game/tuning";
+import { boostTuning, loadTuning, saveTuning, slickTuning } from "./game/tuning";
 import { CUSTOM_VEHICLE_ID, saveCustomVehicle, vehicleById } from "./game/vehicles";
 import { Scene, type RacerPose } from "./render/scene";
 import { themeById } from "./render/themes";
@@ -483,9 +483,11 @@ function loop(now: number): void {
 
   // The player's feel values scaled up to the selected speed class — or the
   // active calibration variant — computed per frame so dev-panel edits keep
-  // applying live mid-race.
-  const raceTuning =
+  // applying live mid-race. A slick track (the cosmos cup) then takes the grip
+  // out from under whatever car you brought.
+  const classTuning =
     mode === "calibrating" && cal ? variantTuning(cal, tuning, calVariant) : applySpeedClass(tuning, cls);
+  const raceTuning = track.slick ? slickTuning(classTuning) : classTuning;
   let engineThrottle = 0; // this frame's throttle, fed to the engine synth
 
   if (mode === "countdown") {
@@ -759,14 +761,24 @@ window.addEventListener("keydown", (e) => {
   if (e.key === " " || e.key.toLowerCase() === "e" || e.key === "Shift") useHeldItem();
 });
 
-/** How far from the centerline the fence sits on the current track. */
+/**
+ * How far from the centerline the fence sits on the current track — and, off a
+ * void track's edge, how far out a car still counts as "safely on the road" for
+ * the rescue anchor. There is no corridor out there: a couple of wheels over
+ * the lip is all the road you get.
+ */
 function corridorPx(): number {
-  return (track ? track.roadWidth / 2 : 0) + tuning.fenceMarginPx;
+  const half = track ? track.roadWidth / 2 : 0;
+  return track?.voidRunoff ? half : half + tuning.fenceMarginPx;
 }
 
-/** How far you may roam off an unfenced stretch before a marshal collects you. */
+/**
+ * How far off the road you get before a marshal collects you. On grass that's
+ * a long excursion past the fence line; over the void it's the width of your
+ * overhang — leave the road and you fall.
+ */
 function rescuePx(): number {
-  return corridorPx() + tuning.rescueMarginPx;
+  return corridorPx() + (track?.voidRunoff ? tuning.voidMarginPx : tuning.rescueMarginPx);
 }
 
 /**
@@ -780,13 +792,14 @@ function updateRescue(): void {
   if (outOfBounds(car, query, rescuePx())) {
     const spot = lastSafe ?? safeSpotAt(car.x, car.y, query);
     if (!spot) return;
+    if (track?.voidRunoff) scene?.fallBurst(car);
     rescueCar(car, spot);
     car.steer = 0;
     car.drifting = false;
     rescueStall = tuning.rescueStallSeconds;
     boostTimer = 0;
     playerDriftBoost = createDriftBoost();
-    hud.toast("back on track");
+    hud.toast(track?.voidRunoff ? "off the edge!" : "back on track");
     audio.rescue();
   } else if (query.distanceToRoad(car.x, car.y) <= corridorPx()) {
     lastSafe = safeSpotAt(car.x, car.y, query) ?? lastSafe;

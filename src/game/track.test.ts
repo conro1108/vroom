@@ -9,7 +9,8 @@ import {
   safeSpotAt,
   updateLap,
 } from "./track";
-import { TRACKS } from "./tracks";
+import { cupById } from "./cups";
+import { trackDefById, TRACKS } from "./tracks";
 
 const track = createTrack(TRACKS[0]!);
 const query = createTrackQuery(track);
@@ -137,6 +138,44 @@ describe("open runoff and rescue", () => {
     expect(car.vy).toBe(0);
     const tan = query.tangentAt(left.x, left.y)!;
     expect(car.heading).toBeCloseTo(Math.atan2(tan.y, tan.x), 5);
+  });
+});
+
+describe("void tracks", () => {
+  const cosmos = cupById("rainbow").trackIds.map((id) => trackDefById(id));
+
+  it("the whole cosmos cup is slick with nothing to run off onto", () => {
+    for (const def of cosmos) {
+      expect(def.slick, def.id).toBe(true);
+      expect(def.voidRunoff, def.id).toBe(true);
+    }
+  });
+
+  it("has no fence anywhere — leaving the road means falling", () => {
+    for (const def of cosmos) {
+      const t = createTrack(def);
+      expect(t.fenced.some(Boolean), def.id).toBe(false);
+      // and a car well off the road is never bounced back
+      const a = t.samples[0]!;
+      const b = t.samples[1]!;
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const out = t.roadWidth;
+      const car = {
+        x: a.x - ((b.y - a.y) / len) * out,
+        y: a.y + ((b.x - a.x) / len) * out,
+        vx: 60,
+        vy: 60,
+      };
+      const before = { ...car };
+      fenceCar(car, createTrackQuery(t), t.roadWidth / 2);
+      expect(car, def.id).toEqual(before);
+    }
+  });
+
+  it("gets wide roads — falling off is the hazard, not a narrow ribbon", () => {
+    const widths = TRACKS.map((t) => t.roadWidth).sort((a, b) => a - b);
+    const median = widths[Math.floor(widths.length / 2)]!;
+    for (const def of cosmos) expect(def.roadWidth, def.id).toBeGreaterThanOrEqual(median);
   });
 });
 

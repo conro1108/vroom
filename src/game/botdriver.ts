@@ -13,7 +13,7 @@ import {
   type TrackDef,
   type TrackQuery,
 } from "./track";
-import { boostTuning, type Tuning } from "./tuning";
+import { boostTuning, slickTuning, type Tuning } from "./tuning";
 
 export interface LapResult {
   /** Simulated lap time in ms, or null if the bot never completed the lap. */
@@ -188,10 +188,14 @@ export function createBot(
  */
 export function simulateLap(
   def: TrackDef,
-  tuning: Tuning,
+  baseTuning: Tuning,
   laps = 2,
   driver: BotPersonality = CLEAN_DRIVER
 ): LapResult {
+  // A slick track is a different surface, so the sim has to drive it as one —
+  // otherwise the balance numbers for the cosmos tracks measure a road nobody
+  // races on.
+  const tuning = def.slick ? slickTuning(baseTuning) : baseTuning;
   const track = createTrack(def);
   const query = createTrackQuery(track);
   const bot = createBot(track, query, tuning, driver);
@@ -257,12 +261,17 @@ function botInput(
   const steer = Math.max(-1, Math.min(1, aimError / 0.45));
   // A sharp bend ahead (or being pointed badly wrong) means lift or brake.
   const trouble = Math.max(Math.abs(aimError), Math.abs(farError) * 0.8);
+  // On a slick track every corner arrives sooner than the grip can take it, so
+  // the bot lifts and brakes proportionally earlier — the same adjustment a
+  // player makes. Without this a bot drives the ice exactly like tarmac and
+  // spends a third of the lap in the scenery.
+  const caution = track.slick ? tuning.slickGrip : 1;
   let throttle = 1;
   let brake = 0;
-  if (trouble > 1.1 && speed > tuning.maxSpeed * 0.45) {
+  if (trouble > 1.1 * caution && speed > tuning.maxSpeed * 0.45 * caution) {
     throttle = 0;
     brake = 1;
-  } else if (trouble > 0.6 && speed > tuning.maxSpeed * 0.7) {
+  } else if (trouble > 0.6 * caution && speed > tuning.maxSpeed * 0.7 * caution) {
     throttle = 0;
   }
   return { steer, throttle, brake };

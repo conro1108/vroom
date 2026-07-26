@@ -21,7 +21,7 @@ import {
   type Track,
   type TrackQuery,
 } from "./track";
-import { boostTuning, type Tuning } from "./tuning";
+import { boostTuning, slickTuning, type Tuning } from "./tuning";
 import { vehicleById, VEHICLES } from "./vehicles";
 
 export const OPPONENT_COUNT = 3; // default field; tuning.opponentCount overrides
@@ -128,7 +128,11 @@ export function createOpponents(
 ): Opponent[] {
   return roster.map(({ vehicleId, skill }, i) => {
     const vehicle = vehicleById(vehicleId);
-    const tuning = applySpeedClass({ ...baseTuning, ...vehicle.values }, cls);
+    // The slick surface goes on last, over the vehicle's own handling: bots
+    // slide on a cosmos track exactly as much as the player does, and their
+    // braking points (createBot reads this tuning) move with it.
+    const handling = { ...baseTuning, ...vehicle.values };
+    const tuning = applySpeedClass(track.slick ? slickTuning(handling) : handling, cls);
     tuning.maxSpeed *= skill;
     tuning.accel *= skill;
     // Slower bots are also sloppier drivers, so the back of the field looks
