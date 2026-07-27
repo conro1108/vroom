@@ -34,7 +34,6 @@ const SLIDERS: SliderSpec[] = [
   { key: "driftTurnBonus", label: "drift turn bonus", min: 0, max: 1, step: 0.05 },
   { key: "driftChargeSeconds", label: "drift charge s", min: 0.2, max: 3, step: 0.1 },
   { key: "driftBoostSeconds", label: "drift boost s", min: 0.2, max: 2, step: 0.1 },
-  { key: "slickGrip", label: "slick track grip ×", min: 0.3, max: 1, step: 0.02 },
   { key: "voidMarginPx", label: "void overhang px", min: 0, max: 80, step: 2 },
   { key: "offroadMaxSpeed", label: "offroad max speed", min: 0.2, max: 1, step: 0.05 },
   { key: "offroadFriction", label: "offroad drag ×", min: 1, max: 8, step: 0.25 },

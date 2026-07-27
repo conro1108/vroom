@@ -86,7 +86,7 @@ import {
   type TrackQuery,
 } from "./game/track";
 import { trackDefById, TRACKS } from "./game/tracks";
-import { boostTuning, loadTuning, saveTuning, slickTuning } from "./game/tuning";
+import { boostTuning, loadTuning, saveTuning } from "./game/tuning";
 import { CUSTOM_VEHICLE_ID, saveCustomVehicle, vehicleById } from "./game/vehicles";
 import { Scene, type RacerPose } from "./render/scene";
 import { themeById } from "./render/themes";
@@ -485,11 +485,9 @@ function loop(now: number): void {
 
   // The player's feel values scaled up to the selected speed class — or the
   // active calibration variant — computed per frame so dev-panel edits keep
-  // applying live mid-race. A slick track (the cosmos cup) then takes the grip
-  // out from under whatever car you brought.
-  const classTuning =
+  // applying live mid-race.
+  const raceTuning =
     mode === "calibrating" && cal ? variantTuning(cal, tuning, calVariant) : applySpeedClass(tuning, cls);
-  const raceTuning = track.slick ? slickTuning(classTuning) : classTuning;
   let engineThrottle = 0; // this frame's throttle, fed to the engine synth
 
   if (mode === "countdown") {

@@ -522,13 +522,12 @@ export const TRACKS: TrackDef[] = [
   // anything in the earlier cups — longer laps, more direction changes, and
   // they're meant to be a handful at 200cc.
   //
-  // Up here the deal is different: the road is *wider* than anywhere else and
-  // slick (`slick`), so there's room to slide but the car keeps wanting to
-  // leave — and there's no grass to catch it (`voidRunoff`). Run off in space
-  // and you fall, which costs the same rescue stall a long grass excursion
-  // does, only instantly. Wide + slippery + no runoff is the whole character
-  // of the cup; the radii below shrank to buy the extra road width without
-  // pushing a lap into the world edge.
+  // Up here the deal is different: the road is *wider* than anywhere else, and
+  // there's no grass to catch it (`voidRunoff`). Run off in space and you fall,
+  // which costs the same rescue stall a long grass excursion does, only
+  // instantly. Wide + no runoff is the whole character of the cup; the radii
+  // below shrank to buy the extra road width without pushing a lap into the
+  // world edge.
   {
     // The longest lap in the game: a huge ring rippled by ten quick lobes, so
     // the car is never once pointed straight for long. (A serpentine was the
@@ -538,7 +537,6 @@ export const TRACKS: TrackDef[] = [
     id: "comet",
     name: "Comet Tail",
     roadWidth: 92,
-    slick: true,
     voidRunoff: true,
     worldWidth: 2600,
     worldHeight: 2000,
@@ -550,7 +548,6 @@ export const TRACKS: TrackDef[] = [
     id: "pulsar",
     name: "Pulsar Spin",
     roadWidth: 84,
-    slick: true,
     voidRunoff: true,
     worldWidth: 2000,
     worldHeight: 2000,
@@ -562,7 +559,6 @@ export const TRACKS: TrackDef[] = [
     id: "nebula",
     name: "Nebula Drift",
     roadWidth: 92,
-    slick: true,
     voidRunoff: true,
     worldWidth: 2500,
     worldHeight: 1600,
@@ -587,7 +583,6 @@ export const TRACKS: TrackDef[] = [
     id: "rainbow",
     name: "Rainbow Run",
     roadWidth: 88,
-    slick: true,
     voidRunoff: true,
     worldWidth: 2800,
     worldHeight: 2000,

@@ -178,9 +178,8 @@ describe("open runoff and rescue", () => {
 describe("void tracks", () => {
   const cosmos = cupById("rainbow").trackIds.map((id) => trackDefById(id));
 
-  it("the whole cosmos cup is slick with nothing to run off onto", () => {
+  it("the whole cosmos cup has nothing to run off onto", () => {
     for (const def of cosmos) {
-      expect(def.slick, def.id).toBe(true);
       expect(def.voidRunoff, def.id).toBe(true);
     }
   });

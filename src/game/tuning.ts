@@ -15,7 +15,6 @@ export interface Tuning {
   driftTurnBonus: number; // extra turn rate (fraction) while sliding — a drift rotates tighter than grip can
   driftChargeSeconds: number; // continuous sliding needed to bank a drift boost
   driftBoostSeconds: number; // how long the kick lasts when a banked drift cashes out
-  slickGrip: number; // 0..1 grip multiplier on a slick track (cosmos) — lower = slides sooner and further
   voidMarginPx: number; // how far past the road edge you can hang over the void before you fall off
   offroadMaxSpeed: number; // fraction of maxSpeed on grass
   offroadFriction: number; // drag multiplier on grass
@@ -63,7 +62,6 @@ export const DEFAULT_TUNING: Tuning = {
   driftTurnBonus: 0.15,
   driftChargeSeconds: 0.8,
   driftBoostSeconds: 0.6,
-  slickGrip: 0.84,
   voidMarginPx: 18,
   offroadMaxSpeed: 0.55,
   offroadFriction: 1.6,
@@ -166,19 +164,7 @@ export function boostTuning(t: Tuning): Tuning {
   };
 }
 
-/**
- * The tuning a car steps with on a slick track: less lateral grip, and an
- * earlier break-point so the tail lets go sooner. Whatever car you brought
- * keeps its personality — it just does it on ice.
- */
-export function slickTuning(t: Tuning): Tuning {
-  return {
-    ...t,
-    lateralGrip: t.lateralGrip * t.slickGrip,
-    driftGrip: t.driftGrip * t.slickGrip,
-    driftThreshold: t.driftThreshold * t.slickGrip,
-  };
-}
+
 
 export function saveTuning(tuning: Tuning): void {
   try {

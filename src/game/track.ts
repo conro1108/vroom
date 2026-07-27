@@ -21,8 +21,6 @@ export interface TrackDef {
   worldWidth: number;
   worldHeight: number;
   unlock?: UnlockRule; // absent = open from the start
-  /** Low-grip surface: the car steps with slickTuning here (see game/tuning.ts). */
-  slick?: boolean;
   /** There is no grass — the road is a ribbon over nothing. Nothing is fenced,
    *  and leaving the road at all drops you off the edge into a rescue. */
   voidRunoff?: boolean;
@@ -39,7 +37,6 @@ export interface Track {
   worldHeight: number;
   start: TrackPoint;
   startHeading: number;
-  slick: boolean;
   voidRunoff: boolean;
 }
 
@@ -85,7 +82,6 @@ export function createTrack(def: TrackDef): Track {
     worldHeight: def.worldHeight,
     start,
     startHeading: Math.atan2(next.y - start.y, next.x - start.x),
-    slick: def.slick ?? false,
     voidRunoff: def.voidRunoff ?? false,
   };
 }
