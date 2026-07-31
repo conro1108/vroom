@@ -25,8 +25,10 @@ export interface Tuning {
   startBoostWindowMs: number; // committing to throttle within this window before green = rocket start
   boostPower: number; // maxSpeed/accel multiplier while a boost is live
   boostSeconds: number; // how long a rocket start's boost lasts
-  boostGuide: number; // 0..1 steering assist a full-guide boost applies — eases you onto the racing line so the boost is easier to keep on-track; each tier scales this (turbo half, mega full)
+  boostGuide: number; // 0..1 steering assist a full-guide boost applies — eases you onto the racing line so the boost is easier to keep on-track; each item tier scales this (plain turbo half, mega and hyper full)
   boostGuideMaxDeg: number; // heading error (deg) at which the boost assist saturates
+  rocketSpeed: number; // straight shot speed, as a multiple of the class top speed (so a shot always outruns the cars)
+  missileSpeed: number; // seeker (missile/crown) speed, same units — a touch slower so its curve reads
   draftRangePx: number; // how close behind a car the slipstream reaches
   draftChargeSeconds: number; // continuous drafting needed to earn a boost
   draftBoostSeconds: number; // how long a slipstream boost lasts
@@ -74,6 +76,8 @@ export const DEFAULT_TUNING: Tuning = {
   boostSeconds: 1.2,
   boostGuide: 0.5,
   boostGuideMaxDeg: 40,
+  rocketSpeed: 2.1,
+  missileSpeed: 1.9,
   draftRangePx: 55,
   draftChargeSeconds: 1.0,
   draftBoostSeconds: 0.8,
@@ -154,11 +158,16 @@ export function loadTuning(): Tuning {
 // and — crucially — most of the grass penalty lifted so a boost blows you over
 // the grass instead of slamming into it. boostOffroad lerps the offroad levers
 // back toward their road values (1 = grass drives exactly like road).
-export function boostTuning(t: Tuning): Tuning {
+//
+// `tier` scales the boost's *excess* over 1×, so the ordinary kick (a rocket
+// start, a drift, a slipstream) is tier 1 and the upper item-boost tiers hit
+// proportionally harder without anyone having to restate boostPower.
+export function boostTuning(t: Tuning, tier = 1): Tuning {
+  const power = 1 + (t.boostPower - 1) * tier;
   return {
     ...t,
-    maxSpeed: t.maxSpeed * t.boostPower,
-    accel: t.accel * t.boostPower,
+    maxSpeed: t.maxSpeed * power,
+    accel: t.accel * power,
     offroadMaxSpeed: t.offroadMaxSpeed + (1 - t.offroadMaxSpeed) * t.boostOffroad,
     offroadFriction: t.offroadFriction + (1 - t.offroadFriction) * t.boostOffroad,
   };

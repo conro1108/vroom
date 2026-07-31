@@ -45,6 +45,8 @@ const SLIDERS: SliderSpec[] = [
   { key: "boostSeconds", label: "boost seconds", min: 0.3, max: 3, step: 0.1 },
   { key: "boostGuide", label: "boost guide (full)", min: 0, max: 1, step: 0.05 },
   { key: "boostGuideMaxDeg", label: "boost guide angle°", min: 15, max: 90, step: 5 },
+  { key: "rocketSpeed", label: "rocket speed × car", min: 1.2, max: 4, step: 0.1 },
+  { key: "missileSpeed", label: "seeker speed × car", min: 1.2, max: 4, step: 0.1 },
   { key: "fenceMarginPx", label: "fence runoff px", min: 12, max: 120, step: 2 },
   { key: "rescueMarginPx", label: "rescue distance px", min: 40, max: 320, step: 10 },
   { key: "rescueTowSeconds", label: "rescue tow s", min: 0.2, max: 3, step: 0.1 },

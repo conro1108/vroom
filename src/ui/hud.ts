@@ -19,8 +19,11 @@ import { ICONS, mapIconEl } from "./icons";
 // the bubble shows the same pixel art the item is drawn with in-world
 // (turbo has no world sprite, so it borrows the UI bolt icon)
 const ITEM_ICONS: Record<ItemKind, { map: PixelMap; palette: Palette }> = {
+  // the boost ladder shares the bolt, recoloured hotter as the tier climbs, so
+  // the bubble tells you at a glance which one you're holding
   turbo: ICONS.bolt,
-  megaturbo: ICONS.bolt, // same bolt; the payoff is felt (longer, harder guide), not a distinct sprite
+  megaturbo: { map: ICONS.bolt.map, palette: { y: "#ff9f1c", d: "#c85a12" } },
+  hyperturbo: { map: ICONS.bolt.map, palette: { y: "#ff5a3c", d: "#a81d3a" } },
   rocket: { map: ROCKET_MAP, palette: ROCKET_PALETTE },
   missile: { map: HOMING_MAP, palette: HOMING_PALETTE }, // the cute homing seeker
   crown: { map: CROWN_MAP, palette: CROWN_PALETTE }, // the rare one — hunts down 1st place

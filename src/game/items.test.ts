@@ -1,28 +1,33 @@
 import { describe, expect, it } from "vitest";
 import {
+  BOOST_TIERS,
   createItemRacer,
   createItemWorld,
   PICKUP_RADIUS,
   rollItem,
+  shotSpeeds,
   spinCar,
   stepItems,
   useItem,
   type ItemWorld,
 } from "./items";
 import { createCarState } from "./physics";
+import { applySpeedClass, SPEED_CLASSES } from "./progression";
 import { createTrack, createTrackQuery } from "./track";
 import { TRACKS } from "./tracks";
+import { boostTuning, DEFAULT_TUNING } from "./tuning";
 
 const track = createTrack(TRACKS[0]!);
 const query = createTrackQuery(track);
+const raceTuning = applySpeedClass(DEFAULT_TUNING, SPEED_CLASSES[0]!);
 
 function emptyWorld(): ItemWorld {
-  return { boxes: [], oils: [], missiles: [] };
+  return { boxes: [], oils: [], missiles: [], shot: shotSpeeds(raceTuning) };
 }
 
 describe("item world", () => {
   it("places box rows on the road, none on the start line", () => {
-    const world = createItemWorld(track);
+    const world = createItemWorld(track, raceTuning);
     expect(world.boxes.length).toBeGreaterThanOrEqual(6);
     for (const box of world.boxes) {
       expect(query.surfaceAt(box.x, box.y)).toBe("road");
@@ -31,9 +36,9 @@ describe("item world", () => {
   });
 
   it("spreads more box rows for a bigger field, clamped 4..12 rows", () => {
-    const small = createItemWorld(track, 2); // tiny pack still gets the floor
-    const big = createItemWorld(track, 12);
-    const huge = createItemWorld(track, 40); // clamps at the ceiling
+    const small = createItemWorld(track, raceTuning, 2); // tiny pack still gets the floor
+    const big = createItemWorld(track, raceTuning, 12);
+    const huge = createItemWorld(track, raceTuning, 40); // clamps at the ceiling
     expect(small.boxes.length).toBe(4 * 3);
     expect(big.boxes.length).toBe(12 * 3);
     expect(huge.boxes.length).toBe(12 * 3);
@@ -41,7 +46,7 @@ describe("item world", () => {
   });
 
   it("hands a racer an item and respawns the box later", () => {
-    const world = createItemWorld(track, 4, 2);
+    const world = createItemWorld(track, raceTuning, 4, 2);
     const box = world.boxes[0]!;
     const racer = createItemRacer(createCarState(box.x, box.y, 0));
     const events = stepItems(world, [racer], 1 / 120, () => 0.5);
@@ -59,7 +64,7 @@ describe("item world", () => {
   });
 
   it("doesn't hand an item to a racer already holding one", () => {
-    const world = createItemWorld(track, 4, 2);
+    const world = createItemWorld(track, raceTuning, 4, 2);
     const box = world.boxes[0]!;
     const racer = createItemRacer(createCarState(box.x + PICKUP_RADIUS - 1, box.y, 0));
     racer.held = "oil";
@@ -74,7 +79,7 @@ describe("rollItem", () => {
   const rolls = (position: number, fieldSize: number, leaderGap = 0) => {
     const deficit = fieldSize <= 1 ? 0 : (position - 1) / (fieldSize - 1);
     const leading = position === 1;
-    const counts = { turbo: 0, megaturbo: 0, rocket: 0, missile: 0, crown: 0, oil: 0 };
+    const counts = { turbo: 0, megaturbo: 0, hyperturbo: 0, rocket: 0, missile: 0, crown: 0, oil: 0 };
     for (let i = 0; i < 400; i++) {
       counts[rollItem(deficit, leading, leaderGap, () => (i + 0.5) / 400)]++;
     }
@@ -110,12 +115,31 @@ describe("rollItem", () => {
     expect(leader.turbo).toBeLessThan(midfield.turbo / 4);
   });
 
-  it("the mega tier is a comeback: none up front, climbing as you drop back", () => {
+  it("the boost ladder climbs as you drop back", () => {
     const midfield = rolls(2, 4);
     const last = rolls(4, 4);
-    expect(last.megaturbo).toBeGreaterThan(midfield.megaturbo);
-    // and even at the back the common turbo still out-rolls the rare mega
-    expect(last.turbo).toBeGreaterThan(last.megaturbo);
+    // up front the plain turbo is the staple and the top tier never shows
+    expect(midfield.turbo).toBeGreaterThan(midfield.megaturbo);
+    expect(rolls(2, 8).hyperturbo).toBeLessThan(last.hyperturbo / 10);
+    // dropped back, the same roll upgrades: the upper tiers take over the
+    // boost mix from the plain turbo
+    expect(last.megaturbo + last.hyperturbo).toBeGreaterThan(last.turbo);
+    expect(last.hyperturbo).toBeGreaterThan(0);
+  });
+
+  it("boosts are the staple of the box, ordnance the garnish", () => {
+    for (const [pos, size] of [
+      [2, 4],
+      [3, 4],
+      [4, 4],
+    ] as const) {
+      const c = rolls(pos, size);
+      const boosts = c.turbo + c.megaturbo + c.hyperturbo;
+      const shots = c.rocket + c.missile + c.crown;
+      expect(boosts, `P${pos}`).toBeGreaterThan(shots);
+      // and no single attack out-rolls the boost ladder's common tier
+      expect(c.rocket, `P${pos}`).toBeLessThan(boosts);
+    }
   });
 
   it("the crown is the rarest shot, scarcer than the missile and pinned to the back", () => {
@@ -131,7 +155,7 @@ describe("rollItem", () => {
     const leaderGone = rolls(2, 8, 1);
     expect(leaderGone.crown).toBeGreaterThan(bunched.crown * 4);
     expect(leaderGone.missile).toBeGreaterThan(bunched.missile * 3);
-    expect(leaderGone.megaturbo).toBeGreaterThan(bunched.megaturbo * 3);
+    expect(leaderGone.hyperturbo).toBeGreaterThan(bunched.hyperturbo * 3);
     // the escaped leader still gets nothing to run away harder with
     expect(rolls(1, 8, 1).megaturbo).toBe(0);
   });
@@ -269,6 +293,42 @@ describe("items in flight", () => {
     expect(useItem(world, [shooter], 0)).toBe("rocket");
     for (let i = 0; i < 120 * 3; i++) stepItems(world, [shooter], 1 / 120);
     expect(shooter.spin).toBe(0);
+  });
+
+  it("a boost carries its tier's punch and guide, cleared when it runs out", () => {
+    const world = emptyWorld();
+    const racer = createItemRacer(createCarState(100, 100, 0));
+    racer.held = "hyperturbo";
+    useItem(world, [racer], 0);
+    expect(racer.boost).toBe(BOOST_TIERS.hyperturbo.seconds);
+    expect(racer.boostPower).toBe(BOOST_TIERS.hyperturbo.power);
+    expect(racer.boostGuide).toBe(BOOST_TIERS.hyperturbo.guide);
+
+    for (let i = 0; i < 120 * 5; i++) stepItems(world, [racer], 1 / 120);
+    expect(racer.boost).toBe(0);
+    expect(racer.boostPower).toBe(1); // back to an ordinary car
+    expect(racer.boostGuide).toBe(0);
+  });
+
+  it("the tiers ascend: longer, harder, more forgiving", () => {
+    const [t, m, h] = [BOOST_TIERS.turbo, BOOST_TIERS.megaturbo, BOOST_TIERS.hyperturbo];
+    expect(m.seconds).toBeGreaterThan(t.seconds);
+    expect(h.seconds).toBeGreaterThan(m.seconds);
+    expect(m.power).toBeGreaterThan(t.power);
+    expect(h.power).toBeGreaterThan(m.power);
+    expect(m.guide).toBeGreaterThanOrEqual(t.guide);
+  });
+
+  it("shots outrun the cars at every speed class, top-tier boost included", () => {
+    // Regression: shot speeds were flat px/s, so at 200cc a car on a boost was
+    // quicker than the rocket chasing it and simply drove away from it.
+    for (const cls of SPEED_CLASSES) {
+      const raced = applySpeedClass(DEFAULT_TUNING, cls);
+      const flatOut = boostTuning(raced, BOOST_TIERS.hyperturbo.power).maxSpeed;
+      const shot = shotSpeeds(raced);
+      expect(shot.rocket, cls.label).toBeGreaterThan(flatOut);
+      expect(shot.missile, cls.label).toBeGreaterThan(flatOut);
+    }
   });
 
   it("turbo boosts the user; oil drops behind the car", () => {

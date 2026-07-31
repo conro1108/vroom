@@ -13,7 +13,6 @@ import { choose, createCalibration, skipAxis, variantTuning, type Calibration } 
 import { createDraft, inSlipstream, stepDraft } from "./game/draft";
 import { createDriftBoost, driftChargeFrac, stepDriftBoost } from "./game/driftboost";
 import {
-  BOOST_TIERS,
   createItemRacer,
   createItemWorld,
   ITEM_GAP_WINDOW,
@@ -152,7 +151,6 @@ let obsArmed: boolean[] = []; // per-observer: ready to fire (re-armed once you'
 let obsRadius = 0; // how close counts as ripping past a listener
 let countdownEnd = 0;
 let boostTimer = 0; // seconds of player speed boost remaining (rocket start, slipstream)
-let itemBoostGuide = 0; // steering-assist strength of the player's active item boost (mega guides, plain turbo is 0)
 let throttleHeldSince: number | null = null; // when the player committed to throttle pre-green
 let lastSafe: SafeSpot | null = null; // where the marshals put you back if you sail off
 let tow: RescueTow | null = null; // the marshals dragging you home; null = driving
@@ -294,7 +292,6 @@ function restartRace(): void {
   finishPending = false;
   playerFinishPlace = 1;
   boostTimer = 0;
-  itemBoostGuide = 0;
   throttleHeldSince = null;
   // Snapped to the centerline, so a rescue can never anchor off the road.
   lastSafe = safeSpotAt(slot.x, slot.y, query) ?? { x: slot.x, y: slot.y, heading: slot.heading };
@@ -303,7 +300,7 @@ function restartRace(): void {
   playerDriftBoost = createDriftBoost();
   playerRacer = createItemRacer(car);
   if (opponents.length > 0) {
-    itemWorld = createItemWorld(track, opponents.length + 1);
+    itemWorld = createItemWorld(track, applySpeedClass(tuning, cls), opponents.length + 1);
     itemRacers = [playerRacer, ...opponents];
   } else {
     itemWorld = null; // solo runs stay pure time trials
@@ -525,7 +522,9 @@ function loop(now: number): void {
       if (boostTimer > 0) boostTimer = Math.max(0, boostTimer - PHYSICS_DT);
       let stepTuning = raceTuning;
       if (boostTimer > 0 || playerRacer.boost > 0) {
-        stepTuning = boostTuning(raceTuning);
+        // An item boost hits at its tier's power; the ordinary kicks (rocket
+        // start, slipstream, drift) are tier 1.
+        stepTuning = boostTuning(raceTuning, playerRacer.boost > 0 ? playerRacer.boostPower : 1);
       }
       let stepInput = carInput;
       if (tow) {
@@ -536,7 +535,7 @@ function loop(now: number): void {
       } else if (playerRacer.spin > 0) {
         stepInput = SPIN_INPUT;
         spinCar(car, PHYSICS_DT);
-      } else if (playerRacer.boost > 0 && itemBoostGuide > 0) {
+      } else if (playerRacer.boost > 0 && playerRacer.boostGuide > 0) {
         // A guided boost (mega-turbo) eases the car onto the racing line so it's
         // spendable through corners instead of into the fence. Added to the
         // driver's own steer, so you can still steer against it.
@@ -546,7 +545,7 @@ function loop(now: number): void {
             car.heading,
             Math.atan2(tan.y, tan.x),
             raceTuning.boostGuideMaxDeg,
-            itemBoostGuide
+            raceTuning.boostGuide * playerRacer.boostGuide
           );
           stepInput = { ...carInput, steer: Math.max(-1, Math.min(1, carInput.steer + assist)) };
         }
@@ -748,10 +747,6 @@ function useHeldItem(): void {
   if (mode !== "racing" || !itemWorld) return;
   const used = useItem(itemWorld, itemRacers, 0);
   if (used) {
-    // capture how hard this boost tier guides, read back while it's live
-    if (used === "turbo" || used === "megaturbo") {
-      itemBoostGuide = tuning.boostGuide * BOOST_TIERS[used].guide;
-    }
     hud.setItem(null);
     audio.item(used);
   }

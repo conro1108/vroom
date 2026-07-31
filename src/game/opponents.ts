@@ -199,6 +199,8 @@ export function createOpponents(
       spin: 0,
       spinFrom: 0,
       boost: 0,
+      boostPower: 1,
+      boostGuide: 0,
       finished: false,
       finishOrder: null,
       tow: null,
@@ -272,14 +274,15 @@ export function stepOpponents(
         o.boostTimer = Math.max(o.boostTimer, o.tuning.driftBoostSeconds);
       }
       if (o.boostTimer > 0) o.boostTimer = Math.max(0, o.boostTimer - dt);
-      // o.boost is the item turbo, ticked down by the item system
+      // o.boost is the item boost, ticked down by the item system; its tier
+      // sets how hard it hits (o.boostPower), ordinary kicks are tier 1
       if (o.boostTimer > 0 || o.boost > 0) boosting = true;
     }
     let tuning =
       mult === 1
         ? o.tuning
         : { ...o.tuning, maxSpeed: o.tuning.maxSpeed * mult, accel: o.tuning.accel * mult };
-    if (boosting) tuning = boostTuning(tuning);
+    if (boosting) tuning = boostTuning(tuning, o.boost > 0 ? o.boostPower : 1);
     o.car = stepCar(o.car, input, tuning, query.surfaceAt(o.car.x, o.car.y), dt);
     if (corridorPx !== null) fenceCar(o.car, query, corridorPx);
     // A bot that slid off an open stretch gets the same marshal treatment the

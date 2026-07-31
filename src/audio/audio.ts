@@ -12,7 +12,7 @@
 // input.ts), not gameplay feel — the one player-facing feel knob, master
 // volume, lives in Tuning and is passed in via setVolume().
 
-import type { ItemKind } from "../game/items";
+import { isBoost, type ItemKind } from "../game/items";
 
 // ---- per-vehicle engine voices ----
 
@@ -610,7 +610,7 @@ export function createAudio(volume: number): GameAudio {
       if (master <= 0) return;
       resume();
       const now = ctx.currentTime;
-      if (kind === "turbo" || kind === "megaturbo") {
+      if (isBoost(kind)) {
         // rising power-up whoosh: a swept-bright noise plus an up-glide tone
         const src = ctx.createBufferSource();
         src.buffer = noise;
