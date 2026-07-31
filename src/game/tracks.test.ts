@@ -2,8 +2,11 @@
 // control points, and these tests are what catch an out-of-bounds sample or a
 // road that folds back onto itself (a "pinch") before anyone drives it.
 import { describe, expect, it } from "vitest";
+import { createOpponents, stepOpponents } from "./opponents";
+import { SPEED_CLASSES } from "./progression";
 import { createTrack, createTrackQuery } from "./track";
 import { TRACKS } from "./tracks";
+import { DEFAULT_TUNING } from "./tuning";
 
 describe.each(TRACKS.map((def) => [def.id, def] as const))("track %s", (_id, def) => {
   const track = createTrack(def);
@@ -62,5 +65,43 @@ describe.each(TRACKS.map((def) => [def.id, def] as const))("track %s", (_id, def
       expect(query.progressAt(p.x, p.y)).not.toBeNull();
       expect(query.surfaceAt(p.x, p.y)).toBe("road");
     }
+  });
+});
+
+// Geometry that passes the checks above can still be undriveable — a corner
+// tighter than the car can turn, or a hairpin that spits the field off. So put
+// a bot on every layout and make it get round: this is the check that a new
+// archetype is a track and not just a closed curve.
+//
+// The clean-lap half of it only applies where there's grass. Over the void
+// (Rainbow Cup) the road edge is a cliff with 18px of overhang past it, and at
+// 200cc the bots' pure-pursuit line runs wider than that through the quick
+// corners — they fall off and get towed several times a lap. That predates
+// these layouts (it reproduces on the untouched pulsar and rainbow) and wants a
+// bot that brakes for corner *radius* rather than for heading error, which is
+// its own piece of work.
+describe.each(TRACKS.map((def) => [def.id, def] as const))("driving %s", (_id, def) => {
+  it("a bot laps it without the marshals having to collect it", () => {
+    const track = createTrack(def);
+    const query = createTrackQuery(track);
+    const corridor = track.roadWidth / 2 + (def.voidRunoff ? 0 : DEFAULT_TUNING.fenceMarginPx);
+    const rescue = corridor + (def.voidRunoff ? DEFAULT_TUNING.voidMarginPx : DEFAULT_TUNING.rescueMarginPx);
+    const [bot] = createOpponents(
+      track,
+      query,
+      [{ vehicleId: "classic", skill: 1 }],
+      { ...DEFAULT_TUNING, botSloppiness: 0 }, // a clean driver: this is about the road, not mistakes
+      SPEED_CLASSES[SPEED_CLASSES.length - 1]!, // and at the fastest class, where a tight corner bites
+      () => 0.5
+    );
+    const start = bot!.tracker.lap;
+    let rescues = 0;
+    for (let i = 0; i < 120 * 180 && bot!.tracker.lap === start; i++) {
+      const towing = bot!.tow !== null;
+      stepOpponents([bot!], query, 1 / 120, true, null, corridor, rescue, DEFAULT_TUNING.rescueTowSeconds);
+      if (!towing && bot!.tow) rescues++;
+    }
+    expect(bot!.tracker.lap, `${def.id}: bot never completed a lap`).toBeGreaterThan(start);
+    if (!def.voidRunoff) expect(rescues, `${def.id}: bot needed rescuing mid-lap`).toBe(0);
   });
 });

@@ -6,12 +6,19 @@
 //
 // These are big, long courses on purpose: the fun is in having room to
 // actually drive a corner sequence, not thread a wiggly ribbon. The archetypes
-// that carry the catalog:
+// that carry the catalog — deliberately five different *shapes of lap*, since a
+// catalog authored in polar form alone comes out as twenty variations on "a
+// circle with some bends pinched into it":
+//   - dogbone(): two bowls turning opposite ways joined by a two-way neck. The
+//     only layout whose lap runs through the middle of its own silhouette.
+//   - street(): four straights meeting in square corners, plus a chicane.
+//     Braking points instead of a racing line.
 //   - serpentine(): the Switchback Pass shape — long straights joined by hard
 //     hairpins, then a return leg. The most "driveable" layout we have.
 //   - circuit(): a road course authored as a ring of corners in polar form.
 //     Big angle gaps read as sweeps; low radii bite inward as hairpins.
-//   - gear(): a star/clover of sharp lobes.
+//   - gear(): a star/clover of sharp lobes. Two tracks only — it was the whole
+//     catalog once, and a field of stars all drives the same.
 //   - hand-drawn point lists for the speed ovals and the hero courses.
 import type { TrackDef, TrackPoint } from "./track";
 
@@ -25,24 +32,147 @@ function gear(cx: number, cy: number, outer: number, inner: number, lobes: numbe
   return pts;
 }
 
-/** A wavy ring: ellipse rx/ry with `lobes` radial sine bumps of `amp` (0..~0.2). */
-function ring(
-  cx: number,
-  cy: number,
-  rx: number,
-  ry: number,
-  pts: number,
-  lobes: number,
-  amp: number,
-  phase = 0
-) {
-  const out = [];
-  for (let k = 0; k < pts; k++) {
-    const a = (k / pts) * Math.PI * 2;
-    const m = 1 + amp * Math.sin(lobes * a + phase);
-    out.push({ x: Math.round(cx + Math.cos(a) * rx * m), y: Math.round(cy + Math.sin(a) * ry * m) });
+/** Points along a circle, from `fromDeg` to `toDeg` (increasing), inclusive. */
+function arc(cx: number, cy: number, r: number, fromDeg: number, toDeg: number, count: number) {
+  const out: TrackPoint[] = [];
+  for (let k = 0; k < count; k++) {
+    const a = ((fromDeg + ((toDeg - fromDeg) * k) / (count - 1)) * Math.PI) / 180;
+    out.push({ x: Math.round(cx + Math.cos(a) * r), y: Math.round(cy + Math.sin(a) * r) });
   }
   return out;
+}
+
+/** Evenly spaced points strictly between two ends (the ends themselves come
+ *  from whatever the straight joins), so Catmull-Rom holds the line straight. */
+function straight(a: TrackPoint, b: TrackPoint, count: number) {
+  return Array.from({ length: count }, (_, k) => ({
+    x: Math.round(a.x + ((b.x - a.x) * (k + 1)) / (count + 1)),
+    y: Math.round(a.y + ((b.y - a.y) * (k + 1)) / (count + 1)),
+  }));
+}
+
+/**
+ * A dogbone: two bowls turning opposite ways, joined by a neck of two parallel
+ * straights. It's the figure-eight you can build without crossing the road, and
+ * the only archetype here whose lap runs through the middle of its own
+ * silhouette instead of around one big empty infield — the neck is a genuine
+ * two-way corridor with racing on both sides of it.
+ *
+ * `rR` well under `rL` turns the far bowl into a bulb on the end of a long
+ * out-and-back tail. `gap` (the distance between the neck's two legs) has to
+ * clear the pinch check — roadWidth + 14 — or the two ribbons read as one road,
+ * and it can't exceed either bowl's diameter.
+ */
+const MIN_NECK = 200; // shortest neck that still reads as a straight between the bowls
+
+function dogbone(W: number, H: number, rL: number, rR: number, gap: number, m = 190): TrackPoint[] {
+  if (gap > 2 * Math.min(rL, rR)) {
+    throw new Error(`dogbone: neck gap ${gap} is wider than the smaller bowl (${2 * Math.min(rL, rR)})`);
+  }
+  // Bowls that overlap don't make a shorter neck, they make a folded mess the
+  // pinch test only catches downstream — so say so here instead.
+  const neck = W - 2 * m - 2 * (rL + rR);
+  if (neck < MIN_NECK) {
+    throw new Error(
+      `dogbone: bowls r${rL}/r${rR} leave ${neck.toFixed(0)}px of neck in a ${W}px world ` +
+        `(need ${MIN_NECK}) — shrink the bowls or widen the world`
+    );
+  }
+  const cy = H / 2;
+  const cxL = m + rL;
+  const cxR = W - m - rR;
+  const deg = (r: number) => (Math.asin(gap / 2 / r) * 180) / Math.PI;
+  const [dL, dR] = [deg(rL), deg(rR)];
+  // Left bowl: entered at its lower-right, swept the long way round to its
+  // upper-right. Right bowl: the mirror, so the two turn opposite ways.
+  const left = arc(cxL, cy, rL, dL, 360 - dL, 9);
+  const right = arc(cxR, cy, rR, 180 + dR, 540 - dR, 9);
+  const topA = left[left.length - 1]!;
+  const topB = right[0]!;
+  const botA = right[right.length - 1]!;
+  const botB = left[0]!;
+  const top = straight(topA, topB, 3);
+  // Start the lap mid-neck on the top leg: a start line wants runway either
+  // side of it, not the exit of a bowl.
+  const half = Math.ceil(top.length / 2);
+  return [...top.slice(half), ...right, ...straight(botA, botB, 3), ...left, ...top.slice(0, half)];
+}
+
+/**
+ * A street box: four long straights meeting in square corners (chamfered so
+ * Catmull-Rom rounds them into a real 90° rather than a cusp), with a chicane
+ * kinked into the bottom straight. Nothing here is a lobe — the corners are
+ * joins between straights, which is what none of the polar layouts can do.
+ */
+interface StreetOpts {
+  m?: number; // world margin
+  chamfer?: number; // how far back from each corner the turn-in point sits
+  chicane?: number; // how deep the bottom-straight kink bites
+  chicaneShift?: number; // slide the chicane along the bottom straight
+  taper?: number; // pull the top straight in by this much each side (a trapezoid, not a box)
+}
+
+function street(W: number, H: number, opts: StreetOpts = {}): TrackPoint[] {
+  const { m = 260, chamfer = 210, chicane = 150, chicaneShift = 0, taper = 0 } = opts;
+  const [x0, x1, y0, y1] = [m, W - m, m, H - m];
+  const c = chamfer;
+  const [tx0, tx1] = [x0 + taper, x1 - taper];
+  const bot = (x0 + x1) / 2 + chicaneShift;
+  return [
+    { x: Math.round((tx0 + tx1) / 2), y: y0 }, // start line, mid main straight
+    { x: tx1 - c, y: y0 },
+    { x: x1, y: y0 + c + taper },
+    { x: x1, y: y1 - c },
+    { x: x1 - c, y: y1 },
+    // the chicane: two quick kinks inward, the one place the lap isn't flat out
+    { x: Math.round(bot + 190), y: y1 },
+    { x: Math.round(bot), y: y1 - chicane },
+    { x: Math.round(bot - 190), y: y1 },
+    { x: x0 + c, y: y1 },
+    { x: x0, y: y1 - c },
+    { x: x0, y: y0 + c + taper },
+    { x: tx0 + c, y: y0 },
+  ];
+}
+
+interface HookOpts {
+  m?: number; // world margin
+  chamfer?: number; // corner turn-in distance
+  spurAt?: number; // where along the bottom straight the spur turns in (px from the right end)
+  gap?: number; // distance between the spur's two legs — the U's diameter
+  depth?: number; // how far up into the infield the spur reaches
+}
+
+/**
+ * A stadium hook: a fast rounded box with one hairpin spur that turns off the
+ * bottom straight, runs up into the infield, U-turns and comes back out. Where
+ * the dogbone's neck is the whole lap's spine, the hook is one detour off an
+ * otherwise flat-out loop — the shape that makes a lap have a *slow section*
+ * rather than an even rhythm of corners.
+ */
+function hook(W: number, H: number, opts: HookOpts = {}): TrackPoint[] {
+  const { m = 240, chamfer = 210, spurAt = 420, gap = 230, depth = 460 } = opts;
+  const [x0, x1, y0, y1] = [m, W - m, m, H - m];
+  const c = chamfer;
+  const xs = x1 - spurAt; // the spur's right-hand leg
+  const yU = y1 - depth; // the U at the top of the spur
+  return [
+    { x: Math.round((x0 + x1) / 2), y: y0 }, // start line, mid main straight
+    { x: x1 - c, y: y0 },
+    { x: x1, y: y0 + c },
+    { x: x1, y: y1 - c },
+    { x: x1 - c, y: y1 },
+    // turn off the straight, up into the infield, round the U and back out
+    { x: Math.round(xs + 70), y: y1 },
+    { x: Math.round(xs), y: Math.round(y1 - depth * 0.42) },
+    ...arc(Math.round(xs - gap / 2), Math.round(yU), gap / 2, 0, -180, 5),
+    { x: Math.round(xs - gap), y: Math.round(y1 - depth * 0.42) },
+    { x: Math.round(xs - gap - 70), y: y1 },
+    { x: x0 + c, y: y1 },
+    { x: x0, y: y1 - c },
+    { x: x0, y: y0 + c },
+    { x: x0 + c, y: y0 },
+  ];
 }
 
 /**
@@ -226,13 +356,16 @@ export const TRACKS: TrackDef[] = [
     points: serpentine(1700, 1500, 3),
   },
   {
+    // Two tight bowls knotted onto one narrow neck — the tightest dogbone in
+    // the game, and the one where the neck traffic matters: you're threading
+    // back past the cars still coming the other way.
     id: "knot",
     unlock: { track: "switchback", result: "podium" },
     name: "Clover Knot",
-    roadWidth: 62,
-    worldWidth: 1700,
-    worldHeight: 1700,
-    points: gear(850, 850, 640, 400, 6),
+    roadWidth: 66,
+    worldWidth: 2000,
+    worldHeight: 1300,
+    points: dogbone(2100, 1300, 300, 300, 200),
   },
   {
     id: "gauntlet",
@@ -309,13 +442,15 @@ export const TRACKS: TrackDef[] = [
 
   // --- Sprout Cup extras ---
   {
-    // Gentle five-petal flower: wide, forgiving, teaches flowing lines.
+    // Two wide bowls linked by a short two-way neck: the lap turns one way,
+    // then the other, with a straight to breathe on between. Forgiving radii —
+    // this is where the Sprout Cup teaches direction changes.
     id: "daisy",
-    name: "Daisy Ring",
+    name: "Daisy Chain",
     roadWidth: 78,
-    worldWidth: 2000,
-    worldHeight: 1400,
-    points: ring(1000, 700, 660, 470, 15, 5, 0.12),
+    worldWidth: 2400,
+    worldHeight: 1500,
+    points: dogbone(2400, 1500, 390, 390, 220),
   },
 
   // --- Dune Cup ---
@@ -341,34 +476,26 @@ export const TRACKS: TrackDef[] = [
     ],
   },
   {
-    // A long technical circuit — a chain of tight hairpins strung around the
-    // dunes like a snake's track in the sand.
+    // The snake track it's named after: straights across the sand joined by
+    // hard hairpins at either end, mirrored so it doesn't read as the Frost
+    // Cup's switchback with a repaint.
     id: "sidewinder",
     name: "Sidewinder",
-    roadWidth: 70,
-    worldWidth: 2200,
+    roadWidth: 80,
+    worldWidth: 2100,
     worldHeight: 1500,
-    points: circuit(1100, 760, 940, 560, [
-      [0, 0.9],
-      [35, 0.5],
-      [70, 0.92],
-      [105, 0.5],
-      [150, 0.9],
-      [185, 0.52],
-      [220, 0.92],
-      [260, 0.5],
-      [300, 0.9],
-      [335, 0.52],
-    ]),
+    points: hook(2100, 1500, { spurAt: 520, gap: 240, depth: 520 }),
   },
   {
-    // Four hard lobes of scorched hardpan — a blunter, faster clover.
+    // Four flat-out straights and four square corners scorched into the
+    // hardpan, with one chicane to break up the bottom run. Braking points
+    // instead of a racing line: nothing here is a curve you can carry.
     id: "scorch",
     name: "Scorch Flats",
-    roadWidth: 72,
-    worldWidth: 1900,
-    worldHeight: 1900,
-    points: gear(950, 950, 720, 480, 4),
+    roadWidth: 78,
+    worldWidth: 2200,
+    worldHeight: 1700,
+    points: street(2200, 1700),
   },
 
   // --- Tide Cup ---
@@ -415,22 +542,14 @@ export const TRACKS: TrackDef[] = [
     ],
   },
   {
-    // A big looping reef shelf — sweeps into six deep hairpin bays.
+    // The shelf and the channel: one big bowl out on the reef, a long two-way
+    // run in, and a tight bulb to turn around in at the far end.
     id: "reef",
     name: "Reef Loop",
     roadWidth: 78,
-    worldWidth: 2200,
+    worldWidth: 2300,
     worldHeight: 1500,
-    points: circuit(1100, 760, 940, 560, [
-      [15, 0.95],
-      [60, 0.55],
-      [110, 0.92],
-      [160, 0.55],
-      [210, 0.95],
-      [255, 0.55],
-      [300, 0.92],
-      [345, 0.6],
-    ]),
+    points: dogbone(2300, 1500, 520, 250, 230),
   },
   {
     // A pinched peanut around the point break — two bowls, one waist.
@@ -480,22 +599,15 @@ export const TRACKS: TrackDef[] = [
     points: gear(900, 900, 680, 440, 5),
   },
   {
-    // Long drops into heavy hairpins — a technical plunge down the mountain.
+    // Long straights walled in by snowbanks, square corners at the ends, and a
+    // chicane where the slide came through — a plunge you brake for, not lean
+    // through.
     id: "avalanche",
     name: "Avalanche Drop",
-    roadWidth: 72,
+    roadWidth: 74,
     worldWidth: 2000,
-    worldHeight: 1600,
-    points: circuit(1000, 820, 850, 640, [
-      [10, 0.9],
-      [50, 0.52],
-      [95, 0.9],
-      [140, 0.5],
-      [190, 0.9],
-      [235, 0.52],
-      [285, 0.9],
-      [330, 0.55],
-    ]),
+    worldHeight: 1800,
+    points: street(2000, 1800, { m: 250, chamfer: 190, chicane: 190, chicaneShift: -230, taper: 260 }),
   },
 
   // --- Dusk Cup extras ---
@@ -529,18 +641,17 @@ export const TRACKS: TrackDef[] = [
   // below shrank to buy the extra road width without pushing a lap into the
   // world edge.
   {
-    // The longest lap in the game: a huge ring rippled by ten quick lobes, so
-    // the car is never once pointed straight for long. (A serpentine was the
-    // obvious pick for "long", but past three rows its return leg has to
-    // squeeze past a second right-hand hairpin and the racing line there falls
-    // apart — see the note on serpentine().)
+    // The name, finally drawn: a huge head of a bowl and a long tail of a
+    // two-way straight out into the dark, with a bulb to whip round at the far
+    // end. The longest lap in the game, and the fastest — over the void the
+    // tail has nothing either side of it but the neighbouring lane.
     id: "comet",
     name: "Comet Tail",
     roadWidth: 92,
     voidRunoff: true,
-    worldWidth: 2600,
-    worldHeight: 2000,
-    points: ring(1300, 1000, 1000, 690, 30, 10, 0.14),
+    worldWidth: 2800,
+    worldHeight: 1700,
+    points: dogbone(2800, 1700, 590, 200, 240),
   },
   {
     // Eight spikes off a collapsed star: the Clover Knot with the dial past
@@ -554,28 +665,16 @@ export const TRACKS: TrackDef[] = [
     points: gear(1000, 1000, 780, 540, 8),
   },
   {
-    // Twelve alternating hairpins around one huge ellipse — no two corners the
-    // same way up, and never a moment to breathe.
+    // Switchbacks strung across the nebula: three long drift straights stacked
+    // over nothing, joined by 180s you have to actually brake for. Nowhere on
+    // it are you pointed the same way twice in a row.
     id: "nebula",
     name: "Nebula Drift",
     roadWidth: 92,
     voidRunoff: true,
-    worldWidth: 2500,
-    worldHeight: 1600,
-    points: circuit(1250, 800, 1090, 640, [
-      [0, 0.9],
-      [30, 0.53],
-      [60, 0.9],
-      [90, 0.53],
-      [120, 0.9],
-      [150, 0.53],
-      [180, 0.9],
-      [210, 0.53],
-      [240, 0.9],
-      [270, 0.53],
-      [300, 0.9],
-      [330, 0.53],
-    ]),
+    worldWidth: 2400,
+    worldHeight: 1700,
+    points: hook(2400, 1700, { m: 280, chamfer: 260, spurAt: 700, gap: 300, depth: 620 }),
   },
   {
     // The hero course. Deliberately irregular — long flat-out sweeps that dump
