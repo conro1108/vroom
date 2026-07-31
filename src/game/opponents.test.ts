@@ -72,6 +72,37 @@ describe("opponent field", () => {
     expect(Math.hypot(player.x - bot.x, player.y - bot.y)).toBeGreaterThan(10);
   });
 
+  it("keeps every grid slot on the road, on every track", () => {
+    // Regression: the grid used to run straight back off the start heading, so
+    // wherever the run-up to the line curved the back rows spawned off the
+    // road — on a void track that's an instant rescue, and the rescue anchor
+    // was the same off-road slot, so the car never got out of the loop.
+    for (const def of TRACKS) {
+      const t = createTrack(def);
+      const q = createTrackQuery(t);
+      for (const columns of [2, 3]) {
+        for (let i = 0; i < 12; i++) {
+          const pos = gridSlot(t, i, columns);
+          expect(q.surfaceAt(pos.x, pos.y), `${def.id} slot ${i} of ${columns} wide`).toBe("road");
+        }
+      }
+    }
+  });
+
+  it("points every grid slot down the road, not off the start heading", () => {
+    const t = createTrack(TRACKS.find((d) => d.id === "pulsar")!);
+    const q = createTrackQuery(t);
+    let turned = false;
+    for (let i = 0; i < 12; i++) {
+      const pos = gridSlot(t, i, 2);
+      const tan = q.tangentAt(pos.x, pos.y)!;
+      const dot = Math.cos(pos.heading) * tan.x + Math.sin(pos.heading) * tan.y;
+      expect(dot, `slot ${i}`).toBeGreaterThan(0.95); // within ~18° of the road
+      if (Math.abs(pos.heading - t.startHeading) > 0.05) turned = true;
+    }
+    expect(turned).toBe(true); // the back of a curving grid isn't on the start heading
+  });
+
   it("widens the grid for a bigger squad but never past 3 columns", () => {
     expect(gridColumns(4)).toBe(2);
     expect(gridColumns(6)).toBe(2);

@@ -44,8 +44,13 @@ export function skillSpread(count: number): number[] {
 }
 
 // Grid layout in world px behind the start line: cars fill a row of `columns`
-// slots, then step back a row. A wider squad gets a wider grid so it doesn't
-// string out into an absurdly long single-file queue behind the line.
+// slots, then step back a row, *following the centerline* rather than running
+// straight back off the start heading. A grid laid out straight walks off the
+// road wherever the run-up to the line curves — which on a Rainbow Cup track
+// (wide road, void either side) spawns the back rows over nothing, and the
+// rescue then drops them right back on the same off-road spot: instant jail.
+// A wider squad gets a wider grid so it doesn't string out into an absurdly
+// long single-file queue behind the line.
 const GRID_FIRST_ROW = 18;
 const GRID_ROW_GAP = 22;
 const GRID_LANE_FRAC = 0.3; // outermost column sits at this fraction of the road out from center
@@ -82,24 +87,54 @@ export interface Opponent extends ItemRacer {
   tow: RescueTow | null;
 }
 
-export function gridSlot(track: Track, index: number, columns = 2): { x: number; y: number } {
+/** Where a car on the grid starts: a spot on the road and the way it faces. */
+export interface GridSlot {
+  x: number;
+  y: number;
+  heading: number;
+}
+
+/** Walk `back` px backwards along the centerline from the start line. Returns
+ *  the point reached and the racing direction there. */
+function centerlineBack(track: Track, back: number): GridSlot {
+  const n = track.samples.length;
+  let left = back;
+  let i = 0; // the sample we're walking back from
+  for (let step = 0; step < n; step++) {
+    const prev = (i - 1 + n) % n;
+    const a = track.samples[prev]!;
+    const b = track.samples[i]!;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (left <= len || len === 0) {
+      const t = len === 0 ? 0 : left / len;
+      return {
+        x: b.x + (a.x - b.x) * t,
+        y: b.y + (a.y - b.y) * t,
+        heading: Math.atan2(b.y - a.y, b.x - a.x),
+      };
+    }
+    left -= len;
+    i = prev;
+  }
+  return { x: track.start.x, y: track.start.y, heading: track.startHeading };
+}
+
+export function gridSlot(track: Track, index: number, columns = 2): GridSlot {
   const col = index % columns;
   const back = GRID_FIRST_ROW + Math.floor(index / columns) * GRID_ROW_GAP;
   // spread columns evenly across the road, centered on the line
   const spread = track.roadWidth * GRID_LANE_FRAC;
   const side = columns <= 1 ? 0 : (col / (columns - 1) - 0.5) * 2 * spread;
-  const dir = { x: Math.cos(track.startHeading), y: Math.sin(track.startHeading) };
+  const row = centerlineBack(track, back);
+  const dir = { x: Math.cos(row.heading), y: Math.sin(row.heading) };
   return {
-    x: track.start.x - dir.x * back - dir.y * side,
-    y: track.start.y - dir.y * back + dir.x * side,
+    x: row.x - dir.y * side,
+    y: row.y + dir.x * side,
+    heading: row.heading,
   };
 }
 
-export function playerGridSlot(
-  track: Track,
-  opponentCount = OPPONENT_COUNT,
-  columns = 2
-): { x: number; y: number } {
+export function playerGridSlot(track: Track, opponentCount = OPPONENT_COUNT, columns = 2): GridSlot {
   return gridSlot(track, opponentCount, columns);
 }
 
@@ -150,7 +185,7 @@ export function createOpponents(
     const startProgress = query.progressAt(pos.x, pos.y) ?? 0;
     return {
       vehicleId: vehicle.id,
-      car: createCarState(pos.x, pos.y, track.startHeading),
+      car: createCarState(pos.x, pos.y, pos.heading),
       tracker: createLapTracker(startProgress),
       tuning,
       bot: createBot(track, query, tuning, personality),
@@ -167,7 +202,10 @@ export function createOpponents(
       finished: false,
       finishOrder: null,
       tow: null,
-      lastSafe: { x: pos.x, y: pos.y, heading: track.startHeading },
+      // Snap the rescue anchor to the centerline rather than trusting the grid
+      // spot: an anchor that is itself off the road hands the marshals a spot
+      // that instantly needs rescuing again.
+      lastSafe: safeSpotAt(pos.x, pos.y, query) ?? { x: pos.x, y: pos.y, heading: pos.heading },
     };
   });
 }

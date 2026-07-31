@@ -281,7 +281,7 @@ function restartRace(): void {
   // opponent i. Solo (no roster) just parks the player on pole.
   const grid = series && roster.length > 0 ? startingGrid(series) : [0];
   const slot = gridSlot(track, grid[0]!, columns);
-  car = createCarState(slot.x, slot.y, track.startHeading);
+  car = createCarState(slot.x, slot.y, slot.heading);
   lapTracker = createLapTracker(query.progressAt(slot.x, slot.y) ?? 0);
   opponents =
     roster.length > 0
@@ -296,7 +296,8 @@ function restartRace(): void {
   boostTimer = 0;
   itemBoostGuide = 0;
   throttleHeldSince = null;
-  lastSafe = { x: slot.x, y: slot.y, heading: track.startHeading };
+  // Snapped to the centerline, so a rescue can never anchor off the road.
+  lastSafe = safeSpotAt(slot.x, slot.y, query) ?? { x: slot.x, y: slot.y, heading: slot.heading };
   tow = null;
   playerDraft = createDraft();
   playerDriftBoost = createDriftBoost();
