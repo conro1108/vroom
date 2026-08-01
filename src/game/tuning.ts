@@ -20,14 +20,15 @@ export interface Tuning {
   offroadFriction: number; // drag multiplier on grass
   boostOffroad: number; // 0..1, how much a live boost negates the grass penalty (1 = grass drives like road)
   opponentCount: number; // AI cars in a group race
-  rubberBand: number; // 0..0.4, how hard the field converges on the player
+  rubberBand: number; // 0..0.4, how hard a bot *behind* the player hurries to catch up
+  rubberBandLead: number; // 0..0.4, how hard a bot *ahead* of the player is reined in — the leash on a runaway leader
   botSloppiness: number; // 0..1, how human (wobbly, mistake-prone) bots drive
   startBoostWindowMs: number; // committing to throttle within this window before green = rocket start
   boostPower: number; // maxSpeed/accel multiplier while a boost is live
   boostSeconds: number; // how long a rocket start's boost lasts
   boostGuide: number; // 0..1 steering assist a full-guide boost applies — eases you onto the racing line so the boost is easier to keep on-track; each item tier scales this (plain turbo half, mega and hyper full)
   boostGuideMaxDeg: number; // heading error (deg) at which the boost assist saturates
-  rocketSpeed: number; // straight shot speed, as a multiple of the class top speed (so a shot always outruns the cars)
+  rocketSpeed: number; // straight shot speed, as a multiple of the fastest a boosting car in this class can go (so a shot always outruns the cars)
   missileSpeed: number; // seeker (missile/crown) speed, same units — a touch slower so its curve reads
   draftRangePx: number; // how close behind a car the slipstream reaches
   draftChargeSeconds: number; // continuous drafting needed to earn a boost
@@ -52,15 +53,15 @@ export interface Tuning {
 // install boots into the house car and the menu shows it as active.
 export const DEFAULT_TUNING: Tuning = {
   maxSpeed: 142,
-  accel: 195,
+  accel: 200,
   brake: 320,
-  drag: 55,
+  drag: 52,
   turnRate: 3.7,
   speedTurnFalloff: 0.12,
   steerResponse: 13.5,
-  lateralGrip: 6.5,
+  lateralGrip: 6.2,
   driftGrip: 2.6,
-  driftThreshold: 46,
+  driftThreshold: 43,
   driftTurnBonus: 0.15,
   driftChargeSeconds: 0.8,
   driftBoostSeconds: 0.6,
@@ -70,14 +71,15 @@ export const DEFAULT_TUNING: Tuning = {
   boostOffroad: 0.8,
   opponentCount: 3,
   rubberBand: 0.12,
+  rubberBandLead: 0.18,
   botSloppiness: 0.6,
   startBoostWindowMs: 350,
   boostPower: 1.35,
   boostSeconds: 1.2,
   boostGuide: 0.5,
   boostGuideMaxDeg: 40,
-  rocketSpeed: 2.1,
-  missileSpeed: 1.9,
+  rocketSpeed: 1.5,
+  missileSpeed: 1.35,
   draftRangePx: 55,
   draftChargeSeconds: 1.0,
   draftBoostSeconds: 0.8,
@@ -101,7 +103,7 @@ export const DEFAULT_TUNING: Tuning = {
 // the whole saved object on a bump (which would wipe every value the player
 // tuned on-device), we migrate the previous version forward and only reset the
 // specific keys whose default actually moved — see MIGRATIONS below.
-const STORAGE_KEY = "vroom.tuning.v6";
+const STORAGE_KEY = "vroom.tuning.v7";
 
 // v4 → v5 retuned the whole field tighter, so every handling default moved. A
 // v4 save is holding the old loose numbers for a car that no longer exists.
@@ -121,12 +123,26 @@ const V5_HANDLING: (keyof Tuning)[] = [
 // entry lists every key whose default has moved between that version and the
 // current one — cumulative, not per-step, since only the matched entry's list
 // is applied.
+// v6 → v7 re-quoted the shot speeds off the *boosted* ceiling rather than plain
+// maxSpeed, so an old saved multiple means something much faster now.
+// v7 also loosened Classic (the shipped handling block) so the starter car
+// banks drift boosts like the rest of the field.
+const V7_MOVED: (keyof Tuning)[] = [
+  "rocketSpeed",
+  "missileSpeed",
+  "accel",
+  "drag",
+  "lateralGrip",
+  "driftThreshold",
+];
+
 const MIGRATIONS: { key: string; resetKeys: (keyof Tuning)[] }[] = [
+  { key: "vroom.tuning.v6", resetKeys: [...V7_MOVED] },
   // v5 → v6 widened the corridor to go with the wider roads and the new
   // out-of-bounds rescue; an old narrow runoff would fence you in again.
-  { key: "vroom.tuning.v5", resetKeys: ["fenceMarginPx"] },
-  { key: "vroom.tuning.v4", resetKeys: [...V5_HANDLING, "fenceMarginPx"] },
-  { key: "vroom.tuning.v3", resetKeys: [...V5_HANDLING, "fenceMarginPx"] },
+  { key: "vroom.tuning.v5", resetKeys: [...V7_MOVED, "fenceMarginPx"] },
+  { key: "vroom.tuning.v4", resetKeys: [...V7_MOVED, ...V5_HANDLING, "fenceMarginPx"] },
+  { key: "vroom.tuning.v3", resetKeys: [...V7_MOVED, ...V5_HANDLING, "fenceMarginPx"] },
 ];
 
 export function loadTuning(): Tuning {

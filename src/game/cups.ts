@@ -95,13 +95,17 @@ export function cupById(id: string): CupDef {
 export const RACES_PER_CUP = 4;
 
 /**
- * Points for finishing `placement` out of `fieldSize`. Linear in the field:
- * last place scores 1 and every place up is worth one more, so first scores
- * `fieldSize`. This scales the spread with the pool and keeps it flat — a win
- * is worth a little more than 2nd, not a landslide over it.
+ * Points for finishing `placement` out of `fieldSize`. The base is linear in
+ * the field — last place scores 1 and every place up is worth one more — and
+ * the sharp end gets a bonus on top, so the podium is where a series is
+ * actually won: 1st is 3 clear of 2nd, 2nd 3 clear of 3rd, 3rd 2 clear of 4th,
+ * and it's the flat +1 a place from there back. A flat ladder made a win worth
+ * barely more than a second, which is not what winning should feel like.
  */
+const PODIUM_BONUS = [5, 3, 1];
+
 export function cupPoints(placement: number, fieldSize: number): number {
-  return Math.max(1, fieldSize - placement + 1);
+  return Math.max(1, fieldSize - placement + 1) + (PODIUM_BONUS[placement - 1] ?? 0);
 }
 
 /** A bot seat that persists across the whole series. */

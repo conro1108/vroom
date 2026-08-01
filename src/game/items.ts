@@ -19,7 +19,7 @@
 //   oil     — dropped behind you; the next car over it spins out
 import type { CarInput, CarState } from "./physics";
 import type { Track } from "./track";
-import type { Tuning } from "./tuning";
+import { boostTuning, type Tuning } from "./tuning";
 
 export type ItemKind = "turbo" | "megaturbo" | "hyperturbo" | "rocket" | "missile" | "crown" | "oil";
 
@@ -97,16 +97,19 @@ export interface ShotSpeeds {
 }
 
 /**
- * Shots are quoted as multiples of the *class* top speed, not in absolute px/s:
- * at 200cc a car tops out around 300 px/s and a boosting one past 400, so the
- * old flat 360/300 px/s shots were slower than the cars they were fired at —
- * you could outrun a rocket. Scaling with the class keeps a shot the same
- * threat at every speed.
+ * Shots are quoted as multiples of the fastest a car in this race can possibly
+ * go — the class top speed with a hyperturbo lit — not in absolute px/s and not
+ * off the unboosted top speed. Both of those let a car outrun a shot: flat px/s
+ * shots got left behind by the higher classes outright, and shots quoted off
+ * plain maxSpeed only had ~30% on a boosting car, which a straight rocket can't
+ * make up inside its short life. Off the boosted ceiling, `rocketSpeed` means
+ * what it says: this much quicker than anything it's chasing.
  */
 export function shotSpeeds(raceTuning: Tuning): ShotSpeeds {
+  const ceiling = boostTuning(raceTuning, BOOST_TIERS.hyperturbo.power).maxSpeed;
   return {
-    rocket: raceTuning.maxSpeed * raceTuning.rocketSpeed,
-    missile: raceTuning.maxSpeed * raceTuning.missileSpeed,
+    rocket: ceiling * raceTuning.rocketSpeed,
+    missile: ceiling * raceTuning.missileSpeed,
   };
 }
 
@@ -126,7 +129,7 @@ const OIL_RADIUS = 9;
 const MISSILE_TURN_RATE = 3.2; // rad/s cap on the seeker's steering — the driving-style curve
 const MISSILE_ACQUIRE_RADIUS = 260; // the seeker only locks racers in this vicinity
 const MISSILE_HIT_RADIUS = 10;
-const ROCKET_TTL_SECONDS = 2.2; // straight shots expire sooner — they don't chase
+export const ROCKET_TTL_SECONDS = 2.6; // straight shots expire sooner — they don't chase
 const MISSILE_TTL_SECONDS = 5;
 const CROWN_TURN_RATE = 4.2; // the leader-hunter corners harder — it will not be shaken
 const CROWN_TTL_SECONDS = 9; // and it stays airborne long enough to run the leader down

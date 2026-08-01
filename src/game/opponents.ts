@@ -31,8 +31,14 @@ export const OPPONENT_COUNT = 3; // default field; tuning.opponentCount override
 // Skill multiplies maxSpeed/accel per opponent so finishes spread out: the
 // podium (needed for main-line unlocks) means beating the slowest bot, while
 // an outright win (bonus branches) means out-driving the fastest one.
-const SKILL_MIN = 0.85;
-const SKILL_MAX = 1.01;
+//
+// Nobody in the field gets more car than the player. A bot on 1.01 with the
+// machine's clean line and near-zero reaction lag isn't a rival, it's a
+// metronome: one player mistake and it's gone, and nothing you do afterwards
+// gets it back. The quick bot's edge is that it drives tidily — the player's
+// edge is the faster car and the item box.
+const SKILL_MIN = 0.87;
+const SKILL_MAX = 0.99;
 
 /** Evenly spread skill factors across the field, one per opponent. */
 export function skillSpread(count: number): number[] {
@@ -174,11 +180,14 @@ export function createOpponents(
     // Slower bots are also sloppier drivers, so the back of the field looks
     // human rather than just detuned.
     const sloppy = baseTuning.botSloppiness;
+    // Even the quickest bot gets a human floor of reaction lag and blown
+    // braking points. Without it the front-runner is flawless, and a flawless
+    // front-runner turns every small player mistake into a permanent deficit.
     const personality: BotPersonality = {
       lineFrac: (rng() - 0.5) * 0.4,
       wobble: sloppy * (1.25 - skill),
-      mistakeRate: sloppy * (1.3 - skill) * 8,
-      reactionSeconds: sloppy * (1.3 - skill) * 0.35,
+      mistakeRate: sloppy * (0.8 + (1.3 - skill) * 8),
+      reactionSeconds: sloppy * (0.05 + (1.3 - skill) * 0.35),
       seed: rng() * 1000,
     };
     const pos = gridSlot(track, gridIndices?.[i] ?? i, columns);
@@ -215,10 +224,12 @@ export function createOpponents(
 // Rubber banding saturates at this many laps of gap to the player.
 const RUBBER_WINDOW = 0.3;
 
-/** Speed/accel multiplier for a bot `gapLaps` ahead (+) or behind (−) the player. */
-export function rubberMult(gapLaps: number, strength: number): number {
+/** Speed/accel multiplier for a bot `gapLaps` ahead (+) or behind (−) the
+ * player. The leash on a bot that's escaping is pulled harder than the tow a
+ * dropped bot gets — a race you can still win is worth more than a tidy pack. */
+export function rubberMult(gapLaps: number, strength: number, leadStrength = strength): number {
   const catchup = Math.max(-1, Math.min(1, -gapLaps / RUBBER_WINDOW));
-  return 1 + catchup * strength;
+  return 1 + catchup * (catchup < 0 ? leadStrength : strength);
 }
 
 /** What the bots know about the player mid-race, for rubber-banding and drafting. */
@@ -253,8 +264,17 @@ export function stepOpponents(
     if (spinning) spinCar(o.car, dt);
     let mult = 1;
     let boosting = false;
-    if (live && player !== null && o.tuning.rubberBand > 0 && o.finishOrder === null) {
-      mult = rubberMult(raceDistance(o.tracker) - player.distance, o.tuning.rubberBand);
+    if (
+      live &&
+      player !== null &&
+      (o.tuning.rubberBand > 0 || o.tuning.rubberBandLead > 0) &&
+      o.finishOrder === null
+    ) {
+      mult = rubberMult(
+        raceDistance(o.tracker) - player.distance,
+        o.tuning.rubberBand,
+        o.tuning.rubberBandLead
+      );
     }
     if (live) {
       const minSpeed = o.tuning.maxSpeed * 0.5;

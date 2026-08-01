@@ -53,28 +53,31 @@ describe("cup series scoring", () => {
     { vehicleId: "gokart", skill: 1.01 },
   ];
 
-  it("points fall off linearly and floor at 1", () => {
-    expect(cupPoints(1, 4)).toBeGreaterThan(cupPoints(2, 4));
-    expect(cupPoints(2, 4)).toBeGreaterThan(cupPoints(3, 4));
+  it("pays the podium a premium and floors at 1", () => {
+    // field of 4: 9 / 6 / 3 / 1
+    expect(cupPoints(1, 4) - cupPoints(2, 4)).toBe(3);
+    expect(cupPoints(2, 4) - cupPoints(3, 4)).toBe(3);
+    expect(cupPoints(3, 4) - cupPoints(4, 4)).toBe(2);
     expect(cupPoints(4, 4)).toBe(1); // last still scores
     expect(cupPoints(8, 4)).toBe(1); // beyond the field floors, never zero
   });
 
-  it("scales the point spread with the pool, not top-heavy", () => {
-    // first place is worth the field size; the gap to second is always 1
-    expect(cupPoints(1, 12)).toBe(12);
-    expect(cupPoints(1, 12) - cupPoints(2, 12)).toBe(1);
-    expect(cupPoints(1, 4) - cupPoints(2, 4)).toBe(1);
+  it("keeps the same podium premium whatever the pool size", () => {
+    expect(cupPoints(1, 12)).toBe(17);
+    expect(cupPoints(1, 12) - cupPoints(2, 12)).toBe(3);
+    expect(cupPoints(2, 12) - cupPoints(3, 12)).toBe(3);
+    expect(cupPoints(3, 12) - cupPoints(4, 12)).toBe(2);
+    expect(cupPoints(4, 12) - cupPoints(5, 12)).toBe(1); // flat +1 below the podium
   });
 
   it("accumulates race placements into standings", () => {
     const state = createCupState("sprout", roster); // field of 4
     recordCupRace(state, [2, 1, 3, 4]); // player 2nd
     recordCupRace(state, [1, 2, 3, 4]); // player wins
-    // player: 3+4=7, bot0: 4+3=7, bot1: 2+2=4, bot2: 1+1=2
+    // player: 6+9=15, bot0: 9+6=15, bot1: 3+3=6, bot2: 1+1=2
     const standings = cupStandings(state);
     expect(standings[0]!.index).toBe(0); // tie breaks toward the player
-    expect(standings[0]!.points).toBe(7);
+    expect(standings[0]!.points).toBe(15);
     expect(playerCupPlacement(state)).toBe(1);
   });
 

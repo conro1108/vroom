@@ -51,15 +51,18 @@ export const VEHICLES: Vehicle[] = [
     blurb: "the house blend — loose enough to slide",
     values: {
       maxSpeed: 142,
-      accel: 195,
+      accel: 200,
       brake: 320,
-      drag: 55,
+      drag: 52,
       turnRate: 3.7,
       speedTurnFalloff: 0.12,
       steerResponse: 13.5,
-      lateralGrip: 6.5,
+      // The starter car has to be able to play the same game the specialists
+      // do: it broke loose late enough that a player never banked the drift
+      // boosts the field lives on, which read as "I can't win in the base car".
+      lateralGrip: 6.2,
       driftGrip: 2.6,
-      driftThreshold: 46,
+      driftThreshold: 43,
     },
   },
   {

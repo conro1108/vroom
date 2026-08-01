@@ -5,6 +5,7 @@ import {
   createItemWorld,
   PICKUP_RADIUS,
   rollItem,
+  ROCKET_TTL_SECONDS,
   shotSpeeds,
   spinCar,
   stepItems,
@@ -16,6 +17,7 @@ import { applySpeedClass, SPEED_CLASSES } from "./progression";
 import { createTrack, createTrackQuery } from "./track";
 import { TRACKS } from "./tracks";
 import { boostTuning, DEFAULT_TUNING } from "./tuning";
+import { VEHICLES } from "./vehicles";
 
 const track = createTrack(TRACKS[0]!);
 const query = createTrackQuery(track);
@@ -321,14 +323,30 @@ describe("items in flight", () => {
 
   it("shots outrun the cars at every speed class, top-tier boost included", () => {
     // Regression: shot speeds were flat px/s, so at 200cc a car on a boost was
-    // quicker than the rocket chasing it and simply drove away from it.
+    // quicker than the rocket chasing it and simply drove away from it. Then
+    // they were quoted off *unboosted* maxSpeed, which left a rocket barely
+    // 30% up on a hyperturbo — not enough to close inside its short life. It
+    // has to run the flat-out car down by a clear margin, in every vehicle.
     for (const cls of SPEED_CLASSES) {
-      const raced = applySpeedClass(DEFAULT_TUNING, cls);
-      const flatOut = boostTuning(raced, BOOST_TIERS.hyperturbo.power).maxSpeed;
-      const shot = shotSpeeds(raced);
-      expect(shot.rocket, cls.label).toBeGreaterThan(flatOut);
-      expect(shot.missile, cls.label).toBeGreaterThan(flatOut);
+      for (const v of VEHICLES) {
+        const raced = applySpeedClass({ ...DEFAULT_TUNING, ...v.values }, cls);
+        const flatOut = boostTuning(raced, BOOST_TIERS.hyperturbo.power).maxSpeed;
+        const shot = shotSpeeds(raced);
+        const where = `${v.id} at ${cls.label}`;
+        expect(shot.rocket / flatOut, where).toBeGreaterThan(1.3);
+        expect(shot.missile / flatOut, where).toBeGreaterThan(1.2);
+      }
     }
+  });
+
+  it("a rocket runs down a flat-out car from a realistic firing distance", () => {
+    // The thing that actually matters: closing speed × how long the shot lives.
+    // A rocket fired at a car half the item-box spacing ahead, with that car on
+    // the biggest boost in the game, has to arrive before the shot burns out.
+    const raced = applySpeedClass(DEFAULT_TUNING, SPEED_CLASSES[SPEED_CLASSES.length - 1]!);
+    const flatOut = boostTuning(raced, BOOST_TIERS.hyperturbo.power).maxSpeed;
+    const closing = shotSpeeds(raced).rocket - flatOut;
+    expect(closing * ROCKET_TTL_SECONDS).toBeGreaterThan(300);
   });
 
   it("turbo boosts the user; oil drops behind the car", () => {

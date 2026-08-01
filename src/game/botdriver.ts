@@ -6,9 +6,16 @@ import { createDriftBoost, stepDriftBoost } from "./driftboost";
 import { createCarState, stepCar, type CarInput, type CarState } from "./physics";
 import {
   createLapTracker,
+  createTow,
   createTrack,
   createTrackQuery,
+  fenceCar,
+  outOfBounds,
+  safeSpotAt,
+  stepTow,
   updateLap,
+  type RescueTow,
+  type SafeSpot,
   type Track,
   type TrackDef,
   type TrackQuery,
@@ -185,6 +192,11 @@ export function createBot(
  * `driver` defaults to the flawless reference. Pass one of DRIVER_SPREAD to see
  * how the car holds up under hands that aren't perfect — which is the number
  * that actually predicts whether it's fun to drive.
+ *
+ * The fence and the marshals are in here too, on the same terms a race runs
+ * them. Without the rescue a sloppy driver who wandered off simply wallowed in
+ * the grass for the rest of the sim, and a single stranded run — pure noise,
+ * nothing a player ever experiences — swamped the car's whole balance number.
  */
 export function simulateLap(
   def: TrackDef,
@@ -197,6 +209,10 @@ export function simulateLap(
   const query = createTrackQuery(track);
   const bot = createBot(track, query, tuning, driver);
 
+  const half = track.roadWidth / 2;
+  const corridor = track.voidRunoff ? half : half + tuning.fenceMarginPx;
+  const rescueAt = corridor + (track.voidRunoff ? tuning.voidMarginPx : tuning.rescueMarginPx);
+
   let car = createCarState(track.start.x, track.start.y, track.startHeading);
   const lapTracker = createLapTracker(0);
   const drift = createDriftBoost();
@@ -208,8 +224,18 @@ export function simulateLap(
   let steps = 0;
   let offroadSteps = 0;
   let driftBoosts = 0;
+  let tow: RescueTow | null = null;
+  let lastSafe: SafeSpot | null = safeSpotAt(car.x, car.y, query);
 
   while (t < MAX_LAP_SECONDS * laps) {
+    // Under tow the car is cargo — the excursion costs exactly what it costs a
+    // player: the tow seconds, standing still.
+    if (tow) {
+      if (stepTow(tow, car, DT)) tow = null;
+      t += DT;
+      steps++;
+      continue;
+    }
     const input = bot(car);
     const surface = query.surfaceAt(car.x, car.y);
     // Drift boosts are part of how quick a car is, so the sim has to earn them
@@ -220,6 +246,18 @@ export function simulateLap(
     }
     boostTimer = Math.max(0, boostTimer - DT);
     car = stepCar(car, input, boostTimer > 0 ? boosted : tuning, surface, DT);
+    fenceCar(car, query, corridor);
+    if (outOfBounds(car, query, rescueAt)) {
+      const spot = lastSafe ?? safeSpotAt(car.x, car.y, query);
+      if (spot) {
+        tow = createTow(car, spot, tuning.rescueTowSeconds);
+        car.steer = 0;
+        car.drifting = false;
+        boostTimer = 0;
+      }
+    } else if (query.distanceToRoad(car.x, car.y) <= corridor) {
+      lastSafe = safeSpotAt(car.x, car.y, query) ?? lastSafe;
+    }
     t += DT;
     steps++;
     if (surface === "offroad") offroadSteps++;

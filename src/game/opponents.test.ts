@@ -51,13 +51,15 @@ describe("opponent field", () => {
     expect(a.map((o) => o.tuning.maxSpeed)).toEqual(b.map((o) => o.tuning.maxSpeed));
   });
 
-  it("spreads skill evenly across the field", () => {
+  it("spreads skill evenly across the field, and never past the player's car", () => {
     const three = skillSpread(3);
-    [0.85, 0.93, 1.01].forEach((v, i) => expect(three[i]).toBeCloseTo(v));
+    [0.87, 0.93, 0.99].forEach((v, i) => expect(three[i]).toBeCloseTo(v));
     const seven = skillSpread(7);
     expect(seven).toHaveLength(7);
-    expect(Math.min(...seven)).toBeCloseTo(0.85);
-    expect(Math.max(...seven)).toBeCloseTo(1.01);
+    expect(Math.min(...seven)).toBeCloseTo(0.87);
+    // no bot out-machines the player: a bot faster than your car and driving a
+    // cleaner line is uncatchable the moment you make one mistake
+    expect(Math.max(...seven)).toBeLessThan(1);
   });
 
   it("grid slots sit on the road just behind the start line", () => {
@@ -217,6 +219,14 @@ describe("rubber banding", () => {
   it("saturates instead of growing without bound", () => {
     expect(rubberMult(5, 0.2)).toBeCloseTo(0.8);
     expect(rubberMult(-5, 0.2)).toBeCloseTo(1.2);
+  });
+
+  it("leashes an escaping bot harder than it tows a dropped one", () => {
+    // the runaway leader is the thing that ruins a race, so the leash pulls
+    // harder than the tow — 1 - lead > 1 + behind in magnitude
+    expect(rubberMult(5, 0.1, 0.3)).toBeCloseTo(0.7);
+    expect(rubberMult(-5, 0.1, 0.3)).toBeCloseTo(1.1);
+    expect(rubberMult(0, 0.1, 0.3)).toBe(1);
   });
 
   it("a bot far ahead of the player covers less ground than one far behind", () => {
