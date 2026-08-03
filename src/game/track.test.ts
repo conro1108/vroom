@@ -40,8 +40,13 @@ describe("surface queries", () => {
 describe("fencing", () => {
   const corridor = track.roadWidth / 2 + 26;
   // Only some stretches are fenced now, so the fence tests have to stand on one
-  // that is — the open stretches are covered by the rescue tests below.
-  const fencedIndex = track.fenced.findIndex(Boolean);
+  // that is — the open stretches are covered by the rescue tests below. Stand
+  // *inside* a fenced run, not on its first sample: nearestOnRoad can snap a
+  // point beside sample i onto segment i-1, and on the edge of a run that
+  // neighbour is the unfenced one, so the fence quietly isn't there.
+  const fencedIndex = track.fenced.findIndex(
+    (f, i) => f && track.fenced[(i + 1) % track.fenced.length] && track.fenced[i - 1]
+  );
 
   it("leaves a car inside the corridor alone", () => {
     const p = track.samples[fencedIndex]!;

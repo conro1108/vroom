@@ -24,6 +24,10 @@ export interface TrackDef {
   /** There is no grass — the road is a ribbon over nothing. Nothing is fenced,
    *  and leaving the road at all drops you off the edge into a rescue. */
   voidRunoff?: boolean;
+  /** A deliberate speed oval: the lap is *meant* to be one flat-out arc, so it
+   *  is exempt from the steering-demand floor in tracks.test.ts. Two tracks in
+   *  the catalog get this; on anything else a flat lap is a layout bug. */
+  speedOval?: boolean;
 }
 
 export interface Track {

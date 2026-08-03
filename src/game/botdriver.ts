@@ -86,22 +86,36 @@ export const DRIVER_SPREAD: BotPersonality[] = [
 
 const MISTAKE_SECONDS = 0.7;
 
-/** Point `aheadPx` of arc length past progress `p`, shifted `lateral` px off the centerline. */
+/**
+ * Point `aheadPx` of arc length past progress `p`, shifted `lateral` px off the
+ * centerline.
+ *
+ * Interpolated *between* samples, not snapped to one. Snapping meant the aim
+ * point sat still while the car covered a sample's worth of road and then
+ * jumped a whole sample forward — a sawtooth that the steering gain amplified
+ * into a visible twitch, on every bot, every frame.
+ */
 function pointAhead(track: Track, totalLen: number, p: number, aheadPx: number, lateral: number) {
+  const n = track.samples.length;
   const f = (p + aheadPx / totalLen) % 1;
-  // progress[] is sorted ascending; find the sample at fraction f
+  // progress[] is sorted ascending; find the sample at or before fraction f
   let lo = 0;
-  let hi = track.progress.length - 1;
+  let hi = n - 1;
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;
     if (track.progress[mid]! <= f) lo = mid;
     else hi = mid - 1;
   }
   const a = track.samples[lo]!;
-  if (!lateral) return a;
-  const b = track.samples[(lo + 1) % track.samples.length]!;
+  const b = track.samples[(lo + 1) % n]!;
+  const p0 = track.progress[lo]!;
+  const p1 = lo + 1 < n ? track.progress[lo + 1]! : 1;
+  const u = p1 > p0 ? Math.min(1, Math.max(0, (f - p0) / (p1 - p0))) : 0;
+  const x = a.x + (b.x - a.x) * u;
+  const y = a.y + (b.y - a.y) * u;
+  if (!lateral) return { x, y };
   const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-  return { x: a.x - ((b.y - a.y) / len) * lateral, y: a.y + ((b.x - a.x) / len) * lateral };
+  return { x: x - ((b.y - a.y) / len) * lateral, y: y + ((b.x - a.x) / len) * lateral };
 }
 
 /** Deterministic pseudo-random in [0,1) — keeps bot mistakes replayable in tests. */

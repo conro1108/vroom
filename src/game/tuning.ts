@@ -88,7 +88,7 @@ export const DEFAULT_TUNING: Tuning = {
   rescueTowSeconds: 1.1,
   cameraLerp: 5,
   lookAhead: 0.35,
-  desktopZoomWorldHeight: 190,
+  desktopZoomWorldHeight: 265,
   steerMode: "joystick",
   fixedStick: true,
   joystickDeadzonePx: 10,
@@ -103,7 +103,7 @@ export const DEFAULT_TUNING: Tuning = {
 // the whole saved object on a bump (which would wipe every value the player
 // tuned on-device), we migrate the previous version forward and only reset the
 // specific keys whose default actually moved — see MIGRATIONS below.
-const STORAGE_KEY = "vroom.tuning.v7";
+const STORAGE_KEY = "vroom.tuning.v8";
 
 // v4 → v5 retuned the whole field tighter, so every handling default moved. A
 // v4 save is holding the old loose numbers for a car that no longer exists.
@@ -136,13 +136,18 @@ const V7_MOVED: (keyof Tuning)[] = [
   "driftThreshold",
 ];
 
+// v7 → v8 zoomed the wide-screen view out: the old height was a squat letterbox
+// with no road ahead on a desktop window.
+const V8_MOVED: (keyof Tuning)[] = ["desktopZoomWorldHeight"];
+
 const MIGRATIONS: { key: string; resetKeys: (keyof Tuning)[] }[] = [
-  { key: "vroom.tuning.v6", resetKeys: [...V7_MOVED] },
+  { key: "vroom.tuning.v7", resetKeys: [...V8_MOVED] },
+  { key: "vroom.tuning.v6", resetKeys: [...V8_MOVED, ...V7_MOVED] },
   // v5 → v6 widened the corridor to go with the wider roads and the new
   // out-of-bounds rescue; an old narrow runoff would fence you in again.
-  { key: "vroom.tuning.v5", resetKeys: [...V7_MOVED, "fenceMarginPx"] },
-  { key: "vroom.tuning.v4", resetKeys: [...V7_MOVED, ...V5_HANDLING, "fenceMarginPx"] },
-  { key: "vroom.tuning.v3", resetKeys: [...V7_MOVED, ...V5_HANDLING, "fenceMarginPx"] },
+  { key: "vroom.tuning.v5", resetKeys: [...V8_MOVED, ...V7_MOVED, "fenceMarginPx"] },
+  { key: "vroom.tuning.v4", resetKeys: [...V8_MOVED, ...V7_MOVED, ...V5_HANDLING, "fenceMarginPx"] },
+  { key: "vroom.tuning.v3", resetKeys: [...V8_MOVED, ...V7_MOVED, ...V5_HANDLING, "fenceMarginPx"] },
 ];
 
 export function loadTuning(): Tuning {

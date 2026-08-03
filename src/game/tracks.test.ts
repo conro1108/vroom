@@ -2,9 +2,11 @@
 // control points, and these tests are what catch an out-of-bounds sample or a
 // road that folds back onto itself (a "pinch") before anyone drives it.
 import { describe, expect, it } from "vitest";
+import { createBot } from "./botdriver";
 import { createOpponents, stepOpponents } from "./opponents";
+import { createCarState, stepCar } from "./physics";
 import { SPEED_CLASSES } from "./progression";
-import { createTrack, createTrackQuery } from "./track";
+import { createLapTracker, createTrack, createTrackQuery, updateLap } from "./track";
 import { TRACKS } from "./tracks";
 import { DEFAULT_TUNING } from "./tuning";
 
@@ -105,3 +107,56 @@ describe.each(TRACKS.map((def) => [def.id, def] as const))("driving %s", (_id, d
     if (!def.voidRunoff) expect(rescues, `${def.id}: bot needed rescuing mid-lap`).toBe(0);
   });
 });
+
+// A layout can clear every check above and still be dull. The failure mode is
+// specific and it's easy to author by accident: bends shallower than the road
+// is wide vanish into the corridor, so the whole lap is one flat-out arc you
+// hold with a constant nudge of lock — a "wiggly circle". Polar layouts are
+// especially prone to it, since a radius that eases inward over 40° of angle is
+// a spiral, not a corner.
+//
+// So drive a clean lap and measure what the road asks of the hands: how much
+// lock it needs on average, and how often it makes you change direction. These
+// floors are set just under where the catalog sits, so they catch a new layout
+// (or a retune) sliding back toward a circle rather than grading the tracks.
+const MIN_AVG_LOCK = 0.11; // mean |steer| over a flying lap
+const MIN_REVERSALS = 3; // times the lap swaps which way you're turning
+
+describe.each(TRACKS.filter((d) => !d.speedOval).map((def) => [def.id, def] as const))(
+  "shape of %s",
+  (_id, def) => {
+    it("asks for real steering, not one flat-out arc", () => {
+      const track = createTrack(def);
+      const query = createTrackQuery(track);
+      const dt = 1 / 120;
+      const bot = createBot(track, query, DEFAULT_TUNING);
+      let car = createCarState(track.start.x, track.start.y, track.startHeading);
+      const tracker = createLapTracker(0);
+      let laps = 0;
+      let steps = 0;
+      let lockSum = 0;
+      let reversals = 0;
+      let turning = 0; // which way we're currently committed, 0 = straight-ish
+      for (let i = 0; i < 120 * 200 && laps < 2; i++) {
+        car = stepCar(car, bot(car), DEFAULT_TUNING, query.surfaceAt(car.x, car.y), dt);
+        if (laps >= 1) {
+          // measure the flying lap only — the standing start is all throttle
+          steps++;
+          lockSum += Math.abs(car.steer);
+          const way = Math.abs(car.steer) < 0.2 ? turning : Math.sign(car.steer);
+          if (way !== 0 && turning !== 0 && way !== turning) reversals++;
+          if (way !== 0) turning = way;
+        }
+        const p = query.progressAt(car.x, car.y);
+        if (p !== null && updateLap(tracker, p).completed) laps++;
+      }
+      expect(steps, `${def.id}: bot never got round for a measured lap`).toBeGreaterThan(0);
+      expect(lockSum / steps, `${def.id}: lap needs almost no steering lock`).toBeGreaterThanOrEqual(
+        MIN_AVG_LOCK
+      );
+      expect(reversals, `${def.id}: lap never changes direction — it's a circle`).toBeGreaterThanOrEqual(
+        MIN_REVERSALS
+      );
+    });
+  }
+);

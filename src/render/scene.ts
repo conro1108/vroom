@@ -10,7 +10,6 @@ import type { Tuning } from "../game/tuning";
 import { themeById, type WorldTheme } from "./themes";
 import {
   buildCarFrames,
-  carFrameIndex,
   CROWN_MAP,
   CROWN_PALETTE,
   drawMap,
@@ -83,9 +82,9 @@ export class Scene {
   private particles: Particle[] = [];
   private cam: { x: number; y: number };
   private scale = 2;
-  private viewHeight = 190; // world-px kept vertically visible on wide screens; frame() syncs it from Tuning
+  private viewHeight = 265; // world-px kept vertically visible on wide screens; frame() syncs it from Tuning
   private skidFadeTimer = 0;
-  private lastCarFrame = -1;
+  private frameHeld = new Map<string, number>(); // per-car rotation frame, see heldFrame
   private clock = 0; // wall time, for the player marker's idle bob
   private ready = false;
 
@@ -235,11 +234,18 @@ export class Scene {
   clearMarks(): void {
     this.skidCtx.clearRect(0, 0, this.skid.width, this.skid.height);
     this.particles.length = 0;
+    this.frameHeld.clear(); // cars are being replaced/repositioned: don't ease into the new headings
   }
 
   private updateCamera(dt: number, car: CarState, tuning: Tuning): void {
-    const tx = car.x + car.vx * tuning.lookAhead;
-    const ty = car.y + car.vy * tuning.lookAhead;
+    // Lead along where the car is *pointed*, at its forward speed. Leading by
+    // the raw velocity vector swung the camera sideways every time the back
+    // stepped out, so the whole world lurched through a drift — exactly when
+    // you most want a steady frame to read the corner in.
+    const fwd = Math.max(0, car.vx * Math.cos(car.heading) + car.vy * Math.sin(car.heading));
+    const lead = fwd * tuning.lookAhead;
+    const tx = car.x + Math.cos(car.heading) * lead;
+    const ty = car.y + Math.sin(car.heading) * lead;
     const k = Math.min(1, tuning.cameraLerp * dt);
     this.cam.x += (tx - this.cam.x) * k;
     this.cam.y += (ty - this.cam.y) * k;
@@ -336,6 +342,13 @@ export class Scene {
     // Floor the camera to a whole world pixel for crisp sampling, then push the
     // leftover fraction into the final blit so scrolling stays smooth instead of
     // snapping the whole scene a buffer-pixel at a time (the source of the jitter).
+    //
+    // Everything drawn on top is therefore rounded in *world* space and only
+    // then shifted by sx/sy — never `round(x - sx)`. Rounding after the shift
+    // folds the camera's sub-pixel fraction into the rounding, and since that
+    // fraction sweeps through a whole pixel every frame or two, it kicked cars
+    // and particles a full buffer pixel back and forth at random. Rounding in
+    // world space locks them to the same grid as the road they're driving on.
     const originX = this.cam.x - bw / 2;
     const originY = this.cam.y - bh / 2;
     const sx = Math.floor(originX);
@@ -351,32 +364,33 @@ export class Scene {
     for (const p of this.particles) {
       ctx.globalAlpha = Math.min(1, p.life * 2);
       ctx.fillStyle = p.color ?? COLORS.dust;
-      ctx.fillRect(Math.round(p.x - sx) - 1, Math.round(p.y - sy) - 1, 2, 2);
+      ctx.fillRect(Math.round(p.x) - sx - 1, Math.round(p.y) - sy - 1, 2, 2);
     }
     ctx.globalAlpha = 1;
 
     // item world under the cars: oil first (on the road), then boxes, then shots
     if (items) {
       for (const oil of items.oils) {
-        drawMap(ctx, OIL_MAP, OIL_PALETTE, Math.round(oil.x - sx) - 5, Math.round(oil.y - sy) - 2);
+        drawMap(ctx, OIL_MAP, OIL_PALETTE, Math.round(oil.x) - sx - 5, Math.round(oil.y) - sy - 2);
       }
       for (const box of items.boxes) {
         if (box.respawnIn > 0) continue;
-        drawMap(ctx, ITEM_BOX_MAP, ITEM_BOX_PALETTE, Math.round(box.x - sx) - 4, Math.round(box.y - sy) - 4);
+        drawMap(ctx, ITEM_BOX_MAP, ITEM_BOX_PALETTE, Math.round(box.x) - sx - 4, Math.round(box.y) - sy - 4);
       }
       for (const m of items.missiles) {
         const map = m.chaseLeader ? CROWN_MAP : m.homing ? HOMING_MAP : ROCKET_MAP;
         const palette = m.chaseLeader ? CROWN_PALETTE : m.homing ? HOMING_PALETTE : ROCKET_PALETTE;
-        drawMap(ctx, map, palette, Math.round(m.x - sx) - 2, Math.round(m.y - sy) - 2);
+        drawMap(ctx, map, palette, Math.round(m.x) - sx - 2, Math.round(m.y) - sy - 2);
       }
     }
 
     // opponents under the player so the player's car always reads on top
-    for (const racer of racers) {
+    for (let i = 0; i < racers.length; i++) {
+      const racer = racers[i]!;
       const frames = this.framesFor(racer.vehicleId);
-      const frame = frames[carFrameIndex(racer.heading)]!;
-      const rx = Math.round(racer.x - sx);
-      const ry = Math.round(racer.y - sy);
+      const frame = frames[this.heldFrame(`racer${i}`, racer.heading, frames.length)]!;
+      const rx = Math.round(racer.x) - sx;
+      const ry = Math.round(racer.y) - sy;
       ctx.fillStyle = COLORS.shadow;
       ctx.fillRect(rx - 7, ry + 6, 14, 3);
       ctx.drawImage(frame, rx - Math.floor(frame.width / 2), ry - Math.floor(frame.height / 2));
@@ -384,17 +398,18 @@ export class Scene {
 
     // ghost under the real car: drawn as the vehicle that set the record, translucent
     if (ghost) {
-      const gFrame = this.framesFor(ghost.vehicleId)[carFrameIndex(ghost.heading)]!;
-      const gx = Math.round(ghost.x - sx);
-      const gy = Math.round(ghost.y - sy);
+      const gFrames = this.framesFor(ghost.vehicleId);
+      const gFrame = gFrames[this.heldFrame("ghost", ghost.heading, gFrames.length)]!;
+      const gx = Math.round(ghost.x) - sx;
+      const gy = Math.round(ghost.y) - sy;
       ctx.globalAlpha = 0.45;
       ctx.drawImage(gFrame, gx - Math.floor(gFrame.width / 2), gy - Math.floor(gFrame.height / 2));
       ctx.globalAlpha = 1;
     }
 
-    const frame = this.carFrames[this.carFrame(car.heading)]!;
-    const cx = Math.round(car.x - sx);
-    const cy = Math.round(car.y - sy);
+    const frame = this.carFrames[this.heldFrame("player", car.heading, this.carFrames.length)]!;
+    const cx = Math.round(car.x) - sx;
+    const cy = Math.round(car.y) - sy;
     ctx.fillStyle = COLORS.shadow;
     ctx.fillRect(cx - 7, cy + 6, 14, 3);
     ctx.drawImage(frame, cx - Math.floor(frame.width / 2), cy - Math.floor(frame.height / 2));
@@ -422,15 +437,31 @@ export class Scene {
     }
   }
 
-  // Hysteresis: hold the current rotation frame until the heading is clearly
-  // past a neighbour, so small steering wobble doesn't flicker the sprite.
-  private carFrame(heading: number): number {
-    const target = carFrameIndex(heading);
-    if (this.lastCarFrame < 0) return (this.lastCarFrame = target);
-    const n = this.carFrames.length;
-    let diff = ((target - this.lastCarFrame + n + n / 2) % n) - n / 2;
-    if (Math.abs(diff) >= 2) this.lastCarFrame = target;
-    return this.lastCarFrame;
+  /**
+   * Which rotation frame a car (keyed by `id`) is showing, with hysteresis.
+   *
+   * Two things make an unfiltered `carFrameIndex` look bad. A heading sitting
+   * right on a frame boundary flickers between two sprites every render, which
+   * is what made a wobbling bot shimmer; the widened deadband below holds the
+   * current frame until the heading is clearly past its neighbour. And snapping
+   * straight to the target skips frames mid-corner, so a turn reads as a
+   * stutter rather than a rotation — hence stepping one frame at a time. Only a
+   * genuinely large jump (a spin, a rescue setting the car down) snaps.
+   */
+  private heldFrame(id: string, heading: number, n: number): number {
+    const pos = (((heading + Math.PI / 2) / (Math.PI * 2)) * n + n) % n; // continuous frame position
+    const held = this.frameHeld.get(id);
+    if (held === undefined) {
+      const first = Math.round(pos) % n;
+      this.frameHeld.set(id, first);
+      return first;
+    }
+    const diff = ((pos - held + n * 1.5) % n) - n / 2; // signed frames to travel
+    if (Math.abs(diff) <= 0.7) return held;
+    const step = Math.abs(diff) >= 4 ? Math.round(diff) : Math.sign(diff);
+    const next = (held + step + n) % n;
+    this.frameHeld.set(id, next);
+    return next;
   }
 }
 

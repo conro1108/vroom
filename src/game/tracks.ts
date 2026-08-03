@@ -15,11 +15,22 @@
 //     Braking points instead of a racing line.
 //   - serpentine(): the Switchback Pass shape — long straights joined by hard
 //     hairpins, then a return leg. The most "driveable" layout we have.
+//   - hook(): a fast rounded box with one hairpin spur off a straight. The
+//     shape that gives a lap a *slow section* rather than an even rhythm.
 //   - circuit(): a road course authored as a ring of corners in polar form.
 //     Big angle gaps read as sweeps; low radii bite inward as hairpins.
 //   - gear(): a star/clover of sharp lobes. Two tracks only — it was the whole
 //     catalog once, and a field of stars all drives the same.
 //   - hand-drawn point lists for the speed ovals and the hero courses.
+//
+// Authoring a corner that's actually a corner is its own trap, and the
+// steering-demand test in tracks.test.ts is what holds the line on it. A bend
+// shallower than the road is wide disappears into the corridor entirely, and in
+// polar form a radius that eases inward over 40° of angle is a spiral you hold
+// flat, not a turn — a bite has to drop hard between control points ~30° apart
+// to read as one. Same story elsewhere: a fat chamfer rounds a square corner
+// into a sweeper, and a hairpin much wider than the car's own turning circle is
+// just a straight with a bend in it.
 import type { TrackDef, TrackPoint } from "./track";
 
 function gear(cx: number, cy: number, outer: number, inner: number, lobes: number) {
@@ -113,7 +124,11 @@ interface StreetOpts {
 }
 
 function street(W: number, H: number, opts: StreetOpts = {}): TrackPoint[] {
-  const { m = 260, chamfer = 210, chicane = 150, chicaneShift = 0, taper = 0 } = opts;
+  // A generous chamfer rounds the "square" corners into sweepers you carry
+  // full speed through, which is the opposite of the point — keep it short
+  // enough that the corner is a braking zone, and the chicane deep enough to
+  // actually be two direction changes.
+  const { m = 260, chamfer = 150, chicane = 230, chicaneShift = 0, taper = 0 } = opts;
   const [x0, x1, y0, y1] = [m, W - m, m, H - m];
   const c = chamfer;
   const [tx0, tx1] = [x0 + taper, x1 - taper];
@@ -151,7 +166,10 @@ interface HookOpts {
  * rather than an even rhythm of corners.
  */
 function hook(W: number, H: number, opts: HookOpts = {}): TrackPoint[] {
-  const { m = 240, chamfer = 210, spurAt = 420, gap = 230, depth = 460 } = opts;
+  // `gap` is the U's diameter, so it's what decides whether the spur is a
+  // hairpin or a wide bowl you can hold flat. Keep it near the car's own
+  // turning circle — a fat U is just a longer straight with a bend in it.
+  const { m = 240, chamfer = 170, spurAt = 420, gap = 180, depth = 460 } = opts;
   const [x0, x1, y0, y1] = [m, W - m, m, H - m];
   const c = chamfer;
   const xs = x1 - spurAt; // the spur's right-hand leg
@@ -224,9 +242,10 @@ function serpentine(W: number, H: number, rows: number, mirror = false): TrackPo
   const y0 = m + 210; // first zig-zag row
   const yN = H - m - 40; // last zig-zag row
   const dy = (yN - y0) / (rows - 1); // row spacing == hairpin diameter
-  const bulge = 0.8 * dy; // how far a hairpin loops past the straight; > dy/2
+  const bulge = 0.62 * dy; // how far a hairpin loops past the straight; > dy/2
   // makes the apex a gentle-enough 180° that the car isn't asked to turn
-  // sharper than it physically can.
+  // sharper than it physically can. Kept only just over that floor: further out
+  // and the "hairpin" opens into a bowl you hold flat, which is no hairpin.
   const corridorGap = 110; // clear space between a right hairpin apex and the return leg
   const xL = m + bulge + 40; // left straight ends (leaves room for left hairpins)
   const xR = W - m - bulge - corridorGap; // right straight ends
@@ -285,8 +304,11 @@ export const TRACKS: TrackDef[] = [
     worldHeight: 1400,
     points: [
       { x: 460, y: 320 },
-      { x: 1020, y: 240 },
-      { x: 1540, y: 340 },
+      // a lazy S across the top: the first thing the game teaches is that the
+      // road changes direction on you, so the opening lap can't be one long arc
+      { x: 900, y: 190 },
+      { x: 1180, y: 430 },
+      { x: 1540, y: 300 },
       { x: 1720, y: 680 },
       { x: 1560, y: 1060 },
       { x: 1200, y: 1160 },
@@ -353,7 +375,7 @@ export const TRACKS: TrackDef[] = [
     roadWidth: 75,
     worldWidth: 1700,
     worldHeight: 1500,
-    points: serpentine(1700, 1500, 3),
+    points: serpentine(1700, 1500, 5),
   },
   {
     // Two tight bowls knotted onto one narrow neck — the tightest dogbone in
@@ -404,12 +426,12 @@ export const TRACKS: TrackDef[] = [
     points: circuit(1000, 750, 800, 600, [
       [10, 0.95],
       [45, 0.92],
-      [95, 0.68],
+      [95, 0.45],
       [135, 0.94],
       [180, 0.5],
       [225, 0.9],
       [270, 0.95],
-      [315, 0.7],
+      [315, 0.45],
       [345, 0.92],
     ]),
   },
@@ -424,11 +446,11 @@ export const TRACKS: TrackDef[] = [
     worldHeight: 1300,
     points: [
       { x: 360, y: 320 },
-      { x: 620, y: 240 },
-      { x: 860, y: 360 },
-      { x: 1120, y: 240 },
-      { x: 1380, y: 360 },
-      { x: 1640, y: 240 },
+      { x: 620, y: 200 },
+      { x: 860, y: 470 },
+      { x: 1120, y: 200 },
+      { x: 1380, y: 470 },
+      { x: 1640, y: 200 },
       { x: 1900, y: 340 },
       { x: 2080, y: 560 },
       { x: 1980, y: 820 },
@@ -458,6 +480,7 @@ export const TRACKS: TrackDef[] = [
     // A big lazy oval that leans through the heat — flat out almost everywhere.
     id: "mirage",
     name: "Mirage Oval",
+    speedOval: true,
     roadWidth: 102,
     worldWidth: 2400,
     worldHeight: 1300,
@@ -484,7 +507,7 @@ export const TRACKS: TrackDef[] = [
     roadWidth: 80,
     worldWidth: 2100,
     worldHeight: 1500,
-    points: hook(2100, 1500, { spurAt: 520, gap: 240, depth: 520 }),
+    points: hook(2100, 1500, { chamfer: 130, spurAt: 620, gap: 170, depth: 620 }),
   },
   {
     // Four flat-out straights and four square corners scorched into the
@@ -495,7 +518,7 @@ export const TRACKS: TrackDef[] = [
     roadWidth: 78,
     worldWidth: 2200,
     worldHeight: 1700,
-    points: street(2200, 1700),
+    points: street(2200, 1700, { chamfer: 120, chicane: 300 }),
   },
 
   // --- Tide Cup ---
@@ -521,6 +544,7 @@ export const TRACKS: TrackDef[] = [
     // Two long plank straights joined by round piers — pure speed.
     id: "boardwalk",
     name: "Boardwalk Sprint",
+    speedOval: true,
     roadWidth: 105,
     worldWidth: 2400,
     worldHeight: 1300,
@@ -552,41 +576,47 @@ export const TRACKS: TrackDef[] = [
     points: dogbone(2300, 1500, 520, 250, 230),
   },
   {
-    // A pinched peanut around the point break — two bowls, one waist.
+    // A pinched peanut around the point break — two bowls, one waist. The
+    // waists cut deep and the shoulders either side stay wide, so each one is a
+    // real turn-in rather than a smooth narrowing you can carry speed through.
     id: "breaker",
     name: "Breaker Bay",
     roadWidth: 95,
     worldWidth: 2200,
     worldHeight: 1400,
     points: circuit(1100, 700, 900, 520, [
-      [0, 0.97],
-      [40, 0.82],
-      [90, 0.52],
-      [140, 0.82],
-      [180, 0.97],
-      [220, 0.82],
-      [270, 0.52],
-      [320, 0.82],
+      [0, 0.98],
+      [58, 0.94],
+      [86, 0.4],
+      [114, 0.94],
+      [180, 0.98],
+      [238, 0.94],
+      [266, 0.4],
+      [294, 0.94],
     ]),
   },
 
   // --- Frost Cup extras ---
   {
-    // Four long committed sweepers carved by old ice.
+    // Two long committed sweepers carved by old ice, each ending in a gouge
+    // that turns hard back on itself. The gouges are the lap: the sweepers are
+    // where you build the speed you have to give back to them.
     id: "glacier",
     name: "Glacier Run",
     roadWidth: 92,
     worldWidth: 2200,
     worldHeight: 1600,
     points: circuit(1100, 800, 880, 640, [
-      [10, 0.95],
-      [60, 0.74],
-      [100, 0.95],
-      [150, 0.74],
-      [200, 0.95],
-      [250, 0.72],
-      [300, 0.95],
-      [345, 0.72],
+      [0, 0.97],
+      [42, 0.95],
+      [72, 0.44],
+      [102, 0.95],
+      [150, 0.98],
+      [180, 0.97],
+      [222, 0.95],
+      [252, 0.44],
+      [282, 0.95],
+      [330, 0.98],
     ]),
   },
   {
@@ -607,26 +637,30 @@ export const TRACKS: TrackDef[] = [
     roadWidth: 74,
     worldWidth: 2000,
     worldHeight: 1800,
-    points: street(2000, 1800, { m: 250, chamfer: 190, chicane: 190, chicaneShift: -230, taper: 260 }),
+    points: street(2000, 1800, { m: 250, chamfer: 150, chicane: 300, chicaneShift: -230, taper: 260 }),
   },
 
   // --- Dusk Cup extras ---
   {
-    // Eight quick kinks under the stars — high speed, never straight.
+    // Four points of starlight, each a genuine hook inward off a long sweep.
+    // The kinks used to be a 12% radial wobble on a 1000px radius — smaller
+    // than the road is wide, so the whole lap was one flat-out circle. They
+    // bite to half radius now, at uneven angles so no two feel alike.
     id: "starlight",
     name: "Starlight Circuit",
     roadWidth: 82,
     worldWidth: 2400,
     worldHeight: 1500,
     points: circuit(1200, 750, 1000, 600, [
-      [0, 0.94],
-      [45, 0.82],
-      [90, 0.94],
-      [135, 0.82],
-      [180, 0.94],
-      [225, 0.82],
-      [270, 0.94],
-      [315, 0.82],
+      [0, 0.97],
+      [40, 0.52],
+      [78, 0.95],
+      [118, 0.55],
+      [160, 0.98],
+      [200, 0.5],
+      [242, 0.94],
+      [284, 0.58],
+      [322, 0.96],
     ]),
   },
 
@@ -665,16 +699,18 @@ export const TRACKS: TrackDef[] = [
     points: gear(1000, 1000, 780, 540, 8),
   },
   {
-    // Switchbacks strung across the nebula: three long drift straights stacked
-    // over nothing, joined by 180s you have to actually brake for. Nowhere on
-    // it are you pointed the same way twice in a row.
+    // Switchbacks strung across the nebula: long drift straights stacked over
+    // nothing, joined by 180s you have to actually brake for. Nowhere on it are
+    // you pointed the same way twice in a row. Mirrored, and in a much wider
+    // world than Switchback Pass, so the straights are long enough to bank a
+    // drift down and the two don't drive like the same track repainted.
     id: "nebula",
     name: "Nebula Drift",
     roadWidth: 92,
     voidRunoff: true,
     worldWidth: 2400,
     worldHeight: 1700,
-    points: hook(2400, 1700, { m: 280, chamfer: 260, spurAt: 700, gap: 300, depth: 620 }),
+    points: serpentine(2400, 1700, 5, true),
   },
   {
     // The hero course. Deliberately irregular — long flat-out sweeps that dump
