@@ -95,14 +95,14 @@ export class Scene {
     query: TrackQuery,
     display: HTMLCanvasElement,
     vehicleId = "classic",
-    corridorPx: number | null = null,
+    fenceMarginPx: number | null = null,
     theme: WorldTheme = themeById("meadow")
   ) {
     this.theme = theme;
     this.display = display;
     this.displayCtx = display.getContext("2d")!;
     display.style.background = theme.grass; // letterbox slack matches the world
-    this.world = paintWorld(track, query, corridorPx, theme);
+    this.world = paintWorld(track, query, fenceMarginPx, theme);
     this.skid = document.createElement("canvas");
     this.skid.width = track.worldWidth;
     this.skid.height = track.worldHeight;
@@ -477,7 +477,7 @@ function paintTrackFence(
   ctx: CanvasRenderingContext2D,
   track: Track,
   query: TrackQuery,
-  corridor: number,
+  marginPx: number,
   theme: WorldTheme
 ): void {
   const n = track.samples.length;
@@ -496,12 +496,13 @@ function paintTrackFence(
         prev = null; // open runoff: no fence here, and no rail into the next post
         continue;
       }
+      const corridor = track.halfWidths[i]! + marginPx; // fence hugs the local edge
       const nx = -(b.y - a.y) / segLen;
       const ny = (b.x - a.x) / segLen;
       const px = a.x + nx * corridor * side;
       const py = a.y + ny * corridor * side;
       const offMap = px < 8 || py < 10 || px > track.worldWidth - 8 || py > track.worldHeight - 8;
-      if (offMap || query.distanceToRoad(px, py) < corridor - 2) {
+      if (offMap || query.edgeDistance(px, py) < marginPx - 2) {
         prev = null;
         continue;
       }
@@ -523,7 +524,7 @@ function paintTrackFence(
 function paintWorld(
   track: Track,
   query: TrackQuery,
-  corridorPx: number | null = null,
+  fenceMarginPx: number | null = null,
   theme: WorldTheme = themeById("meadow")
 ): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
@@ -544,16 +545,18 @@ function paintWorld(
     }
   }
 
-  // road: dark edge pass, then fill pass
+  // road: dark edge pass, then fill pass — per-sample radius, so authored
+  // pinches and fans actually narrow and widen on the ground
   const w = track.roadWidth;
   for (const pass of [
-    { radius: w / 2 + 3, color: theme.roadEdge },
-    { radius: w / 2, color: theme.road },
+    { pad: 3, color: theme.roadEdge },
+    { pad: 0, color: theme.road },
   ]) {
     ctx.fillStyle = pass.color;
-    for (const p of track.samples) {
+    for (let i = 0; i < track.samples.length; i++) {
+      const p = track.samples[i]!;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, pass.radius, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, track.halfWidths[i]! + pass.pad, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -563,15 +566,16 @@ function paintWorld(
   for (let i = 0; i < track.samples.length; i += 2) {
     const p = track.samples[i]!;
     const a = hash(i, 1) * Math.PI * 2;
-    const r = hash(i, 2) * (w / 2 - 4);
+    const r = hash(i, 2) * (track.halfWidths[i]! - 4);
     ctx.fillRect(Math.round(p.x + Math.cos(a) * r), Math.round(p.y + Math.sin(a) * r), 2, 1);
   }
 
-  // decorations, kept off the road and its shoulder
+  // decorations, kept off the road and its shoulder (distances from the
+  // local road edge, so planting follows pinches and fans)
   for (let y = 8; y < canvas.height - 8; y += 14) {
     for (let x = 8; x < canvas.width - 8; x += 14) {
-      const dist = query.distanceToRoad(x, y);
-      if (dist < w / 2 + 8) continue;
+      const edge = query.edgeDistance(x, y);
+      if (edge < 8) continue;
       const r = hash(x, y + 3);
       if (r < 0.05) {
         ctx.fillStyle = theme.tuft;
@@ -583,15 +587,15 @@ function paintWorld(
         ctx.fillRect(x, y + 1, 1, 2);
         ctx.fillStyle = color;
         ctx.fillRect(x, y, 2, 2);
-      } else if (r < 0.098 && dist > w) {
+      } else if (r < 0.098 && edge > w * 0.5) {
         drawMap(ctx, MUSHROOM_MAP, MUSHROOM_PALETTE, x, y);
-      } else if (r < 0.103 && dist > w * 1.3) {
+      } else if (r < 0.103 && edge > w * 0.8) {
         drawMap(ctx, STUMP_MAP, STUMP_PALETTE, x, y);
       }
     }
   }
 
-  if (corridorPx !== null) paintTrackFence(ctx, track, query, corridorPx, theme);
+  if (fenceMarginPx !== null) paintTrackFence(ctx, track, query, fenceMarginPx, theme);
 
   // checkered start line, two rows deep across the road
   const start = track.start;

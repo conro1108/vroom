@@ -38,7 +38,10 @@ describe("surface queries", () => {
 });
 
 describe("fencing", () => {
-  const corridor = track.roadWidth / 2 + 26;
+  // fenceCar takes a margin past the local road edge; this test track is
+  // uniform width, so positions are still computed from the centerline
+  const margin = 26;
+  const corridor = track.roadWidth / 2 + margin;
   // Only some stretches are fenced now, so the fence tests have to stand on one
   // that is — the open stretches are covered by the rescue tests below. Stand
   // *inside* a fenced run, not on its first sample: nearestOnRoad can snap a
@@ -51,7 +54,7 @@ describe("fencing", () => {
   it("leaves a car inside the corridor alone", () => {
     const p = track.samples[fencedIndex]!;
     const car = { x: p.x, y: p.y, vx: 50, vy: 0 };
-    fenceCar(car, query, corridor);
+    fenceCar(car, query, margin);
     expect(car).toEqual({ x: p.x, y: p.y, vx: 50, vy: 0 });
   });
 
@@ -67,7 +70,7 @@ describe("fencing", () => {
       vx: nx * 100,
       vy: ny * 100,
     };
-    fenceCar(car, query, corridor);
+    fenceCar(car, query, margin);
     const after = query.nearestOnRoad(car.x, car.y)!;
     expect(after.dist).toBeLessThanOrEqual(corridor + 0.01);
     // outward velocity component is now inward (bounced)
@@ -87,7 +90,7 @@ describe("fencing", () => {
       vx: nx * 2,
       vy: ny * 2,
     };
-    fenceCar(car, query, corridor);
+    fenceCar(car, query, margin);
     const inward = -(car.vx * nx + car.vy * ny);
     expect(inward).toBeGreaterThanOrEqual(35);
   });
@@ -100,7 +103,8 @@ describe("fencing", () => {
 });
 
 describe("open runoff and rescue", () => {
-  const corridor = track.roadWidth / 2 + 26;
+  const margin = 26; // past the road edge (uniform width here)
+  const corridor = track.roadWidth / 2 + margin;
   const openIndex = track.fenced.findIndex((f) => !f);
 
   /** A point `out` px straight off the road from sample `i`. */
@@ -121,14 +125,14 @@ describe("open runoff and rescue", () => {
   it("lets a car sail off an unfenced stretch", () => {
     const p = offRoad(openIndex, corridor + 40);
     const car = { x: p.x, y: p.y, vx: 60, vy: 60 };
-    fenceCar(car, query, corridor);
+    fenceCar(car, query, margin);
     expect(car).toEqual({ x: p.x, y: p.y, vx: 60, vy: 60 });
   });
 
   it("only calls for a rescue once the car is well past the runoff", () => {
     const near = offRoad(openIndex, corridor + 20);
     const far = offRoad(openIndex, corridor + 400);
-    const limit = corridor + 150;
+    const limit = margin + 150; // outOfBounds measures past the road edge
     expect(outOfBounds(near, query, limit)).toBe(false);
     expect(outOfBounds(far, query, limit)).toBe(true);
   });

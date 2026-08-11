@@ -223,7 +223,7 @@ function startCalibration(): void {
   series = null;
   track = createTrack(def);
   query = createTrackQuery(track);
-  scene = new Scene(track, query, canvas, progress.lastVehicle, corridorPx());
+  scene = new Scene(track, query, canvas, progress.lastVehicle, fenceMargin());
   minimap.setTrack(track);
   car = createCarState(track.start.x, track.start.y, track.startHeading);
   lastSafe = { x: track.start.x, y: track.start.y, heading: track.startHeading };
@@ -263,7 +263,7 @@ function startSeriesRace(raceIndex: number): void {
   const def = trackDefById(cup.trackIds[raceIndex]!);
   track = createTrack(def);
   query = createTrackQuery(track);
-  scene = new Scene(track, query, canvas, progress.lastVehicle, corridorPx(), themeById(cup.theme));
+  scene = new Scene(track, query, canvas, progress.lastVehicle, fenceMargin(), themeById(cup.theme));
   minimap.setTrack(track);
   hud.setBest(getRecords(records, def.id, cls.id).bestLapMs);
   menu.hide();
@@ -577,8 +577,8 @@ function loop(now: number): void {
           PHYSICS_DT,
           true,
           { distance: raceDistance(lapTracker), car },
-          corridorPx(),
-          rescuePx(),
+          fenceMargin(),
+          rescueMargin(),
           tuning.rescueTowSeconds
         );
         separateCars([car, ...opponents.map((o) => o.car)]);
@@ -598,7 +598,7 @@ function loop(now: number): void {
         if (stepTow(tow, car, PHYSICS_DT)) tow = null;
       } else {
         applyWalls();
-        fenceCar(car, query, corridorPx());
+        fenceCar(car, query, fenceMargin());
         updateRescue();
       }
       if (!racing) continue;
@@ -769,23 +769,21 @@ window.addEventListener("keydown", (e) => {
 });
 
 /**
- * How far from the centerline the fence sits on the current track — and, off a
- * void track's edge, how far out a car still counts as "safely on the road" for
- * the rescue anchor. There is no corridor out there: a couple of wheels over
- * the lip is all the road you get.
+ * How far past the *local road edge* the fence sits on the current track —
+ * margin-based because road width varies along a lap now. Over the void there
+ * is no corridor at all: a couple of wheels over the lip is all you get.
  */
-function corridorPx(): number {
-  const half = track ? track.roadWidth / 2 : 0;
-  return track?.voidRunoff ? half : half + tuning.fenceMarginPx;
+function fenceMargin(): number {
+  return track?.voidRunoff ? 0 : tuning.fenceMarginPx;
 }
 
 /**
- * How far off the road you get before a marshal collects you. On grass that's
- * a long excursion past the fence line; over the void it's the width of your
- * overhang — leave the road and you fall.
+ * How far past the road edge you get before a marshal collects you. On grass
+ * that's a long excursion past the fence line; over the void it's the width
+ * of your overhang — leave the road and you fall.
  */
-function rescuePx(): number {
-  return corridorPx() + (track?.voidRunoff ? tuning.voidMarginPx : tuning.rescueMarginPx);
+function rescueMargin(): number {
+  return fenceMargin() + (track?.voidRunoff ? tuning.voidMarginPx : tuning.rescueMarginPx);
 }
 
 /**
@@ -796,7 +794,7 @@ function rescuePx(): number {
  */
 function updateRescue(): void {
   if (!query || tow) return;
-  if (outOfBounds(car, query, rescuePx())) {
+  if (outOfBounds(car, query, rescueMargin())) {
     const spot = lastSafe ?? safeSpotAt(car.x, car.y, query);
     if (!spot) return;
     if (track?.voidRunoff) scene?.fallBurst(car);
@@ -807,7 +805,7 @@ function updateRescue(): void {
     playerDriftBoost = createDriftBoost();
     hud.toast(track?.voidRunoff ? "off the edge!" : "back on track");
     audio.rescue();
-  } else if (query.distanceToRoad(car.x, car.y) <= corridorPx()) {
+  } else if (query.edgeDistance(car.x, car.y) <= fenceMargin()) {
     lastSafe = safeSpotAt(car.x, car.y, query) ?? lastSafe;
   }
 }

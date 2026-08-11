@@ -95,7 +95,7 @@ const MISTAKE_SECONDS = 0.7;
  * jumped a whole sample forward — a sawtooth that the steering gain amplified
  * into a visible twitch, on every bot, every frame.
  */
-function pointAhead(track: Track, totalLen: number, p: number, aheadPx: number, lateral: number) {
+function pointAhead(track: Track, totalLen: number, p: number, aheadPx: number, lateralFrac: number) {
   const n = track.samples.length;
   const f = (p + aheadPx / totalLen) % 1;
   // progress[] is sorted ascending; find the sample at or before fraction f
@@ -113,7 +113,8 @@ function pointAhead(track: Track, totalLen: number, p: number, aheadPx: number, 
   const u = p1 > p0 ? Math.min(1, Math.max(0, (f - p0) / (p1 - p0))) : 0;
   const x = a.x + (b.x - a.x) * u;
   const y = a.y + (b.y - a.y) * u;
-  if (!lateral) return { x, y };
+  if (!lateralFrac) return { x, y };
+  const lateral = lateralFrac * track.halfWidths[lo]! * 2;
   const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
   return { x: x - ((b.y - a.y) / len) * lateral, y: y + ((b.x - a.x) / len) * lateral };
 }
@@ -147,7 +148,9 @@ export function createBot(
     totalLen += Math.hypot(b.x - a.x, b.y - a.y);
   }
 
-  const lateral = personality.lineFrac * track.roadWidth;
+  // lineFrac stays a *fraction* of the road: pointAhead scales it by the local
+  // width, so a bot's off-center line squeezes down through a pinch with it.
+  const lateral = personality.lineFrac;
 
   // Reaction lag is a FIFO of decided-but-not-yet-applied inputs: the bot reads
   // the corner now and its hands get there `reactionSeconds` later. Primed with
@@ -223,8 +226,8 @@ export function simulateLap(
   const query = createTrackQuery(track);
   const bot = createBot(track, query, tuning, driver);
 
-  const half = track.roadWidth / 2;
-  const corridor = track.voidRunoff ? half : half + tuning.fenceMarginPx;
+  // margins past the local road edge (width varies along a lap now)
+  const corridor = track.voidRunoff ? 0 : tuning.fenceMarginPx;
   const rescueAt = corridor + (track.voidRunoff ? tuning.voidMarginPx : tuning.rescueMarginPx);
 
   let car = createCarState(track.start.x, track.start.y, track.startHeading);
@@ -269,7 +272,7 @@ export function simulateLap(
         car.drifting = false;
         boostTimer = 0;
       }
-    } else if (query.distanceToRoad(car.x, car.y) <= corridor) {
+    } else if (query.edgeDistance(car.x, car.y) <= corridor) {
       lastSafe = safeSpotAt(car.x, car.y, query) ?? lastSafe;
     }
     t += DT;

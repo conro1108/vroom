@@ -209,7 +209,9 @@ export function createItemWorld(
     const nx = -(b.y - a.y) / len;
     const ny = (b.x - a.x) / len;
     for (const lane of [-1, 0, 1]) {
-      const off = lane * track.roadWidth * 0.28;
+      // lanes scale with the *local* width, so a row placed on a pinch or a
+      // narrowed tail keeps all three boxes on the road
+      const off = lane * track.halfWidths[lo]! * 2 * 0.28;
       boxes.push({ x: a.x + nx * off, y: a.y + ny * off, respawnIn: 0 });
     }
   }

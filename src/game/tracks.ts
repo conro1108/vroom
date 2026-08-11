@@ -23,6 +23,14 @@
 //     catalog once, and a field of stars all drives the same.
 //   - hand-drawn point lists for the speed ovals and the hero courses.
 //
+// Width is an authoring tool too: any point can carry `w` (or a builder's
+// neckW/spurW/chicaneW/farW knob) to narrow the road below the track's nominal
+// roadWidth, and the pinch eases in and out along the spline. Use it to give a
+// lap a held breath — a canyon slot, a dredged channel, an ice bridge — and
+// use it sparingly: one or two squeezes read as drama, five read as a flinch.
+// Widths only ever narrow (tests enforce w <= roadWidth, w >= 56), so the
+// grid, item lanes, and observers sized off the nominal stay honest.
+//
 // Authoring a corner that's actually a corner is its own trap, and the
 // steering-demand test in tracks.test.ts is what holds the line on it. A bend
 // shallower than the road is wide disappears into the corridor entirely, and in
@@ -62,6 +70,11 @@ function straight(a: TrackPoint, b: TrackPoint, count: number) {
   }));
 }
 
+/** The same points with an authored road width — the pinch/fan brush. */
+function narrowed(pts: TrackPoint[], w: number): TrackPoint[] {
+  return pts.map((p) => ({ ...p, w }));
+}
+
 /**
  * A dogbone: two bowls turning opposite ways, joined by a neck of two parallel
  * straights. It's the figure-eight you can build without crossing the road, and
@@ -76,7 +89,20 @@ function straight(a: TrackPoint, b: TrackPoint, count: number) {
  */
 const MIN_NECK = 200; // shortest neck that still reads as a straight between the bowls
 
-function dogbone(W: number, H: number, rL: number, rR: number, gap: number, m = 190): TrackPoint[] {
+interface DogboneOpts {
+  neckW?: number; // road width along both neck legs — a two-way channel you thread
+  farW?: number; // road width around the far (right) bowl — a tight bulb to whip round
+}
+
+function dogbone(
+  W: number,
+  H: number,
+  rL: number,
+  rR: number,
+  gap: number,
+  m = 190,
+  opts: DogboneOpts = {}
+): TrackPoint[] {
   if (gap > 2 * Math.min(rL, rR)) {
     throw new Error(`dogbone: neck gap ${gap} is wider than the smaller bowl (${2 * Math.min(rL, rR)})`);
   }
@@ -97,16 +123,22 @@ function dogbone(W: number, H: number, rL: number, rR: number, gap: number, m = 
   // Left bowl: entered at its lower-right, swept the long way round to its
   // upper-right. Right bowl: the mirror, so the two turn opposite ways.
   const left = arc(cxL, cy, rL, dL, 360 - dL, 9);
-  const right = arc(cxR, cy, rR, 180 + dR, 540 - dR, 9);
+  let right = arc(cxR, cy, rR, 180 + dR, 540 - dR, 9);
+  if (opts.farW) right = narrowed(right, opts.farW);
   const topA = left[left.length - 1]!;
   const topB = right[0]!;
   const botA = right[right.length - 1]!;
   const botB = left[0]!;
-  const top = straight(topA, topB, 3);
+  let top = straight(topA, topB, 3);
+  let bot = straight(botA, botB, 3);
+  if (opts.neckW) {
+    top = narrowed(top, opts.neckW);
+    bot = narrowed(bot, opts.neckW);
+  }
   // Start the lap mid-neck on the top leg: a start line wants runway either
   // side of it, not the exit of a bowl.
   const half = Math.ceil(top.length / 2);
-  return [...top.slice(half), ...right, ...straight(botA, botB, 3), ...left, ...top.slice(0, half)];
+  return [...top.slice(half), ...right, ...bot, ...left, ...top.slice(0, half)];
 }
 
 /**
@@ -120,6 +152,7 @@ interface StreetOpts {
   chamfer?: number; // how far back from each corner the turn-in point sits
   chicane?: number; // how deep the bottom-straight kink bites
   chicaneShift?: number; // slide the chicane along the bottom straight
+  chicaneW?: number; // road width through the chicane — a squeeze, not just a kink
   taper?: number; // pull the top straight in by this much each side (a trapezoid, not a box)
 }
 
@@ -128,11 +161,12 @@ function street(W: number, H: number, opts: StreetOpts = {}): TrackPoint[] {
   // full speed through, which is the opposite of the point — keep it short
   // enough that the corner is a braking zone, and the chicane deep enough to
   // actually be two direction changes.
-  const { m = 260, chamfer = 150, chicane = 230, chicaneShift = 0, taper = 0 } = opts;
+  const { m = 260, chamfer = 150, chicane = 230, chicaneShift = 0, chicaneW, taper = 0 } = opts;
   const [x0, x1, y0, y1] = [m, W - m, m, H - m];
   const c = chamfer;
   const [tx0, tx1] = [x0 + taper, x1 - taper];
   const bot = (x0 + x1) / 2 + chicaneShift;
+  const cw = chicaneW !== undefined ? { w: chicaneW } : {};
   return [
     { x: Math.round((tx0 + tx1) / 2), y: y0 }, // start line, mid main straight
     { x: tx1 - c, y: y0 },
@@ -140,9 +174,9 @@ function street(W: number, H: number, opts: StreetOpts = {}): TrackPoint[] {
     { x: x1, y: y1 - c },
     { x: x1 - c, y: y1 },
     // the chicane: two quick kinks inward, the one place the lap isn't flat out
-    { x: Math.round(bot + 190), y: y1 },
-    { x: Math.round(bot), y: y1 - chicane },
-    { x: Math.round(bot - 190), y: y1 },
+    { x: Math.round(bot + 190), y: y1, ...cw },
+    { x: Math.round(bot), y: y1 - chicane, ...cw },
+    { x: Math.round(bot - 190), y: y1, ...cw },
     { x: x0 + c, y: y1 },
     { x: x0, y: y1 - c },
     { x: x0, y: y0 + c + taper },
@@ -156,6 +190,7 @@ interface HookOpts {
   spurAt?: number; // where along the bottom straight the spur turns in (px from the right end)
   gap?: number; // distance between the spur's two legs — the U's diameter
   depth?: number; // how far up into the infield the spur reaches
+  spurW?: number; // road width up the spur — a back alley off the boulevard
 }
 
 /**
@@ -169,11 +204,12 @@ function hook(W: number, H: number, opts: HookOpts = {}): TrackPoint[] {
   // `gap` is the U's diameter, so it's what decides whether the spur is a
   // hairpin or a wide bowl you can hold flat. Keep it near the car's own
   // turning circle — a fat U is just a longer straight with a bend in it.
-  const { m = 240, chamfer = 170, spurAt = 420, gap = 180, depth = 460 } = opts;
+  const { m = 240, chamfer = 170, spurAt = 420, gap = 180, depth = 460, spurW } = opts;
   const [x0, x1, y0, y1] = [m, W - m, m, H - m];
   const c = chamfer;
   const xs = x1 - spurAt; // the spur's right-hand leg
   const yU = y1 - depth; // the U at the top of the spur
+  const sw = spurW !== undefined ? { w: spurW } : {};
   return [
     { x: Math.round((x0 + x1) / 2), y: y0 }, // start line, mid main straight
     { x: x1 - c, y: y0 },
@@ -182,9 +218,11 @@ function hook(W: number, H: number, opts: HookOpts = {}): TrackPoint[] {
     { x: x1 - c, y: y1 },
     // turn off the straight, up into the infield, round the U and back out
     { x: Math.round(xs + 70), y: y1 },
-    { x: Math.round(xs), y: Math.round(y1 - depth * 0.42) },
-    ...arc(Math.round(xs - gap / 2), Math.round(yU), gap / 2, 0, -180, 5),
-    { x: Math.round(xs - gap), y: Math.round(y1 - depth * 0.42) },
+    { x: Math.round(xs), y: Math.round(y1 - depth * 0.42), ...sw },
+    ...(spurW !== undefined
+      ? narrowed(arc(Math.round(xs - gap / 2), Math.round(yU), gap / 2, 0, -180, 5), spurW)
+      : arc(Math.round(xs - gap / 2), Math.round(yU), gap / 2, 0, -180, 5)),
+    { x: Math.round(xs - gap), y: Math.round(y1 - depth * 0.42), ...sw },
     { x: Math.round(xs - gap - 70), y: y1 },
     { x: x0 + c, y: y1 },
     { x: x0, y: y1 - c },
@@ -195,21 +233,27 @@ function hook(W: number, H: number, opts: HookOpts = {}): TrackPoint[] {
 
 /**
  * A road course authored as a ring of corners in polar form. Each entry is
- * `[angleDeg, radiusFraction]` around center (cx,cy) on an rx×ry ellipse, in
- * increasing angle. Big angle gaps become long sweeps; low radius fractions
- * bite inward as hairpins. This buys the shape variety of freehand points with
- * far less pinch risk, since everything stays inside one ellipse band.
+ * `[angleDeg, radiusFraction, width?]` around center (cx,cy) on an rx×ry
+ * ellipse, in increasing angle. Big angle gaps become long sweeps; low radius
+ * fractions bite inward as hairpins; an optional third element narrows the
+ * road through that corner (it eases back to nominal across the neighbouring
+ * points). This buys the shape variety of freehand points with far less pinch
+ * risk, since everything stays inside one ellipse band.
  */
 function circuit(
   cx: number,
   cy: number,
   rx: number,
   ry: number,
-  corners: readonly (readonly [number, number])[]
+  corners: readonly (readonly [number, number] | readonly [number, number, number])[]
 ): TrackPoint[] {
-  return corners.map(([deg, rf]) => {
+  return corners.map(([deg, rf, w]) => {
     const a = (deg * Math.PI) / 180;
-    return { x: Math.round(cx + Math.cos(a) * rx * rf), y: Math.round(cy + Math.sin(a) * ry * rf) };
+    return {
+      x: Math.round(cx + Math.cos(a) * rx * rf),
+      y: Math.round(cy + Math.sin(a) * ry * rf),
+      ...(w !== undefined ? { w } : {}),
+    };
   });
 }
 
@@ -348,7 +392,9 @@ export const TRACKS: TrackDef[] = [
   },
   {
     // A snake of hairpins and sweeps around a wide ellipse — direction changes
-    // with room to breathe between them.
+    // with room to breathe between them. Each inward bite is a slot canyon:
+    // the road squeezes to 62 through the apex, so the corner asks for a line,
+    // not just a speed.
     id: "serpent",
     unlock: { track: "speedway", result: "podium" },
     name: "Serpent Run",
@@ -358,13 +404,13 @@ export const TRACKS: TrackDef[] = [
     points: circuit(1150, 650, 950, 500, [
       [5, 0.94],
       [30, 0.9],
-      [70, 0.56],
+      [70, 0.56, 62],
       [108, 0.92],
       [140, 0.9],
-      [180, 0.56],
+      [180, 0.56, 62],
       [218, 0.92],
       [250, 0.9],
-      [292, 0.56],
+      [292, 0.56, 62],
       [330, 0.93],
     ]),
   },
@@ -396,6 +442,8 @@ export const TRACKS: TrackDef[] = [
     roadWidth: 95,
     worldWidth: 2520,
     worldHeight: 1680,
+    // wide boulevards everywhere except the esses, which close in to 68 —
+    // the gauntlet the name promises, run between the walls mid-lap
     points: [
       { x: 348, y: 250 },
       { x: 1112, y: 181 },
@@ -403,10 +451,10 @@ export const TRACKS: TrackDef[] = [
       { x: 2307, y: 528 },
       { x: 2196, y: 917 },
       { x: 1835, y: 1029 },
-      { x: 1640, y: 806 },
-      { x: 1390, y: 751 },
-      { x: 1223, y: 973 },
-      { x: 1390, y: 1251 },
+      { x: 1640, y: 806, w: 68 },
+      { x: 1390, y: 751, w: 68 },
+      { x: 1223, y: 973, w: 68 },
+      { x: 1390, y: 1251, w: 68 },
       { x: 904, y: 1362 },
       { x: 487, y: 1390 },
       { x: 209, y: 1084 },
@@ -466,13 +514,14 @@ export const TRACKS: TrackDef[] = [
   {
     // Two wide bowls linked by a short two-way neck: the lap turns one way,
     // then the other, with a straight to breathe on between. Forgiving radii —
-    // this is where the Sprout Cup teaches direction changes.
+    // this is where the Sprout Cup teaches direction changes, and (gently)
+    // that a road can narrow on you: the neck pinches just enough to notice.
     id: "daisy",
     name: "Daisy Chain",
     roadWidth: 78,
     worldWidth: 2400,
     worldHeight: 1500,
-    points: dogbone(2400, 1500, 390, 390, 220),
+    points: dogbone(2400, 1500, 390, 390, 220, 190, { neckW: 68 }),
   },
 
   // --- Dune Cup ---
@@ -507,18 +556,20 @@ export const TRACKS: TrackDef[] = [
     roadWidth: 80,
     worldWidth: 2100,
     worldHeight: 1500,
-    points: hook(2100, 1500, { chamfer: 130, spurAt: 620, gap: 170, depth: 620 }),
+    // the spur narrows into a slot canyon: brake on the boulevard, thread the walls
+    points: hook(2100, 1500, { chamfer: 130, spurAt: 620, gap: 170, depth: 620, spurW: 64 }),
   },
   {
     // Four flat-out straights and four square corners scorched into the
     // hardpan, with one chicane to break up the bottom run. Braking points
-    // instead of a racing line: nothing here is a curve you can carry.
+    // instead of a racing line: nothing here is a curve you can carry — and
+    // the chicane itself is a squeeze between the rocks.
     id: "scorch",
     name: "Scorch Flats",
     roadWidth: 78,
     worldWidth: 2200,
     worldHeight: 1700,
-    points: street(2200, 1700, { chamfer: 120, chicane: 300 }),
+    points: street(2200, 1700, { chamfer: 120, chicane: 300, chicaneW: 62 }),
   },
 
   // --- Tide Cup ---
@@ -541,10 +592,14 @@ export const TRACKS: TrackDef[] = [
     ]),
   },
   {
-    // Two long plank straights joined by round piers — pure speed.
+    // Two long plank straights joined by round piers — pure speed, and the
+    // mid-game's taste of the void: the boards run over open water, nothing
+    // is fenced, and running wide is a splash and a tow back onto the pier.
+    // The road is the widest in the game precisely because the edge is wet.
     id: "boardwalk",
     name: "Boardwalk Sprint",
     speedOval: true,
+    voidRunoff: true,
     roadWidth: 105,
     worldWidth: 2400,
     worldHeight: 1300,
@@ -567,13 +622,15 @@ export const TRACKS: TrackDef[] = [
   },
   {
     // The shelf and the channel: one big bowl out on the reef, a long two-way
-    // run in, and a tight bulb to turn around in at the far end.
+    // run in, and a tight bulb to turn around in at the far end. The channel
+    // is dredged narrow — two-way traffic through a 64px cut is the lap's
+    // whole conversation.
     id: "reef",
     name: "Reef Loop",
     roadWidth: 78,
     worldWidth: 2300,
     worldHeight: 1500,
-    points: dogbone(2300, 1500, 520, 250, 230),
+    points: dogbone(2300, 1500, 520, 250, 230, 190, { neckW: 64 }),
   },
   {
     // A pinched peanut around the point break — two bowls, one waist. The
@@ -606,15 +663,16 @@ export const TRACKS: TrackDef[] = [
     roadWidth: 92,
     worldWidth: 2200,
     worldHeight: 1600,
+    // each gouge is an ice bridge: the road narrows to 66 through the turn-back
     points: circuit(1100, 800, 880, 640, [
       [0, 0.97],
       [42, 0.95],
-      [72, 0.44],
+      [72, 0.44, 66],
       [102, 0.95],
       [150, 0.98],
       [180, 0.97],
       [222, 0.95],
-      [252, 0.44],
+      [252, 0.44, 66],
       [282, 0.95],
       [330, 0.98],
     ]),
@@ -637,7 +695,15 @@ export const TRACKS: TrackDef[] = [
     roadWidth: 74,
     worldWidth: 2000,
     worldHeight: 1800,
-    points: street(2000, 1800, { m: 250, chamfer: 150, chicane: 300, chicaneShift: -230, taper: 260 }),
+    // the chicane threads the slide debris — the plunge narrows as it kinks
+    points: street(2000, 1800, {
+      m: 250,
+      chamfer: 150,
+      chicane: 300,
+      chicaneShift: -230,
+      chicaneW: 60,
+      taper: 260,
+    }),
   },
 
   // --- Dusk Cup extras ---
@@ -651,15 +717,17 @@ export const TRACKS: TrackDef[] = [
     roadWidth: 82,
     worldWidth: 2400,
     worldHeight: 1500,
+    // each point of the star is threaded, not just turned: the road narrows
+    // to 64 through every hook, then fans back out for the sweep between
     points: circuit(1200, 750, 1000, 600, [
       [0, 0.97],
-      [40, 0.52],
+      [40, 0.52, 64],
       [78, 0.95],
-      [118, 0.55],
+      [118, 0.55, 64],
       [160, 0.98],
-      [200, 0.5],
+      [200, 0.5, 64],
       [242, 0.94],
-      [284, 0.58],
+      [284, 0.58, 64],
       [322, 0.96],
     ]),
   },
@@ -677,15 +745,18 @@ export const TRACKS: TrackDef[] = [
   {
     // The name, finally drawn: a huge head of a bowl and a long tail of a
     // two-way straight out into the dark, with a bulb to whip round at the far
-    // end. The longest lap in the game, and the fastest — over the void the
-    // tail has nothing either side of it but the neighbouring lane.
+    // end. The longest lap in the game, and the fastest — and now the tail
+    // actually *tapers* like a comet's: full width leaving the head, narrowing
+    // toward the far bulb, with nothing either side but the neighbouring lane
+    // and the drop. Kept gentle (78/72 on a 92 nominal) because the void is
+    // already the teeth here.
     id: "comet",
     name: "Comet Tail",
     roadWidth: 92,
     voidRunoff: true,
     worldWidth: 2800,
     worldHeight: 1700,
-    points: dogbone(2800, 1700, 590, 200, 240),
+    points: dogbone(2800, 1700, 590, 200, 240, 190, { neckW: 78, farW: 72 }),
   },
   {
     // Eight spikes off a collapsed star: the Clover Knot with the dial past
@@ -721,15 +792,17 @@ export const TRACKS: TrackDef[] = [
     voidRunoff: true,
     worldWidth: 2800,
     worldHeight: 2000,
+    // two of the hairpins narrow over the void — the lap's two held breaths.
+    // Only two: every corner a squeeze would read as one long flinch.
     points: circuit(1400, 1000, 1230, 850, [
       [0, 0.97],
       [24, 0.94],
-      [56, 0.5],
+      [56, 0.5, 74],
       [86, 0.9],
       [112, 0.56],
       [148, 0.98],
       [186, 0.93],
-      [206, 0.47],
+      [206, 0.47, 74],
       [238, 0.9],
       [268, 0.62],
       [296, 0.97],

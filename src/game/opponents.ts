@@ -128,8 +128,9 @@ function centerlineBack(track: Track, back: number): GridSlot {
 export function gridSlot(track: Track, index: number, columns = 2): GridSlot {
   const col = index % columns;
   const back = GRID_FIRST_ROW + Math.floor(index / columns) * GRID_ROW_GAP;
-  // spread columns evenly across the road, centered on the line
-  const spread = track.roadWidth * GRID_LANE_FRAC;
+  // spread columns evenly across the road, centered on the line — sized from
+  // the local width at the start, so a grid on a narrowed neck stays on road
+  const spread = track.halfWidths[0]! * 2 * GRID_LANE_FRAC;
   const side = columns <= 1 ? 0 : (col / (columns - 1) - 0.5) * 2 * spread;
   const row = centerlineBack(track, back);
   const dir = { x: Math.cos(row.heading), y: Math.sin(row.heading) };
@@ -247,8 +248,8 @@ export function stepOpponents(
   dt: number,
   live: boolean,
   player: PlayerContext | null = null,
-  corridorPx: number | null = null,
-  rescuePx: number | null = null,
+  fenceMarginPx: number | null = null,
+  rescueMarginPx: number | null = null,
   towSeconds = 0
 ): void {
   let finished = opponents.filter((o) => o.finishOrder !== null).length;
@@ -304,10 +305,10 @@ export function stepOpponents(
         : { ...o.tuning, maxSpeed: o.tuning.maxSpeed * mult, accel: o.tuning.accel * mult };
     if (boosting) tuning = boostTuning(tuning, o.boost > 0 ? o.boostPower : 1);
     o.car = stepCar(o.car, input, tuning, query.surfaceAt(o.car.x, o.car.y), dt);
-    if (corridorPx !== null) fenceCar(o.car, query, corridorPx);
+    if (fenceMarginPx !== null) fenceCar(o.car, query, fenceMarginPx);
     // A bot that slid off an open stretch gets the same marshal treatment the
     // player does — dropped back on the line where it went out.
-    if (rescuePx !== null && outOfBounds(o.car, query, rescuePx)) {
+    if (rescueMarginPx !== null && outOfBounds(o.car, query, rescueMarginPx)) {
       const spot = o.lastSafe ?? safeSpotAt(o.car.x, o.car.y, query);
       if (spot) {
         o.tow = createTow(o.car, spot, towSeconds);
@@ -316,7 +317,7 @@ export function stepOpponents(
         o.boostTimer = 0;
         o.driftBoost = createDriftBoost();
       }
-    } else if (corridorPx !== null && query.distanceToRoad(o.car.x, o.car.y) <= corridorPx) {
+    } else if (fenceMarginPx !== null && query.edgeDistance(o.car.x, o.car.y) <= fenceMarginPx) {
       o.lastSafe = safeSpotAt(o.car.x, o.car.y, query) ?? o.lastSafe;
     }
     const p = query.progressAt(o.car.x, o.car.y);

@@ -37,8 +37,9 @@ describe.each(TRACKS.map((def) => [def.id, def] as const))("track %s", (_id, def
 
   it("never pinches: far-apart arc points keep road-width spatial separation", () => {
     // Points >5% of the lap apart along the arc must be far enough apart in
-    // space that the two road ribbons (plus shoulders) don't merge.
-    const minGap = track.roadWidth + 14;
+    // space that the two road ribbons (plus shoulders) don't merge. The gap is
+    // measured against the *local* widths, so a deliberately narrowed neck may
+    // legally run closer than two boulevards could.
     const n = track.samples.length;
     for (let i = 0; i < n; i += 2) {
       for (let j = i + 2; j < n; j += 2) {
@@ -49,14 +50,28 @@ describe.each(TRACKS.map((def) => [def.id, def] as const))("track %s", (_id, def
         if (arcDist < 0.05) continue;
         const a = track.samples[i]!;
         const b = track.samples[j]!;
+        const minGap = track.halfWidths[i]! + track.halfWidths[j]! + 14;
         const d = Math.hypot(b.x - a.x, b.y - a.y);
         if (d < minGap) {
           throw new Error(
             `pinch on ${def.id}: samples ${i} and ${j} are ${d.toFixed(0)}px apart ` +
-              `(need ${minGap}) at (${a.x.toFixed(0)},${a.y.toFixed(0)})`
+              `(need ${minGap.toFixed(0)}) at (${a.x.toFixed(0)},${a.y.toFixed(0)})`
           );
         }
       }
+    }
+  });
+
+  it("per-point widths only narrow the nominal road, and never below a car's needs", () => {
+    // Nominal roadWidth is still what grid spacing, item lanes, and observer
+    // offsets are sized from, so authored widths must stay at or under it —
+    // and a pinch tighter than ~56px stops being a road the field fits down.
+    for (const p of def.points) {
+      if (p.w === undefined) continue;
+      expect(p.w, `${def.id}: point width ${p.w} above nominal ${def.roadWidth}`).toBeLessThanOrEqual(
+        def.roadWidth
+      );
+      expect(p.w, `${def.id}: point width ${p.w} too narrow to race`).toBeGreaterThanOrEqual(56);
     }
   });
 
@@ -86,7 +101,8 @@ describe.each(TRACKS.map((def) => [def.id, def] as const))("driving %s", (_id, d
   it("a bot laps it without the marshals having to collect it", () => {
     const track = createTrack(def);
     const query = createTrackQuery(track);
-    const corridor = track.roadWidth / 2 + (def.voidRunoff ? 0 : DEFAULT_TUNING.fenceMarginPx);
+    // margins past the local road edge, same terms main.ts runs them
+    const corridor = def.voidRunoff ? 0 : DEFAULT_TUNING.fenceMarginPx;
     const rescue = corridor + (def.voidRunoff ? DEFAULT_TUNING.voidMarginPx : DEFAULT_TUNING.rescueMarginPx);
     const [bot] = createOpponents(
       track,
