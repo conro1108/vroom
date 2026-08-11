@@ -73,8 +73,8 @@ import {
   createTrack,
   createTrackQuery,
   createTow,
+  cutsCourse,
   fenceCar,
-  outOfBounds,
   safeSpotAt,
   stepTow,
   updateLap,
@@ -226,7 +226,12 @@ function startCalibration(): void {
   scene = new Scene(track, query, canvas, progress.lastVehicle, fenceMargin());
   minimap.setTrack(track);
   car = createCarState(track.start.x, track.start.y, track.startHeading);
-  lastSafe = { x: track.start.x, y: track.start.y, heading: track.startHeading };
+  lastSafe = safeSpotAt(track.start.x, track.start.y, query) ?? {
+    x: track.start.x,
+    y: track.start.y,
+    heading: track.startHeading,
+    progress: 0,
+  };
   tow = null;
   opponents = [];
   cal = createCalibration(tuning);
@@ -295,7 +300,12 @@ function restartRace(): void {
   boostTimer = 0;
   throttleHeldSince = null;
   // Snapped to the centerline, so a rescue can never anchor off the road.
-  lastSafe = safeSpotAt(slot.x, slot.y, query) ?? { x: slot.x, y: slot.y, heading: slot.heading };
+  lastSafe = safeSpotAt(slot.x, slot.y, query) ?? {
+    x: slot.x,
+    y: slot.y,
+    heading: slot.heading,
+    progress: query.progressAt(slot.x, slot.y) ?? 0,
+  };
   tow = null;
   playerDraft = createDraft();
   playerDriftBoost = createDriftBoost();
@@ -791,10 +801,26 @@ function rescueMargin(): number {
  * bouncing you the moment you run wide it lets you sail off — and if you go so
  * far that you're lost in the void, picks you up and sets you back down where
  * you left the road, facing the right way, stopped for a beat.
+ *
+ * Two ways an excursion ends in a tow: stray too far *out* (past the rescue
+ * margin), or too far *along* — an infield crossing whose nearest road is no
+ * longer the stretch you left (cutsCourse). The second is what stops "skip
+ * half the lap across the grass" on layouts where the gap between two ribbons
+ * is too narrow for the distance rescue to ever fire.
  */
 function updateRescue(): void {
   if (!query || tow) return;
-  if (outOfBounds(car, query, rescueMargin())) {
+  // The cut check runs the moment the car is off the road *surface* (edge > 0),
+  // not just past the fence margin: where two ribbons run close, the flip to
+  // the far ribbon can happen while still inside the shoulder corridor, and
+  // gating on the margin would let lastSafe re-anchor across the gap.
+  const edge = query.edgeDistance(car.x, car.y);
+  const cut =
+    edge > 0 &&
+    edge <= rescueMargin() &&
+    lastSafe !== null &&
+    cutsCourse(car, lastSafe, query, tuning.cutRescuePx);
+  if (edge > rescueMargin() || cut) {
     const spot = lastSafe ?? safeSpotAt(car.x, car.y, query);
     if (!spot) return;
     if (track?.voidRunoff) scene?.fallBurst(car);
@@ -803,9 +829,9 @@ function updateRescue(): void {
     car.drifting = false;
     boostTimer = 0;
     playerDriftBoost = createDriftBoost();
-    hud.toast(track?.voidRunoff ? "off the edge!" : "back on track");
+    hud.toast(cut ? "no shortcuts!" : track?.voidRunoff ? "off the edge!" : "back on track");
     audio.rescue();
-  } else if (query.edgeDistance(car.x, car.y) <= fenceMargin()) {
+  } else if (edge <= fenceMargin()) {
     lastSafe = safeSpotAt(car.x, car.y, query) ?? lastSafe;
   }
 }

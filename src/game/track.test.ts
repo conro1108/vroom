@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  arcBetween,
   createLapTracker,
   createTrack,
   createTrackQuery,
   createTow,
+  cutsCourse,
   fenceCar,
   outOfBounds,
   rescueCar,
@@ -218,6 +220,29 @@ describe("void tracks", () => {
     const widths = TRACKS.map((t) => t.roadWidth).sort((a, b) => a - b);
     const median = widths[Math.floor(widths.length / 2)]!;
     for (const def of cosmos) expect(def.roadWidth, def.id).toBeGreaterThanOrEqual(median);
+  });
+});
+
+describe("course cuts", () => {
+  it("arcBetween measures the short way round", () => {
+    expect(arcBetween(0.1, 0.9, 1000)).toBeCloseTo(200);
+    expect(arcBetween(0.4, 0.6, 1000)).toBeCloseTo(200);
+    expect(arcBetween(0.5, 0.5, 1000)).toBe(0);
+  });
+
+  it("calls a cut when the nearest road is far along the lap from the anchor", () => {
+    const n = track.samples.length;
+    const anchor = safeSpotAt(track.samples[0]!.x, track.samples[0]!.y, query)!;
+    const far = track.samples[Math.floor(n / 2)]!; // half a lap away
+    const near = track.samples[4]!; // a few car lengths on
+    expect(cutsCourse(far, anchor, query, 450)).toBe(true);
+    expect(cutsCourse(near, anchor, query, 450)).toBe(false);
+  });
+
+  it("rescue anchors carry the progress they were taken at", () => {
+    const i = Math.floor(track.samples.length / 3);
+    const spot = safeSpotAt(track.samples[i]!.x, track.samples[i]!.y, query)!;
+    expect(spot.progress).toBeCloseTo(track.progress[i]!, 3);
   });
 });
 

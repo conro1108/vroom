@@ -35,6 +35,7 @@ export interface Tuning {
   draftBoostSeconds: number; // how long a slipstream boost lasts
   fenceMarginPx: number; // grass runoff between road edge and the fence (where there is one)
   rescueMarginPx: number; // extra grass past the fence line you may roam on unfenced stretches before a marshal collects you
+  cutRescuePx: number; // lap-arc px an off-road excursion may stray from where it left the road before the marshal calls it a course cut
   rescueTowSeconds: number; // how long the marshals take to drag you back to the road — the price of the excursion
   cameraLerp: number; // 1/s camera chase
   lookAhead: number; // seconds of velocity the camera leads by
@@ -85,6 +86,7 @@ export const DEFAULT_TUNING: Tuning = {
   draftBoostSeconds: 0.8,
   fenceMarginPx: 56,
   rescueMarginPx: 150,
+  cutRescuePx: 450,
   rescueTowSeconds: 1.1,
   cameraLerp: 5,
   lookAhead: 0.35,

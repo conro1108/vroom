@@ -50,6 +50,7 @@ const SLIDERS: SliderSpec[] = [
   { key: "missileSpeed", label: "seeker speed × boosted car", min: 1.05, max: 3, step: 0.05 },
   { key: "fenceMarginPx", label: "fence runoff px", min: 12, max: 120, step: 2 },
   { key: "rescueMarginPx", label: "rescue distance px", min: 40, max: 320, step: 10 },
+  { key: "cutRescuePx", label: "cut rescue arc px", min: 200, max: 900, step: 25 },
   { key: "rescueTowSeconds", label: "rescue tow s", min: 0.2, max: 3, step: 0.1 },
   { key: "draftRangePx", label: "slipstream range px", min: 25, max: 120, step: 5 },
   { key: "draftChargeSeconds", label: "slipstream charge s", min: 0.3, max: 3, step: 0.1 },

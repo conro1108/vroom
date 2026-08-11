@@ -12,8 +12,8 @@ import { applySpeedClass, RACE_LAPS, type SpeedClass } from "./progression";
 import {
   createLapTracker,
   createTow,
+  cutsCourse,
   fenceCar,
-  outOfBounds,
   safeSpotAt,
   stepTow,
   updateLap,
@@ -217,7 +217,12 @@ export function createOpponents(
       // Snap the rescue anchor to the centerline rather than trusting the grid
       // spot: an anchor that is itself off the road hands the marshals a spot
       // that instantly needs rescuing again.
-      lastSafe: safeSpotAt(pos.x, pos.y, query) ?? { x: pos.x, y: pos.y, heading: pos.heading },
+      lastSafe: safeSpotAt(pos.x, pos.y, query) ?? {
+        x: pos.x,
+        y: pos.y,
+        heading: pos.heading,
+        progress: query.progressAt(pos.x, pos.y) ?? 0,
+      },
     };
   });
 }
@@ -307,8 +312,17 @@ export function stepOpponents(
     o.car = stepCar(o.car, input, tuning, query.surfaceAt(o.car.x, o.car.y), dt);
     if (fenceMarginPx !== null) fenceCar(o.car, query, fenceMarginPx);
     // A bot that slid off an open stretch gets the same marshal treatment the
-    // player does — dropped back on the line where it went out.
-    if (rescueMarginPx !== null && outOfBounds(o.car, query, rescueMarginPx)) {
+    // player does — dropped back on the line where it went out. Including the
+    // course-cut call: a spun bot sliding across an infield gap can't bank the
+    // progress jump any more than the player can.
+    const edge = query.edgeDistance(o.car.x, o.car.y);
+    const cut =
+      rescueMarginPx !== null &&
+      edge > 0 &&
+      edge <= rescueMarginPx &&
+      o.lastSafe !== null &&
+      cutsCourse(o.car, o.lastSafe, query, o.tuning.cutRescuePx);
+    if (rescueMarginPx !== null && (edge > rescueMarginPx || cut)) {
       const spot = o.lastSafe ?? safeSpotAt(o.car.x, o.car.y, query);
       if (spot) {
         o.tow = createTow(o.car, spot, towSeconds);
@@ -317,7 +331,7 @@ export function stepOpponents(
         o.boostTimer = 0;
         o.driftBoost = createDriftBoost();
       }
-    } else if (fenceMarginPx !== null && query.edgeDistance(o.car.x, o.car.y) <= fenceMarginPx) {
+    } else if (fenceMarginPx !== null && edge <= fenceMarginPx) {
       o.lastSafe = safeSpotAt(o.car.x, o.car.y, query) ?? o.lastSafe;
     }
     const p = query.progressAt(o.car.x, o.car.y);

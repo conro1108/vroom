@@ -6,7 +6,7 @@ import { createBot } from "./botdriver";
 import { createOpponents, stepOpponents } from "./opponents";
 import { createCarState, stepCar } from "./physics";
 import { SPEED_CLASSES } from "./progression";
-import { createLapTracker, createTrack, createTrackQuery, updateLap } from "./track";
+import { arcBetween, createLapTracker, createTrack, createTrackQuery, updateLap } from "./track";
 import { TRACKS } from "./tracks";
 import { DEFAULT_TUNING } from "./tuning";
 
@@ -176,3 +176,85 @@ describe.each(TRACKS.filter((d) => !d.speedOval).map((def) => [def.id, def] as c
     });
   }
 );
+
+// The referee check. With most of the fencing gone, what stops "skip half the
+// lap across the grass" is the rescue system: the distance rescue on wide-open
+// gaps, and the course-cut rescue on gaps too narrow for it to ever fire. So
+// walk straight chords between far-apart-in-arc points on every track,
+// applying the same rules main.ts runs (lastSafe follows the shoulder, rescue
+// past the distance margin, cut called when the nearest road strays more than
+// cutRescuePx of lap-arc from the anchor), and assert every crossing that
+// would land a real feature-skip is denied before it arrives.
+//
+// Deliberately tolerated: single-corner cuts. A chord hugging a curving
+// corner's inside shoulder re-anchors legitimately as it grazes, so it can
+// land a bit past the cut window — but geometry bounds those at roughly
+// arc-vs-chord of one corner, which grass speed prices at break-even (and a
+// boost item legitimately unlocks: that's the shortcut economy). What must
+// never survive is a landing past MAX_CUT_LANDING_PX — that's skipping a
+// feature, not shaving a corner, and means a margin or layout regression.
+// Crossings that step on another road mid-gap are excluded too: driving over
+// a road re-anchors you legitimately, and each hop is still bounded.
+// Absolute, not derived from cutRescuePx: if the window were cranked open in
+// tuning, this floor is what fails — the catalog's bowl-hops and spur-skips
+// all landed 1900–3200px before the cut rescue existed.
+const MAX_CUT_LANDING_PX = 900;
+
+describe.each(TRACKS.map((def) => [def.id, def] as const))("cutting %s", (_id, def) => {
+  it("no straight grass crossing reaches a distant ribbon without a rescue", () => {
+    const track = createTrack(def);
+    const query = createTrackQuery(track);
+    const L = track.lapLength;
+    const fenceMargin = def.voidRunoff ? 0 : DEFAULT_TUNING.fenceMarginPx;
+    const rescueMargin =
+      fenceMargin + (def.voidRunoff ? DEFAULT_TUNING.voidMarginPx : DEFAULT_TUNING.rescueMarginPx);
+    const n = track.samples.length;
+    for (let i = 0; i < n; i += 4) {
+      for (let j = i + 4; j < n; j += 4) {
+        const pi = track.progress[i]!;
+        const pj = track.progress[j]!;
+        if (arcBetween(pi, pj, L) <= MAX_CUT_LANDING_PX) continue;
+        const A = track.samples[i]!;
+        const B = track.samples[j]!;
+        const d = Math.hypot(B.x - A.x, B.y - A.y);
+        // a gap this wide can't be crossed without the distance rescue firing
+        if (d - track.halfWidths[i]! - track.halfWidths[j]! > 2 * rescueMargin + 8) continue;
+
+        let anchor = pi;
+        let denied = false;
+        let touchedRoad = false; // stepped on a road mid-gap: not a grass-only cut
+        let leftHome = false;
+        const steps = Math.ceil(d / 6);
+        for (let s = 1; s < steps && !denied; s++) {
+          const x = A.x + ((B.x - A.x) * s) / steps;
+          const y = A.y + ((B.y - A.y) * s) / steps;
+          const hit = query.nearestOnRoad(x, y);
+          const p = query.progressAt(x, y);
+          if (!hit || p === null) {
+            denied = true; // lost to the query grid entirely = rescue
+            break;
+          }
+          const edge = hit.dist - hit.halfWidth;
+          if (edge > rescueMargin) {
+            denied = true; // distance rescue
+          } else if (edge > 0 && arcBetween(p, anchor, L) > DEFAULT_TUNING.cutRescuePx) {
+            denied = true; // course-cut rescue
+          } else {
+            if (edge <= 0 && leftHome && arcBetween(p, pj, L) > MAX_CUT_LANDING_PX / 2) {
+              touchedRoad = true;
+            }
+            if (edge > 0) leftHome = true;
+            if (edge <= fenceMargin) anchor = p; // lastSafe follows the shoulder
+          }
+        }
+        if (!denied && !touchedRoad) {
+          throw new Error(
+            `free cut on ${def.id}: (${A.x.toFixed(0)},${A.y.toFixed(0)}) → ` +
+              `(${B.x.toFixed(0)},${B.y.toFixed(0)}) crosses ${d.toFixed(0)}px of grass and lands ` +
+              `${arcBetween(pi, pj, L).toFixed(0)}px along the lap with no rescue on the way`
+          );
+        }
+      }
+    }
+  });
+});

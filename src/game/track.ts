@@ -41,6 +41,7 @@ export interface Track {
   progress: number[]; // arc-length fraction 0..1 at each sample
   fenced: boolean[]; // per sample: is this stretch physically walled in?
   halfWidths: number[]; // per sample: half the local road width
+  lapLength: number; // centerline length of one lap, px
   roadWidth: number; // nominal width (grid spacing, minimap stroke, bot lanes)
   worldWidth: number;
   worldHeight: number;
@@ -88,6 +89,7 @@ export function createTrack(def: TrackDef): Track {
     samples,
     progress,
     halfWidths,
+    lapLength: total,
     // A void track has nothing to fence *against* — you're either on the road
     // or falling — so its runoff is entirely the rescue's job.
     fenced: def.voidRunoff ? samples.map(() => false) : fencedSamples(samples, progress, total, def),
@@ -169,6 +171,8 @@ function catmullRom1(a: number, b: number, c: number, d: number, t: number): num
 }
 
 export interface TrackQuery {
+  /** Centerline length of one lap (px) — for turning arc fractions into road distance. */
+  readonly lapLength: number;
   distanceToRoad(x: number, y: number): number;
   /** How far past the local road edge (x,y) sits: <= 0 on the road, positive
    *  on the runoff, Infinity when nothing is anywhere near. The number every
@@ -238,6 +242,7 @@ export function createTrackQuery(track: Track): TrackQuery {
   }
 
   return {
+    lapLength: track.lapLength,
     distanceToRoad(x, y) {
       const hit = nearest(x, y);
       return hit ? hit.dist : Infinity;
@@ -342,6 +347,15 @@ export interface SafeSpot {
   x: number;
   y: number;
   heading: number;
+  /** Arc fraction of the anchor — what an off-road excursion is measured against. */
+  progress: number;
+}
+
+/** Just a position and facing — all a tow needs at either end of the cable. */
+interface Pose {
+  x: number;
+  y: number;
+  heading: number;
 }
 
 /** Positioned things a rescue can move (the player's car, or a bot's). */
@@ -358,8 +372,35 @@ export function outOfBounds(car: { x: number; y: number }, query: TrackQuery, ma
 export function safeSpotAt(x: number, y: number, query: TrackQuery): SafeSpot | null {
   const hit = query.nearestOnRoad(x, y);
   const tan = query.tangentAt(x, y);
-  if (!hit || !tan) return null;
-  return { x: hit.x, y: hit.y, heading: Math.atan2(tan.y, tan.x) };
+  const progress = query.progressAt(x, y);
+  if (!hit || !tan || progress === null) return null;
+  return { x: hit.x, y: hit.y, heading: Math.atan2(tan.y, tan.x), progress };
+}
+
+/** Px of lap between two arc fractions, the short way round. */
+export function arcBetween(a: number, b: number, lapLength: number): number {
+  let d = Math.abs(a - b);
+  if (d > 0.5) d = 1 - d;
+  return d * lapLength;
+}
+
+/**
+ * Is an off-road car cutting the course? True when the nearest stretch of road
+ * is more than `windowPx` of lap-arc away from the anchor where it left the
+ * road — the continuous version of sequential checkpoints. Roaming beside the
+ * stretch you ran off is fine; the moment the excursion "arrives" at a distant
+ * part of the lap (crossing an infield gap the fences and the distance rescue
+ * both miss), the marshal calls it. Callers gate this on being off the road,
+ * since on the road the anchor just follows the car.
+ */
+export function cutsCourse(
+  car: { x: number; y: number },
+  anchor: SafeSpot,
+  query: TrackQuery,
+  windowPx: number
+): boolean {
+  const p = query.progressAt(car.x, car.y);
+  return p !== null && arcBetween(p, anchor.progress, query.lapLength) > windowPx;
 }
 
 /** Plop a car down at `spot`, stopped and facing the right way. */
@@ -374,14 +415,14 @@ export function rescueCar(car: Placeable, spot: SafeSpot): void {
 /** A car under tow: where the cable picked it up, where it's being put down,
  *  and how far through the drag it is. */
 export interface RescueTow {
-  from: SafeSpot;
-  to: SafeSpot;
+  from: Pose;
+  to: Pose;
   elapsed: number;
   duration: number;
 }
 
 /** Hook a stranded car up: it stops dead and the drag home begins. */
-export function createTow(car: Placeable, spot: SafeSpot, seconds: number): RescueTow {
+export function createTow(car: Placeable, spot: Pose, seconds: number): RescueTow {
   car.vx = 0;
   car.vy = 0;
   return {
