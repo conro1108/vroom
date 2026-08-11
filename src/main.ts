@@ -92,6 +92,7 @@ import { themeById } from "./render/themes";
 import { createCalibrateUi } from "./ui/calibrate";
 import { createDevPanel } from "./ui/devpanel";
 import { createHud, ordinal } from "./ui/hud";
+import { iconEl } from "./ui/icons";
 import { createInput } from "./ui/input";
 import { createMenu } from "./ui/menu";
 import { createMinimap } from "./ui/minimap";
@@ -449,6 +450,11 @@ function finishRace(): void {
     }
   );
 }
+
+// pixel icons for the fixed round buttons (glyph chars render differently
+// per platform; the pixel maps don't)
+document.getElementById("reset-btn")!.appendChild(iconEl("restart", "p15"));
+document.getElementById("home-btn")!.appendChild(iconEl("home", "p15"));
 
 document.getElementById("reset-btn")!.addEventListener("click", () => {
   if (mode === "calibrating" && track && scene) {

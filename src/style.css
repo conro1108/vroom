@@ -610,11 +610,10 @@ body {
   margin: 0 auto;
 }
 
-.menu-title {
-  font-size: 52px;
-  letter-spacing: 4px;
-  color: var(--accent);
-  text-shadow: 0 4px 0 rgba(74, 55, 40, 0.25);
+/* the wordmark is pixel art (ui/wordmark.ts), not text — hard pixel shadow
+   via drop-shadow so the outline casts, not the box */
+.menu-title img {
+  filter: drop-shadow(0 5px 0 rgba(74, 55, 40, 0.25));
 }
 
 .menu-sub {

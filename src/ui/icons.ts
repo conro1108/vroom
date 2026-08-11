@@ -32,7 +32,9 @@ export type IconName =
   | "wave"
   | "snowflake"
   | "moon"
-  | "planet";
+  | "planet"
+  | "restart"
+  | "home";
 
 // medals share one shape — ribbon up top, shaded disc below
 const MEDAL_MAP: PixelMap = [
@@ -341,6 +343,42 @@ export const ICONS: Record<IconName, Icon> = {
       "...yyyy.....",
       "....yyyyy...",
       "......yyy...",
+      "............",
+    ],
+  },
+  // counterclockwise circular arrow (replaces the ↺ font glyph)
+  restart: {
+    palette: { s: "#5a4632" },
+    map: [
+      "............",
+      "....ssss....",
+      "..sss..sss..",
+      ".sss....sss.",
+      ".ss......ss.",
+      "sssss....ss.",
+      ".sss.....ss.",
+      "..s......ss.",
+      ".........ss.",
+      ".ss.....ss..",
+      "..sssssss...",
+      "............",
+    ],
+  },
+  // solid little house with a door notch (replaces the ⌂ font glyph)
+  home: {
+    palette: { s: "#5a4632" },
+    map: [
+      "............",
+      ".....ss.....",
+      "....ssss....",
+      "...ssssss...",
+      "..ssssssss..",
+      ".ssssssssss.",
+      "..ssssssss..",
+      "..ssssssss..",
+      "..sss..sss..",
+      "..sss..sss..",
+      "..sss..sss..",
       "............",
     ],
   },

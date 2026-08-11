@@ -18,6 +18,7 @@ import { applyVehicle, CUSTOM_VEHICLE_ID, loadCustomVehicle, resetCustomVehicle,
 import { drawMap, vehicleSprite } from "../render/sprites";
 import { ordinal } from "./hud";
 import { iconEl, STAR_5, type IconName } from "./icons";
+import { wordmarkEl } from "./wordmark";
 import { trackThumb } from "./trackshape";
 
 const PLACE_MEDALS: IconName[] = ["medal1", "medal2", "medal3"];
@@ -184,7 +185,7 @@ export function createMenu(
 
     const title = document.createElement("h1");
     title.className = "menu-title";
-    title.textContent = "vroom";
+    title.appendChild(wordmarkEl());
     const sub = document.createElement("div");
     sub.className = "menu-sub";
     sub.textContent = "one thumb. four tracks. go.";
@@ -231,7 +232,7 @@ export function createMenu(
       });
       const revertBtn = document.createElement("button");
       revertBtn.className = "vehicle-revert";
-      revertBtn.textContent = "↺";
+      revertBtn.appendChild(iconEl("restart"));
       revertBtn.setAttribute("aria-label", `reset ${vehicle.name} to its base stats`);
       revertBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -273,7 +274,7 @@ export function createMenu(
     });
     const revertBtn = document.createElement("button");
     revertBtn.className = "vehicle-revert";
-    revertBtn.textContent = "↺";
+    revertBtn.appendChild(iconEl("restart"));
     revertBtn.setAttribute("aria-label", "revert custom car to starting point");
     revertBtn.addEventListener("click", (e) => {
       e.stopPropagation();
