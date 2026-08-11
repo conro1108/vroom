@@ -10,8 +10,8 @@ tuning), `src/render/` draws the pixel-art world to canvas, `src/ui/` handles
 input, HUD, and the dev panel. Tests are Vitest, colocated as `*.test.ts`.
 
 `npm run dev` / `npm test` / `npm run build`. `npm run icons` regenerates PWA
-icons from the car pixel map (keep `scripts/make-icons.mjs` and
-`src/render/sprites.ts` in sync).
+icons from a dedicated icon pixel map in `scripts/make-icons.mjs` (icon art
+is its own scene, independent of the in-game sprites).
 
 ## Feel values live in Tuning — hard rule
 
@@ -28,10 +28,3 @@ off the grid. Car rotation is pre-rendered into quantized frames by
 `buildCarFrames` in `src/render/sprites.ts`; new rotating art goes through the
 same path. Unit tests can't catch visual regressions: verify rendering changes
 with a headless-browser screenshot before calling them done.
-
-This project merges straight to `main` — no feature branches or PRs.
-
-Always commit and push after completing a piece of work, without asking for
-confirmation first. Always `git pull` before pushing, in case downstream
-changes have landed — this is still single-threaded on `main`, just cheap
-insurance.

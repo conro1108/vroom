@@ -6,7 +6,7 @@ export type PixelMap = string[];
 export type Palette = Record<string, string>;
 
 // A rounded silhouette with 2px features so nearest-neighbor rotation degrades
-// gracefully at every angle. Keep in sync with CAR_MAP in scripts/make-icons.mjs.
+// gracefully at every angle.
 export const CAR_MAP: PixelMap = [
   ".................",
   ".......ooo.......",

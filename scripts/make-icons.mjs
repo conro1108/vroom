@@ -1,38 +1,53 @@
-// Generates public/icons/*.png from the car pixel map. No deps: minimal PNG
-// encoder (RGBA, filter 0) using node's zlib. Run: npm run icons
+// Generates public/icons/*.png. No deps: minimal PNG encoder (RGBA, filter 0)
+// using node's zlib. Run: npm run icons
 import { deflateSync } from "node:zlib";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-// Keep in sync with CAR_MAP in src/render/sprites.ts
-const CAR_MAP = [
-  ".................",
-  ".......ooo.......",
-  "......obbbo......",
-  ".....obbbbbo.....",
-  "....obbgggbbo....",
-  "....obgggggbo....",
-  "...owbbgggbbwo...",
-  "...obbbbbbbbbo...",
-  "...obbbbbbbbbo...",
-  "...obbbhhhbbbo...",
-  "...owBBhhhBBwo...",
-  "....oBBBBBBBo....",
-  "....oBBBBBBBo....",
-  ".....oBBBBBo.....",
-  "......oBBBo......",
-  ".......ooo.......",
-  ".................",
+// Dedicated icon art (not the in-game 17px sprite, which reads as a blob when
+// blown up to icon size): side-view car on the game's road, meadow palette.
+const ICON_MAP = [
+  "........................",
+  "...yy...................",
+  "..yyyy..................",
+  "..yyyy..................",
+  "...yy...................",
+  "........................",
+  "........oooooo..........",
+  ".......obbbbbbo.........",
+  ".......obggggbo.........",
+  "..ooo.obbggggbbo........",
+  "....oobbbbbbbbbbbboooo..",
+  "BB.obbbbbbbbbbbbbbbbbbo.",
+  "...obbbbbbbbbbbbbbbbhho.",
+  "BB.obBBBBBBBBBBBBBBBBBo.",
+  "...oBooooooBBBooooooBBo.",
+  ".....owwwwo...owwwwo....",
+  ".....owhhwo...owhhwo....",
+  "......oooo.....oooo.....",
+  "EEEEEEEEEEEEEEEEEEEEEEEE",
+  "RRRRRRRRRRRRRRRRRRRRRRRR",
+  "RRRRSRRRRRRRSRRRRRRRSRRR",
+  "EEEEEEEEEEEEEEEEEEEEEEEE",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGyGGGGGfGGGGPGGGGGGfGGG",
 ];
 
 const PALETTE = {
-  o: [58, 43, 32, 255],
-  b: [242, 163, 60, 255],
-  B: [217, 134, 46, 255],
-  h: [255, 194, 102, 255],
-  w: [67, 52, 42, 255],
-  g: [207, 230, 236, 255],
+  o: [58, 43, 32, 255], // outline
+  b: [242, 163, 60, 255], // body
+  B: [217, 134, 46, 255], // body shade / speed lines
+  h: [255, 194, 102, 255], // highlight / headlight / hubs
+  w: [67, 52, 42, 255], // wheels
+  g: [207, 230, 236, 255], // glass
+  y: [242, 208, 102, 255], // sun / flowers
+  f: [232, 139, 184, 255], // flowers
+  G: [127, 191, 77, 255], // grass
+  P: [119, 183, 71, 255], // grass patch
+  R: [217, 192, 143, 255], // road
+  S: [203, 178, 131, 255], // road speckle
+  E: [181, 151, 95, 255], // road edge
 };
 const CREAM = [242, 231, 210, 255];
 
@@ -74,24 +89,22 @@ function encodePng(width, height, rgba) {
 }
 
 function makeIcon(size) {
+  // Full-bleed scene: uniform pixel grid, edge rows/cols extended to cover the
+  // remainder when size isn't a multiple of the map (keeps icons maskable).
   const rgba = Buffer.alloc(size * size * 4);
-  for (let i = 0; i < size * size; i++) CREAM.forEach((v, c) => (rgba[i * 4 + c] = v));
-
-  const mapW = CAR_MAP[0].length;
-  const mapH = CAR_MAP.length;
-  const scale = Math.max(1, Math.floor((size * 0.82) / mapW));
+  const mapW = ICON_MAP[0].length;
+  const mapH = ICON_MAP.length;
+  const scale = Math.max(1, Math.floor(size / mapW));
   const ox = Math.floor((size - mapW * scale) / 2);
   const oy = Math.floor((size - mapH * scale) / 2);
-  for (let my = 0; my < mapH; my++) {
-    for (let mx = 0; mx < mapW; mx++) {
-      const color = PALETTE[CAR_MAP[my][mx]];
-      if (!color) continue;
-      for (let dy = 0; dy < scale; dy++) {
-        for (let dx = 0; dx < scale; dx++) {
-          const i = ((oy + my * scale + dy) * size + ox + mx * scale + dx) * 4;
-          color.forEach((v, c) => (rgba[i + c] = v));
-        }
-      }
+  const clamp = (v, hi) => Math.max(0, Math.min(hi, v));
+  for (let y = 0; y < size; y++) {
+    const my = clamp(Math.floor((y - oy) / scale), mapH - 1);
+    for (let x = 0; x < size; x++) {
+      const mx = clamp(Math.floor((x - ox) / scale), mapW - 1);
+      const color = PALETTE[ICON_MAP[my][mx]] ?? CREAM;
+      const i = (y * size + x) * 4;
+      color.forEach((v, c) => (rgba[i + c] = v));
     }
   }
   return encodePng(size, size, rgba);
