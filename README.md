@@ -6,9 +6,9 @@ go, drift the corners, beat your best lap.
 **Play it: [vroom-cyan-ten.vercel.app](https://vroom-cyan-ten.vercel.app)** —
 one thumb, best on a phone.
 
-| | |
-|---|---|
-| ![The garage](shots/garage.png) | ![Meadow Loop](shots/race.png) |
+| | | |
+|---|---|---|
+| ![The garage](shots/garage.png) | ![Four-wide into turn one](shots/race.png) | ![Scrapping for the lead](shots/duel.png) |
 
 Six car archetypes with genuinely different handling (plus a custom one you
 tune yourself), five cups to unlock, group races against a rubber-banding AI
