@@ -3,6 +3,18 @@
 A cute pixel-art racing game for your thumb. Drag sideways to steer, hold to
 go, drift the corners, beat your best lap.
 
+**Play it: [vroom-cyan-ten.vercel.app](https://vroom-cyan-ten.vercel.app)** —
+one thumb, best on a phone.
+
+| | |
+|---|---|
+| ![The garage](shots/garage.png) | ![Meadow Loop](shots/race.png) |
+
+Six car archetypes with genuinely different handling (plus a custom one you
+tune yourself), five cups to unlock, group races against a rubber-banding AI
+field or solo time trials against your own ghosts, and a marshal who will call
+a cut if the grass carries you to another ribbon of road.
+
 TypeScript + Vite PWA, no framework. Deploys statically (Vercel auto-detects
 Vite; `npm run build` → `dist/`).
 
