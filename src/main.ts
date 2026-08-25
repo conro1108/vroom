@@ -1,3 +1,11 @@
+// The one stateful module. Owns the mode machine
+//   menu -> countdown -> racing -> finished -> (next race | results | menu)
+//   menu -> calibrating -> menu
+// and per-frame steps every game/ system in loop(), then hands poses to the
+// scene, HUD, minimap and audio. Nothing here computes feel or geometry — it
+// wires pure modules together. Outline (grep "// ----"):
+//   state · calibration · cup/race lifecycle · lap & finish · loop()
+//   (countdown, physics, audio, draw) · positions & items · rescue · walls
 import "./style.css";
 import {
   createGhostRecorder,
@@ -98,6 +106,7 @@ import { createMenu } from "./ui/menu";
 import { createMinimap } from "./ui/minimap";
 import { hideResults, showResults } from "./ui/results";
 
+// ---- state ----
 const PHYSICS_DT = 1 / 120; // fixed step so feel doesn't vary with frame rate
 const WALL_MARGIN = 14;
 const WALL_BOUNCE = -0.3;
@@ -170,7 +179,7 @@ const menu = createMenu(progress, tuning, (cupId, classId, startTrackIndex) => {
   startCup(cupId, classId, startTrackIndex);
 });
 
-// --- feel calibration: free-drive A/B taste test on the first track ---
+// ---- feel calibration: free-drive A/B taste test on the first track ----
 
 const calUi = createCalibrateUi({
   onVariant(which) {
@@ -250,6 +259,7 @@ function startCalibration(): void {
  * Group always starts at track 1; solo may pick any track in the cup to
  * practice, so `startTrackIndex` seeds where the series begins.
  */
+// ---- cup / race lifecycle ----
 function startCup(cupId: string, classId: string, startTrackIndex = 0): void {
   cup = cupById(cupId);
   cls = speedClassById(classId);
@@ -341,6 +351,7 @@ function goToMenu(): void {
   menu.show();
 }
 
+// ---- lap & finish ----
 function onLapCompleted(now: number): void {
   if (!track) return;
   const lapMs = now - lapStart;
@@ -486,6 +497,7 @@ window.addEventListener("resize", () => scene?.resize());
 let last = performance.now();
 let accumulator = 0;
 
+// ---- loop: one frame ----
 function loop(now: number): void {
   const frameDt = Math.min((now - last) / 1000, 0.1);
   last = now;
@@ -717,6 +729,7 @@ function loop(now: number): void {
 
 /** Live standings for the item system: rank sets order, and each racer's gap
  * behind the leader (in laps) sets how mean its next pickup rolls. */
+// ---- positions & items ----
 function updatePositions(): void {
   const list = [
     { r: playerRacer as ItemRacer, key: raceDistance(lapTracker), laps: raceDistance(lapTracker) },
@@ -783,6 +796,7 @@ window.addEventListener("keydown", (e) => {
  * margin-based because road width varies along a lap now. Over the void there
  * is no corridor at all: a couple of wheels over the lip is all you get.
  */
+// ---- rescue ----
 function fenceMargin(): number {
   return track?.voidRunoff ? 0 : tuning.fenceMarginPx;
 }
@@ -868,6 +882,7 @@ function setupObservers(): void {
   obsRadius = track.roadWidth * 0.5 + 55;
 }
 
+// ---- walls ----
 function applyWalls(): void {
   if (!track) return;
   if (car.x < WALL_MARGIN) (car.x = WALL_MARGIN), (car.vx *= WALL_BOUNCE);
