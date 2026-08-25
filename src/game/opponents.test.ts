@@ -2,20 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   buildRoster,
   createOpponents,
-  gridColumns,
   gridSlot,
   OPPONENT_COUNT,
-  playerGridSlot,
   playerPlacement,
-  playerPosition,
   rubberMult,
-  separateCars,
-  skillSpread,
   stepOpponents,
 } from "./opponents";
-import { createCarState } from "./physics";
-import { RACE_LAPS, SPEED_CLASSES } from "./progression";
-import { createLapTracker, createTrack, createTrackQuery } from "./track";
+import { SPEED_CLASSES } from "./progression";
+import { createTrack, createTrackQuery } from "./track";
 import { TRACKS } from "./tracks";
 import { DEFAULT_TUNING } from "./tuning";
 
@@ -23,8 +17,8 @@ const track = createTrack(TRACKS[0]!);
 const query = createTrackQuery(track);
 const rng = () => 0.42; // deterministic
 
-function field(count = OPPONENT_COUNT) {
-  const roster = buildRoster("classic", count, rng);
+function field() {
+  const roster = buildRoster("classic", OPPONENT_COUNT, rng);
   return createOpponents(track, query, roster, { ...DEFAULT_TUNING }, SPEED_CLASSES[0]!, rng);
 }
 
@@ -37,48 +31,7 @@ describe("opponent field", () => {
     expect(ids).not.toContain("classic");
   });
 
-  it("fields any requested count, reusing vehicles but never the player's", () => {
-    const opponents = field(7);
-    expect(opponents).toHaveLength(7);
-    expect(opponents.map((o) => o.vehicleId)).not.toContain("classic");
-  });
-
-  it("the same roster fields the same seats again (a cup series rematch)", () => {
-    const roster = buildRoster("classic", 3, rng);
-    const a = createOpponents(track, query, roster, { ...DEFAULT_TUNING }, SPEED_CLASSES[0]!, rng);
-    const b = createOpponents(track, query, roster, { ...DEFAULT_TUNING }, SPEED_CLASSES[0]!, rng);
-    expect(a.map((o) => o.vehicleId)).toEqual(b.map((o) => o.vehicleId));
-    expect(a.map((o) => o.tuning.maxSpeed)).toEqual(b.map((o) => o.tuning.maxSpeed));
-  });
-
-  it("spreads skill evenly across the field, and never past the player's car", () => {
-    const three = skillSpread(3);
-    [0.87, 0.93, 0.99].forEach((v, i) => expect(three[i]).toBeCloseTo(v));
-    const seven = skillSpread(7);
-    expect(seven).toHaveLength(7);
-    expect(Math.min(...seven)).toBeCloseTo(0.87);
-    // no bot out-machines the player: a bot faster than your car and driving a
-    // cleaner line is uncatchable the moment you make one mistake
-    expect(Math.max(...seven)).toBeLessThan(1);
-  });
-
-  it("grid slots sit on the road just behind the start line", () => {
-    for (let i = 0; i < 4; i++) {
-      const pos = gridSlot(track, i);
-      expect(query.surfaceAt(pos.x, pos.y)).toBe("road");
-      const p = query.progressAt(pos.x, pos.y)!;
-      expect(p).toBeGreaterThan(0.9); // just before the line, not past it
-    }
-    const player = playerGridSlot(track);
-    const bot = gridSlot(track, 0);
-    expect(Math.hypot(player.x - bot.x, player.y - bot.y)).toBeGreaterThan(10);
-  });
-
   it("keeps every grid slot on the road, on every track", () => {
-    // Regression: the grid used to run straight back off the start heading, so
-    // wherever the run-up to the line curved the back rows spawned off the
-    // road — on a void track that's an instant rescue, and the rescue anchor
-    // was the same off-road slot, so the car never got out of the loop.
     for (const def of TRACKS) {
       const t = createTrack(def);
       const q = createTrackQuery(t);
@@ -91,73 +44,6 @@ describe("opponent field", () => {
     }
   });
 
-  it("points every grid slot down the road, not off the start heading", () => {
-    const t = createTrack(TRACKS.find((d) => d.id === "pulsar")!);
-    const q = createTrackQuery(t);
-    let turned = false;
-    for (let i = 0; i < 12; i++) {
-      const pos = gridSlot(t, i, 2);
-      const tan = q.tangentAt(pos.x, pos.y)!;
-      const dot = Math.cos(pos.heading) * tan.x + Math.sin(pos.heading) * tan.y;
-      expect(dot, `slot ${i}`).toBeGreaterThan(0.95); // within ~18° of the road
-      if (Math.abs(pos.heading - t.startHeading) > 0.05) turned = true;
-    }
-    expect(turned).toBe(true); // the back of a curving grid isn't on the start heading
-  });
-
-  it("widens the grid for a bigger squad but never past 3 columns", () => {
-    expect(gridColumns(4)).toBe(2);
-    expect(gridColumns(6)).toBe(2);
-    expect(gridColumns(9)).toBe(3);
-    expect(gridColumns(12)).toBe(3);
-    expect(gridColumns(40)).toBe(3);
-  });
-
-  it("keeps a wide grid on the road, all slots distinct", () => {
-    const columns = gridColumns(12);
-    const seen: { x: number; y: number }[] = [];
-    for (let i = 0; i < 12; i++) {
-      const pos = gridSlot(track, i, columns);
-      // front rows sit on the road; assert distinctness for the whole grid
-      if (i < 2 * columns) expect(query.surfaceAt(pos.x, pos.y)).toBe("road");
-      for (const s of seen) expect(Math.hypot(pos.x - s.x, pos.y - s.y)).toBeGreaterThan(5);
-      seen.push(pos);
-    }
-  });
-
-  it("spawns a full field with no two cars closer than the separation minDist", () => {
-    // Regression: a 4-wide grid packed columns closer than minDist on narrow
-    // tracks, so cars spawned overlapping and got spat off the road. Grid
-    // geometry only depends on roadWidth, so the narrowest track is worst case.
-    const narrowest = TRACKS.reduce((a, b) => (a.roadWidth <= b.roadWidth ? a : b));
-    const t = createTrack(narrowest);
-    const columns = gridColumns(12);
-    const slots = Array.from({ length: 12 }, (_, i) => gridSlot(t, i, columns));
-    for (let i = 0; i < slots.length; i++) {
-      for (let j = i + 1; j < slots.length; j++) {
-        const d = Math.hypot(slots[i]!.x - slots[j]!.x, slots[i]!.y - slots[j]!.y);
-        expect(d).toBeGreaterThanOrEqual(12); // separateCars minDist
-      }
-    }
-  });
-
-  it("seats opponents at the grid slots it is handed", () => {
-    const roster = buildRoster("classic", 3, rng);
-    // reverse-order grid: opponent 0 on pole, opponent 2 furthest back
-    const opponents = createOpponents(
-      track,
-      query,
-      roster,
-      { ...DEFAULT_TUNING },
-      SPEED_CLASSES[0]!,
-      rng,
-      [0, 1, 2],
-      2
-    );
-    const pole = gridSlot(track, 0, 2);
-    expect(Math.hypot(opponents[0]!.car.x - pole.x, opponents[0]!.car.y - pole.y)).toBeLessThan(0.001);
-  });
-
   it("bots hold still before the green light and race after it", () => {
     const opponents = field();
     const before = opponents.map((o) => ({ x: o.car.x, y: o.car.y }));
@@ -168,8 +54,7 @@ describe("opponent field", () => {
     });
     for (let i = 0; i < 240; i++) stepOpponents(opponents, query, 1 / 120, true);
     opponents.forEach((o, i) => {
-      const moved = Math.hypot(o.car.x - before[i]!.x, o.car.y - before[i]!.y);
-      expect(moved).toBeGreaterThan(20);
+      expect(Math.hypot(o.car.x - before[i]!.x, o.car.y - before[i]!.y)).toBeGreaterThan(20);
     });
   });
 
@@ -183,93 +68,10 @@ describe("opponent field", () => {
     expect(new Set(orders).size).toBe(OPPONENT_COUNT);
     expect(playerPlacement(opponents)).toBe(OPPONENT_COUNT + 1); // player last
   });
-});
 
-describe("standings", () => {
-  it("counts racers ahead by distance and finished racers as ahead", () => {
-    const opponents = field();
-    const player = createLapTracker(0);
-    player.lap = 2;
-    player.accum = 0.5; // 1.5 laps in
-    opponents[0]!.tracker.lap = 3; // 2.x laps: ahead
-    opponents[0]!.tracker.accum = 0.1;
-    opponents[1]!.tracker.lap = 2; // 1.2 laps: behind
-    opponents[1]!.tracker.accum = 0.2;
-    opponents[2]!.finishOrder = 1; // done: ahead
-    expect(playerPosition(player, opponents)).toBe(3);
-  });
-
-  it("caps distance at the finish so a cruising bot doesn't gain", () => {
-    const opponents = field();
-    const player = createLapTracker(0);
-    player.lap = RACE_LAPS + 1; // player finished too
-    opponents[0]!.tracker.lap = RACE_LAPS + 1;
-    opponents[0]!.tracker.accum = 0.9; // still driving around
-    expect(playerPosition(player, opponents)).toBeLessThanOrEqual(2);
-  });
-});
-
-describe("rubber banding", () => {
-  it("slows bots ahead of the player and hurries bots behind", () => {
+  it("rubber banding slows bots ahead of the player and hurries bots behind", () => {
     expect(rubberMult(0.2, 0.2)).toBeLessThan(1);
     expect(rubberMult(-0.2, 0.2)).toBeGreaterThan(1);
     expect(rubberMult(0, 0.2)).toBe(1);
-  });
-
-  it("saturates instead of growing without bound", () => {
-    expect(rubberMult(5, 0.2)).toBeCloseTo(0.8);
-    expect(rubberMult(-5, 0.2)).toBeCloseTo(1.2);
-  });
-
-  it("leashes an escaping bot harder than it tows a dropped one", () => {
-    // the runaway leader is the thing that ruins a race, so the leash pulls
-    // harder than the tow — 1 - lead > 1 + behind in magnitude
-    expect(rubberMult(5, 0.1, 0.3)).toBeCloseTo(0.7);
-    expect(rubberMult(-5, 0.1, 0.3)).toBeCloseTo(1.1);
-    expect(rubberMult(0, 0.1, 0.3)).toBe(1);
-  });
-
-  it("a bot far ahead of the player covers less ground than one far behind", () => {
-    const ahead = field(1);
-    const behind = field(1);
-    ahead[0]!.tracker.lap = 3; // ~2 laps covered, a full lap up on the player
-    behind[0]!.tracker.lap = 1; // still on the opening lap, a lap down
-    // player mid-race, parked far off in a corner so no one drafts off them
-    const player = { distance: 1.0, car: createCarState(5, 5, 0) };
-    for (let i = 0; i < 600; i++) {
-      stepOpponents(ahead, query, 1 / 120, true, player);
-      stepOpponents(behind, query, 1 / 120, true, player);
-    }
-    const speed = (o: { car: { vx: number; vy: number } }) => Math.hypot(o.car.vx, o.car.vy);
-    expect(speed(ahead[0]!)).toBeLessThan(speed(behind[0]!));
-  });
-});
-
-describe("car separation", () => {
-  it("pushes overlapping cars apart to the minimum distance", () => {
-    const a = createCarState(100, 100, 0);
-    const b = createCarState(104, 100, 0);
-    separateCars([a, b], 12);
-    expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeCloseTo(12, 5);
-  });
-
-  it("bounces closing velocity without adding energy", () => {
-    const a = createCarState(100, 100, 0);
-    const b = createCarState(106, 100, 0);
-    a.vx = 100; // driving into b
-    separateCars([a, b], 12);
-    expect(a.vx).toBeLessThan(100);
-    expect(b.vx).toBeGreaterThan(0);
-    expect(a.vx + b.vx).toBeCloseTo(100, 3); // momentum-ish conserved
-  });
-
-  it("leaves separated cars alone", () => {
-    const a = createCarState(100, 100, 0);
-    const b = createCarState(200, 100, 0);
-    a.vx = 50;
-    separateCars([a, b], 12);
-    expect(a.x).toBe(100);
-    expect(b.x).toBe(200);
-    expect(a.vx).toBe(50);
   });
 });

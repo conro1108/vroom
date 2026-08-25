@@ -8,6 +8,8 @@ lapping.
 TypeScript + Vite, no framework. `src/game/` is pure logic (physics, track,
 tuning), `src/render/` draws the pixel-art world to canvas, `src/ui/` handles
 input, HUD, and the dev panel. Tests are Vitest, colocated as `*.test.ts`.
+Keep the suite small and under ~2s; no balance sims or exhaustive edge cases
+in `npm test` — balance checks live in `scripts/`.
 
 `npm run dev` / `npm test` / `npm run build`. `npm run icons` regenerates PWA
 icons from a dedicated icon pixel map in `scripts/make-icons.mjs` (icon art

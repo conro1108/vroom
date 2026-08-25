@@ -38,5 +38,6 @@ lever. Values persist locally; "copy json" exports them for pasting back into
 ## Test
 
 ```
-npm test
+npm test                  # fast regression suite
+npm run balance           # hand-run vehicle/race balance sims (slow; `-- laps` or `-- race` to narrow)
 ```
