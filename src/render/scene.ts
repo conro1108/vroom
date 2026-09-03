@@ -193,7 +193,7 @@ export class Scene {
     this.draw(car, ghost, racers, items);
   }
 
-  /** Kick the camera: a hit or a wall lands harder when the frame flinches. */
+  /** Kick the camera: a hit or a rescue lands harder when the frame flinches. */
   shake(px: number): void {
     this.shakeAmt = Math.max(this.shakeAmt, px);
   }
@@ -643,29 +643,37 @@ function paintTrackFence(
  * an aligned grid of 8px squares read as compression artefacts, not grass.
  */
 function paintGround(ctx: CanvasRenderingContext2D, w: number, h: number, theme: WorldTheme): void {
-  const img = ctx.createImageData(w, h);
+  const CELL = 3;
+  const cw = Math.ceil(w / CELL);
+  const ch = Math.ceil(h / CELL);
+  // one pixel per cell, then blown up with smoothing off: same chunky
+  // patches, a ninth of the writes and of the transient memory
+  const small = document.createElement("canvas");
+  small.width = cw;
+  small.height = ch;
+  const sctx = small.getContext("2d")!;
+  const img = sctx.createImageData(cw, ch);
   const d = img.data;
   const base = rgb(theme.grass);
   const dark = rgb(theme.grassPatch);
   const light = rgb(theme.grassLight);
-  const CELL = 3;
-  for (let cy = 0; cy < h; cy += CELL) {
-    for (let cx = 0; cx < w; cx += CELL) {
-      const n = valueNoise(cx / 26, cy / 26) * 0.65 + valueNoise(cx / 9 + 71, cy / 9 + 13) * 0.35;
+  let i = 0;
+  for (let cy = 0; cy < ch; cy++) {
+    for (let cx = 0; cx < cw; cx++) {
+      const x = cx * CELL;
+      const y = cy * CELL;
+      const n = valueNoise(x / 26, y / 26) * 0.65 + valueNoise(x / 9 + 71, y / 9 + 13) * 0.35;
       const c = n > 0.58 ? dark : n < 0.4 ? light : base;
-      for (let y = cy; y < Math.min(h, cy + CELL); y++) {
-        let i = (y * w + cx) * 4;
-        for (let x = cx; x < Math.min(w, cx + CELL); x++) {
-          d[i] = c[0];
-          d[i + 1] = c[1];
-          d[i + 2] = c[2];
-          d[i + 3] = 255;
-          i += 4;
-        }
-      }
+      d[i] = c[0];
+      d[i + 1] = c[1];
+      d[i + 2] = c[2];
+      d[i + 3] = 255;
+      i += 4;
     }
   }
-  ctx.putImageData(img, 0, 0);
+  sctx.putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(small, 0, 0, cw * CELL, ch * CELL);
 }
 
 /** Smoothed signed curvature (1/px) at every sample; positive = turning one way. */
@@ -704,7 +712,7 @@ function paintKerbs(ctx: CanvasRenderingContext2D, track: Track, theme: WorldThe
   const curv = trackCurvature(track);
   const thr = 1 / KERB_RADIUS;
   ctx.lineWidth = 4;
-  ctx.lineCap = "butt";
+  ctx.lineCap = "round";
   for (const side of [-1, 1]) {
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
@@ -714,14 +722,26 @@ function paintKerbs(ctx: CanvasRenderingContext2D, track: Track, theme: WorldThe
       const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
       const nx = -(b.y - a.y) / len;
       const ny = (b.x - a.x) / len;
-      const ha = track.halfWidths[i]! - 2;
-      const hb = track.halfWidths[j]! - 2;
-      const arc = track.progress[i]! * track.lapLength;
-      ctx.strokeStyle = theme.kerb[Math.floor(arc / KERB_BLOCK) % 2]!;
-      ctx.beginPath();
-      ctx.moveTo(a.x + nx * ha * side, a.y + ny * ha * side);
-      ctx.lineTo(b.x + nx * hb * side, b.y + ny * hb * side);
-      ctx.stroke();
+      const ax = a.x + nx * (track.halfWidths[i]! - 2) * side;
+      const ay = a.y + ny * (track.halfWidths[i]! - 2) * side;
+      const bx = b.x + nx * (track.halfWidths[j]! - 2) * side;
+      const by = b.y + ny * (track.halfWidths[j]! - 2) * side;
+      // Samples sit 12-19px apart, so colour by arc length *within* the
+      // segment — one colour per segment aliased the stripes to the sampling.
+      const arc0 = track.progress[i]! * track.lapLength;
+      let s0 = arc0;
+      const arc1 = arc0 + len;
+      while (s0 < arc1) {
+        const s1 = Math.min(arc1, (Math.floor(s0 / KERB_BLOCK) + 1) * KERB_BLOCK);
+        const t0 = (s0 - arc0) / len;
+        const t1 = (s1 - arc0) / len;
+        ctx.strokeStyle = theme.kerb[Math.floor(s0 / KERB_BLOCK) % 2]!;
+        ctx.beginPath();
+        ctx.moveTo(ax + (bx - ax) * t0, ay + (by - ay) * t0);
+        ctx.lineTo(ax + (bx - ax) * t1, ay + (by - ay) * t1);
+        ctx.stroke();
+        s0 = s1;
+      }
     }
   }
 }
@@ -790,8 +810,7 @@ function paintWorld(
   paintKerbs(ctx, track, theme);
 
   // decorations, kept off the road and its shoulder (distances from the
-  // local road edge, so planting follows pinches and fans). Trees stay past
-  // the fence line so the racing corridor is never hidden under a canopy.
+  // local road edge, so planting follows pinches and fans).
   const canopies: Canopy[] = [];
   const treePalette = { c: theme.canopy, C: theme.canopyLight };
   const trunkPalette = { t: theme.trunk };
@@ -800,7 +819,7 @@ function paintWorld(
   const canopyImg = treeMap ? bakeMap(treeMap, treePalette) : null;
   const rockImg = bakeMap(ROCK_MAP, rockPalette);
   const pebbleImg = bakeMap(PEBBLE_MAP, rockPalette);
-  const treeMin = 26;
+  const fenceMin = (fenceMarginPx ?? 56) + 8;
   const treeW = treeMap ? treeMap[0]!.length : 0;
   const treeH = treeMap ? treeMap.length : 0;
   for (let gy = 8; gy < canvas.height - 8; gy += 14) {
@@ -813,11 +832,13 @@ function paintWorld(
       const r = hash(x, y + 3);
       const inWorld = x > 16 && y > 16 && x < canvas.width - 24 && y < canvas.height - 24;
       // trees come in groves: a slow noise field decides where the woods are.
-      // They may stand on the runoff past the shoulder — canopies are drawn
-      // over the cars, so a car that runs wide ducks under them, but they stay
-      // clear of the road surface itself.
+      // On fenced stretches they stand beyond the fence, clear of the strip a
+      // car rides when it's pinned to the rail; on open runoff they may come
+      // in past the shoulder — canopies draw over the cars, so a car that
+      // runs wide ducks under them.
       const grove = Math.max(0, valueNoise(x / 120 + 300, y / 120 + 300) - 0.38) * 1.6;
       const treeP = 0.02 + grove * 0.22;
+      const treeMin = query.nearestOnRoad(x, y)?.fenced ? fenceMin : 26;
       if (r < treeP && canopyImg && inWorld && edge > treeMin) {
         const tx = x - Math.floor(treeW / 2);
         const ty = y - treeH + 2; // (x, y) is where the trunk meets the ground
