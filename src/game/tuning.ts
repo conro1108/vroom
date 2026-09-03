@@ -39,6 +39,7 @@ export interface Tuning {
   rescueTowSeconds: number; // how long the marshals take to drag you back to the road — the price of the excursion
   cameraLerp: number; // 1/s camera chase
   lookAhead: number; // seconds of velocity the camera leads by
+  hitShakePx: number; // camera flinch (world px) when you're spun; 0 = none
   desktopZoomWorldHeight: number; // wide-screen zoom: world-px kept visible vertically so you still see ahead (phones stay width-driven)
   steerMode: "joystick" | "dragx"; // joystick: thumb vector = screen direction to drive
   fixedStick: boolean; // joystick anchored bottom-right instead of at touch-down
@@ -90,6 +91,7 @@ export const DEFAULT_TUNING: Tuning = {
   rescueTowSeconds: 1.1,
   cameraLerp: 5,
   lookAhead: 0.35,
+  hitShakePx: 3,
   desktopZoomWorldHeight: 265,
   steerMode: "joystick",
   fixedStick: true,

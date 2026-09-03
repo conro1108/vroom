@@ -8,7 +8,7 @@ one thumb, best on a phone.
 
 | | | |
 |---|---|---|
-| ![The garage](shots/garage.png) | ![Four-wide into turn one](shots/race.png) | ![Scrapping for the lead](shots/duel.png) |
+| ![The garage](shots/garage.png) | ![On the grid at Meadow Loop](shots/race.png) | ![Mid-pack at dusk](shots/duel.png) |
 
 Six car archetypes with genuinely different handling (plus a custom one you
 tune yourself), five cups to unlock, group races against a rubber-banding AI

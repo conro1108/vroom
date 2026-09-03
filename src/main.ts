@@ -759,8 +759,9 @@ function stepItemWorld(): void {
         audio.pickup();
       } else opponents[ev.racer - 1]!.itemUseDelay = 0.8 + Math.random() * 2.2;
     } else if (ev.racer === 0) {
-      // no toast — the spin-out and its sound already make it obvious you got hit
+      // no toast — the spin-out, the flinch and its sound make it obvious you got hit
       audio.spun();
+      scene?.shake(tuning.hitShakePx);
     }
   }
   for (let i = 0; i < opponents.length; i++) {
@@ -838,6 +839,7 @@ function updateRescue(): void {
     const spot = lastSafe ?? safeSpotAt(car.x, car.y, query);
     if (!spot) return;
     if (track?.voidRunoff) scene?.fallBurst(car);
+    scene?.shake(tuning.hitShakePx);
     tow = createTow(car, spot, tuning.rescueTowSeconds);
     car.steer = 0;
     car.drifting = false;
