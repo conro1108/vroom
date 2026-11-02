@@ -15,7 +15,12 @@ const rev = readdirSync(cache).filter((d) => /^chromium-\d+$/.test(d)).sort().po
 const app = `${cache}/${rev}/chrome-mac-arm64`;
 const bundle = readdirSync(app).find((f) => f.endsWith(".app"));
 const executablePath = `${app}/${bundle}/Contents/MacOS/${bundle.replace(".app", "")}`;
-const browser = await chromium.launch({ executablePath, args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
+// Real GPU (Metal) by default: ~70x faster than software and renders shadows and
+// lighting as a device would. SOFTWARE=1 falls back to SwiftShader on GPU-less hosts.
+const GPU = process.env.SOFTWARE
+  ? ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
+  : ["--use-angle=metal", "--ignore-gpu-blocklist", "--enable-gpu"];
+const browser = await chromium.launch({ executablePath, args: GPU });
 const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 2 });
 page.on("pageerror", (e) => console.log("PAGE ERROR:", e.message));
 await page.goto(`http://localhost:5310/?${query}`);
