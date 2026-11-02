@@ -85,5 +85,7 @@ export function prop(kind: string): Geo {
 }
 
 export function registerProps(more: Record<string, () => Geo>) {
+  // names are global across worlds: a clash silently swaps one world's art for another's
+  for (const k of Object.keys(more)) if (k in BUILDERS) console.warn(`prop "${k}" registered twice; last one wins`);
   Object.assign(BUILDERS, more);
 }

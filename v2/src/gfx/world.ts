@@ -589,7 +589,8 @@ export class World {
       const a = c.h[i]!;
       const m = new THREE.Mesh(prop(l.kind), lam);
       const [x, z] = [c.x[i]! - Math.sin(a) * l.side, c.z[i]! + Math.cos(a) * l.side];
-      m.position.set(x, this.heightAt?.(x, z) ?? c.y[i]!, z);
+      const base = l.base === "road" ? c.y[i]! : this.heightAt?.(x, z) ?? c.y[i]!;
+      m.position.set(x, base + (l.lift ?? 0), z);
       m.rotation.y = -a + (l.yaw ?? 0);
       m.scale.setScalar(l.scale ?? 1);
       m.castShadow = true;

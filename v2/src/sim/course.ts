@@ -53,6 +53,8 @@ export interface Landmark {
   side: number; // lateral metres from centerline (+ = right)
   scale?: number;
   yaw?: number; // radians, 0 = parallel to the road
+  base?: "ground" | "road"; // stand on the terrain (default) or at the road's height
+  lift?: number; // metres above that base
 }
 
 export interface TrackDef {
