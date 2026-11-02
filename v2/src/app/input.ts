@@ -23,6 +23,8 @@ export class Controls {
   private flicked = false;
   private stick = 0;
   private touchDrift = false;
+  private deepest = 0; // furthest the thumb has pulled down during this drift
+  private coast = 0; // throttle held after lifting out of a drift
   /** Where the thumb went down and how far it's dragged, for the on-screen stick. */
   thumb: { x: number; y: number; dx: number; dy: number; f: number } | null = null;
   private active = false;
@@ -99,6 +101,9 @@ export class Controls {
   private end(e: TouchEvent) {
     for (const t of Array.from(e.changedTouches)) {
       if (t.identifier !== this.touchId) continue;
+      // lifting out of a drift is how thumbs naturally end one: cash the boost
+      // rather than reading it as "thumb off, brake"
+      if (this.touchDrift) this.coast = TUNING.releaseCoast;
       this.touchId = null;
       this.stick = 0;
       this.thumb = null;
@@ -119,15 +124,29 @@ export class Controls {
       i.throttle = 1;
       i.brake = 0;
       const pull = TUNING.driftPull;
-      if (!this.touchDrift && this.flicked && Math.abs(s) > TUNING.driftSteer) this.touchDrift = true;
+      if (!this.touchDrift && this.flicked && Math.abs(s) > TUNING.driftSteer) {
+        this.touchDrift = true;
+        this.deepest = this.pull;
+      }
       this.flicked = false;
-      if (this.touchDrift && this.pull < pull * 0.45) this.touchDrift = false;
+      if (this.touchDrift) {
+        this.deepest = Math.max(this.deepest, this.pull);
+        // any clear move back up ends it; no need to find where the flick began
+        if (this.pull < this.deepest - TUNING.driftRelease || this.pull < pull * 0.3) this.touchDrift = false;
+      }
       i.drift = this.touchDrift;
     } else if (usingKeys) {
       i.steer = (right ? 1 : 0) - (left ? 1 : 0);
       i.throttle = key("arrowdown", "s") ? 0 : 1;
       i.brake = key("arrowdown", "s") ? 1 : 0;
       i.drift = key(" ", "shift");
+    } else if (this.coast > 0) {
+      this.coast -= dt;
+      i.steer = 0;
+      i.throttle = 1;
+      i.brake = 0;
+      i.drift = false;
+      this.touchDrift = false;
     } else {
       i.steer = 0;
       i.throttle = 0;

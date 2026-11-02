@@ -40,6 +40,8 @@ export const TUNING = {
   touchCurve: 1.35, // >1 makes small drags gentle and saves full lock for big ones
   driftPull: 60, // css px the thumb must flick down, quickly, to throw the car into a drift
   driftFlick: 0.28, // seconds that flick has to happen within; a slow sag never drifts
+  driftRelease: 20, // css px back up from the deepest point of the pull that ends a drift
+  releaseCoast: 0.45, // seconds of throttle kept after lifting the thumb out of a drift, so the boost pays
   driftSteer: 0.35, // steer needed before a flick counts, so the drift has a clear direction
 };
 
