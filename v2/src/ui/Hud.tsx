@@ -6,7 +6,6 @@ import { computed } from "@preact/signals";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { course, hud, phase, type Game, type Hud as HudData } from "../app/game";
 import { hintDone, markHintDone } from "../app/career";
-import { throwPx } from "../app/input";
 import { TUNING } from "../sim/tuning";
 import { PauseIcon } from "./art";
 import { clock, hex, ordinal } from "./look";
@@ -254,7 +253,7 @@ function Thumb() {
     if (t) {
       el.style.transform = `translate3d(${t.x - t.dx}px,${t.y - 76}px,0)`;
       const down = Math.min(t.dy, TUNING.driftPull * 1.4);
-      if (knob.current) knob.current.style.transform = `translate3d(${t.dx * (62 / throwPx())}px,${down}px,0) skewX(-12deg)`;
+      if (knob.current) knob.current.style.transform = `translate3d(${t.f * 62}px,${down}px,0) skewX(-12deg)`;
       el.classList.toggle("hard", t.dy >= TUNING.driftPull);
     }
   });

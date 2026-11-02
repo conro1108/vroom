@@ -218,7 +218,8 @@ export class View {
     // Lag behind the slide so you see the car's flank in a drift, without the
     // horizon swinging as hard as the car does.
     const aim = lerpAngle(velH, car.h, 0.55);
-    this.camH = lerpAngle(this.camH, aim, Math.min(1, dt * (car.driftDir ? 3.6 : 5.5)));
+    // slow enough that thumb jitter in the car's yaw never reaches the horizon
+    this.camH = lerpAngle(this.camH, aim, Math.min(1, dt * (car.driftDir ? 2.6 : 3.4)));
     this.camY += (y - this.camY) * Math.min(1, dt * (car.grounded ? 9 : 4));
 
     const back = (portrait ? 8.6 : 6.4) + sf * 1.6;
@@ -236,7 +237,6 @@ export class View {
     const ahead = (portrait ? 6 : 9) + sf * 5;
     const ly = c.y[(car.i + Math.round(ahead / c.ds)) % c.n]!;
     cam.lookAt(x + fx * ahead, Math.max(ly, this.camY - 3) + 0.9, z + fz * ahead);
-    cam.rotateZ(-car.steer * 0.022 * sf);
 
     this.fovKick *= Math.exp(-dt * 2.4);
     const base = portrait ? 74 : 60;

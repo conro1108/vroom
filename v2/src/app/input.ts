@@ -15,6 +15,8 @@ export class Controls {
   private keys = new Set<string>();
   private touchId: number | null = null;
   private anchor = 0;
+  private fullL = 100;
+  private fullR = 100;
   private startY = 0;
   private pull = 0;
   private trail: { t: number; y: number }[] = [];
@@ -22,7 +24,7 @@ export class Controls {
   private stick = 0;
   private touchDrift = false;
   /** Where the thumb went down and how far it's dragged, for the on-screen stick. */
-  thumb: { x: number; y: number; dx: number; dy: number } | null = null;
+  thumb: { x: number; y: number; dx: number; dy: number; f: number } | null = null;
   private active = false;
 
   constructor() {
@@ -58,19 +60,25 @@ export class Controls {
     const t = e.changedTouches[0]!;
     this.touchId = t.identifier;
     this.anchor = t.clientX;
+    // A thumb lands near its own edge of the screen, so the throw toward that edge
+    // shrinks to the room actually there: full lock always fits on the glass.
+    const full = throwPx();
+    const margin = 18;
+    this.fullR = Math.max(40, Math.min(full, innerWidth - t.clientX - margin));
+    this.fullL = Math.max(40, Math.min(full, t.clientX - margin));
     this.startY = t.clientY;
     this.pull = 0;
     this.trail = [{ t: performance.now(), y: t.clientY }];
     this.flicked = false;
     this.stick = 0;
-    this.thumb = { x: t.clientX, y: t.clientY, dx: 0, dy: 0 };
+    this.thumb = { x: t.clientX, y: t.clientY, dx: 0, dy: 0, f: 0 };
   }
 
   private move(e: TouchEvent) {
     for (const t of Array.from(e.changedTouches)) {
       if (t.identifier !== this.touchId) continue;
-      const full = throwPx();
       let dx = t.clientX - this.anchor;
+      const full = dx >= 0 ? this.fullR : this.fullL;
       if (Math.abs(dx) > full) {
         this.anchor = t.clientX - Math.sign(dx) * full;
         dx = t.clientX - this.anchor;
@@ -83,7 +91,7 @@ export class Controls {
       this.trail.push({ t: now, y: t.clientY });
       while (this.trail.length > 2 && now - this.trail[0]!.t > TUNING.driftFlick * 1000) this.trail.shift();
       if (t.clientY - this.trail[0]!.y >= TUNING.driftPull) this.flicked = true;
-      if (this.thumb) this.thumb = { ...this.thumb, dx, dy: this.pull };
+      if (this.thumb) this.thumb = { ...this.thumb, dx, dy: this.pull, f: this.stick };
       e.preventDefault();
     }
   }
