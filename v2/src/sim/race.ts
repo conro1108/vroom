@@ -123,7 +123,15 @@ export class Race {
     const j = (car.i + look) % c.n;
     const nx = -Math.sin(c.h[j]!);
     const nz = Math.cos(c.h[j]!);
-    const off = c.line[j]! + r.bias * (c.half[j]! > 5 ? 1 : 0.4);
+    let off = c.line[j]! + r.bias * (c.half[j]! > 5 ? 1 : 0.4);
+    // Already committed to the other side of a median? Use that lane rather than
+    // steering into the divider to reach the planned one.
+    const isle = c.isleHalf[car.i]!;
+    if (isle > 0.5) {
+      const mine = Math.sign(car.d - c.isleD[car.i]!);
+      const edge = c.isleD[j]! + mine * (c.isleHalf[j]! + 2.2);
+      if (Math.sign(off - c.isleD[j]!) !== mine) off = mine > 0 ? Math.min(c.limR[j]! - 2, Math.max(edge, (edge + c.limR[j]!) / 2)) : Math.max(-c.limL[j]! + 2, Math.min(edge, (edge - c.limL[j]!) / 2));
+    }
     const [tx, tz] = [c.x[j]! + nx * off, c.z[j]! + nz * off];
     let e = Math.atan2(tz - car.z, tx - car.x) - car.h;
     e = Math.atan2(Math.sin(e), Math.cos(e));

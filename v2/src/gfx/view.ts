@@ -108,7 +108,10 @@ export class View {
         case "land":
           this.models[i]!.bounce(Math.min(2.4, ev.e.drop * 0.16));
           if (near) this.shake = Math.max(this.shake, Math.min(0.45, ev.e.drop * 0.03));
-          for (let k = 0; k < 8; k++) fx.dust(car.x, car.y, car.z, this.world!.theme.verge, car.vx, car.vz, 0.4);
+          if (this.world!.theme.ground !== "void") {
+            const puffs = Math.min(5, Math.round(ev.e.drop * 0.35));
+            for (let k = 0; k < puffs; k++) fx.dust(car.x, car.y, car.z, this.world!.theme.verge, car.vx, car.vz, 0.25);
+          }
           break;
         case "drift":
           this.models[i]!.bounce(0.7);

@@ -1,6 +1,232 @@
-// Placeholder cup: one stand-in track until the real layouts are authored.
-import { R, S } from "../sim/course";
+// Tide Cup: "the track does things". Piers, broken bridges, a headland. Bridges and
+// gaps are what clear the sea: terrain only forms around plain road, so anything
+// meant to stand in open water must be a `bridge` run well clear (50m+) of land.
+// Runoff stays near zero on void decks, or you'd drive on invisible air.
+import { L, R, S, type Feature, type PieceOpts, type TrackDef } from "../sim/course";
 import type { Cup } from "./index";
+
+/** Railed plank deck over the sea. */
+const pier: PieceOpts = { surface: "plank", bridge: true };
+/** Open plank deck: step off the edge and you swim. */
+const boards: PieceOpts = { surface: "plank", bridge: true, edge: "void", runoff: 0.6 };
+/** A concrete causeway, open to the sea. */
+const causeway: PieceOpts = { bridge: true, edge: "void", runoff: 0.8 };
+/**
+ * A jump's run-up, on a short piece of its own: kickers across the whole deck, so
+ * being off-centre can't miss them, and pads 19m back. `len` is the piece's length
+ * after closure stretches it, not the authored one. The pad is what makes a jump fair: a fall respawns you
+ * 16m short of the kicker from a standstill, onto the pads' edge, and without them
+ * you'd drop in the same hole forever. Any closer and their cooldown eats the kicker.
+ */
+const leap = (len: number): Feature[] => [
+  ...[-0.62, 0, 0.62].flatMap((d): Feature[] => [
+    { kind: "boost", at: 0.97 - 19 / len, d },
+    { kind: "kicker", at: 0.97, d },
+  ]),
+];
+
+const pierhead: TrackDef = {
+  id: "pierhead",
+  name: "Pierhead Run",
+  theme: "tide",
+  blurb: "Down the pier, round the end, and back before the tide turns.",
+  width: 15,
+  runoff: 10,
+  edge: "wall",
+  landmarks: [
+    { kind: "ferrisWheel", at: 0.08, side: -38, yaw: 0.5 },
+    { kind: "pavilion", at: 0.458, side: -34 },
+    { kind: "stiltHut", at: 0.33, side: 26 },
+    { kind: "stiltHut", at: 0.4, side: -22, yaw: 1 },
+    { kind: "stiltHut", at: 0.53, side: -23, yaw: 2 },
+    { kind: "palmIslet", at: 0.458, side: 150 },
+    { kind: "seaStack", at: 0.42, side: -200 },
+    { kind: "tideLighthouse", at: 0.2, side: 150, scale: 0.9 },
+  ],
+  pieces: [
+    S(190),
+    R(90, 30, { bank: 4 }),
+    S(70),
+    S(230, { ...pier, y: 4, w: 13 }),
+    R(180, 22, { ...pier, y: 4, bank: 8 }),
+    S(210, { ...pier, y: 3 }),
+    S(40, { ...pier, y: 3 }),
+    S(46, { ...pier, y: 3, items: leap(29) }),
+    S(11, { gap: true, y: 1 }),
+    S(50, { y: 0, w: 15 }),
+    L(90, 24, { bank: 5 }),
+    S(130, { y: 5 }),
+    R(70, 26),
+    L(70, 26),
+    S(40, { y: 3 }),
+    R(90, 26),
+    S(70),
+    R(90, 36),
+    S(60, { y: 0 }),
+  ],
+};
+
+const hopscotch: TrackDef = {
+  id: "hopscotch",
+  name: "Hopscotch Keys",
+  theme: "tide",
+  blurb: "The bridges are out. Keep your foot in and trust the ramp.",
+  width: 13,
+  runoff: 8,
+  edge: "wall",
+  landmarks: [
+    { kind: "bridgeOut", at: 0.122, side: 9 },
+    { kind: "bridgeOut", at: 0.122, side: -9 },
+    { kind: "palmIslet", at: 0.14, side: 42 },
+    { kind: "seaStack", at: 0.14, side: -75 },
+    { kind: "bridgeOut", at: 0.272, side: 9 },
+    { kind: "bridgeOut", at: 0.272, side: -9 },
+    { kind: "palmIslet", at: 0.295, side: -46 },
+    { kind: "seaStack", at: 0.3, side: 90, scale: 1.2 },
+    { kind: "palmIslet", at: 0.52, side: 60, scale: 1.2 },
+    { kind: "seaStack", at: 0.7, side: -80 },
+    { kind: "tideLighthouse", at: 0.61, side: 42, scale: 0.7 },
+  ],
+  pieces: [
+    S(130),
+    L(50, 26),
+    R(50, 26),
+    S(40, { ...causeway, y: 7, w: 12 }),
+    S(30, { ...causeway, y: 7, items: leap(29) }),
+    S(14, { gap: true, y: 5 }),
+    S(80, { ...causeway, y: 1 }),
+    S(30, { y: 0, w: 13 }),
+    R(90, 24, { bank: 5 }),
+    S(40),
+    S(50, { ...causeway, y: 8, w: 12 }),
+    S(30, { ...causeway, y: 8, items: leap(31) }),
+    S(15, { gap: true, y: 6 }),
+    S(80, { ...causeway, y: 1 }),
+    S(30, { y: 0, w: 13 }),
+    L(90, 24, { bank: 5 }),
+    S(60),
+    R(180, 21, { bank: 8 }),
+    S(50),
+    S(110, { ...causeway, y: 3, items: [{ kind: "boost", at: 0.3, d: 0.4 }] }),
+    S(30, { y: 0 }),
+    L(75, 22),
+    R(150, 22),
+    L(75, 22),
+    S(30),
+    S(110, { ...causeway, y: 3 }),
+    S(50, { y: 0 }),
+    R(90, 38),
+    S(250, { y: 6 }),
+    R(90, 38),
+    S(60, { y: 0 }),
+  ],
+};
+
+const stilts: TrackDef = {
+  id: "stilts",
+  name: "Stilt Village",
+  theme: "tide",
+  blurb: "A boardwalk one kart wide and a lagoon either side. Slow is fast.",
+  width: 11,
+  runoff: 6,
+  edge: "wall",
+  landmarks: [
+    { kind: "stiltHut", at: 0.145, side: 16, yaw: 0.4 },
+    { kind: "stiltHut", at: 0.21, side: -15, yaw: 1.2 },
+    { kind: "stiltHut", at: 0.26, side: 15, yaw: 2 },
+    { kind: "stiltHut", at: 0.34, side: 16, yaw: 0.8 },
+    { kind: "stiltHut", at: 0.38, side: -16, yaw: 2.6 },
+    { kind: "stiltHut", at: 0.47, side: 16, yaw: 1.6 },
+    { kind: "stiltHut", at: 0.74, side: 16, yaw: 0.2 },
+    { kind: "stiltHut", at: 0.8, side: -15, yaw: 2.2 },
+    { kind: "stiltHut", at: 0.87, side: 15, yaw: 1 },
+    { kind: "pavilion", at: 0.3, side: 70 },
+    { kind: "palmIslet", at: 0.8, side: 60 },
+    { kind: "seaStack", at: 0.42, side: -120 },
+  ],
+  pieces: [
+    S(120),
+    R(90, 18, { ...boards }),
+    S(60, { ...boards }),
+    L(90, 18, { ...boards }),
+    S(50, { ...boards }),
+    R(90, 18, { ...boards }),
+    S(70, { ...boards }),
+    R(90, 18, { ...boards }),
+    S(170, { ...boards }),
+    R(90, 20, { ...boards, y: 7 }),
+    S(100, { ...boards, y: 8 }),
+    S(100, { ...pier, y: 8, tunnel: true }),
+    L(90, 20, { ...boards, y: 8 }),
+    S(90, { ...boards, y: 5 }),
+    L(90, 18, { ...boards, y: 0 }),
+    S(60, { ...boards }),
+    R(90, 18, { ...boards }),
+    L(90, 18, { ...boards }),
+    S(90, { ...boards }),
+    L(90, 22),
+    S(60),
+  ],
+};
+
+const lighthouse: TrackDef = {
+  id: "lighthouse",
+  name: "Lighthouse Point",
+  theme: "tide",
+  blurb: "Up the headland, round the light, and off the end of the world.",
+  width: 12,
+  runoff: 7,
+  edge: "wall",
+  landmarks: [
+    { kind: "tideLighthouse", at: 0.297, side: 20.5, scale: 1.25 },
+    { kind: "seaStack", at: 0.43, side: 70, scale: 1.3 },
+    { kind: "seaStack", at: 0.5, side: -70 },
+    { kind: "palmIslet", at: 0.46, side: 46 },
+    { kind: "bridgeOut", at: 0.405, side: 8.5 },
+    { kind: "bridgeOut", at: 0.405, side: -8.5 },
+    { kind: "palmPair", at: 0.635, side: -10.2 },
+    { kind: "palmPair", at: 0.655, side: -10.2, scale: 1.2 },
+    { kind: "palmIslet", at: 0.55, side: 90 },
+    { kind: "ferrisWheel", at: 0.05, side: 40, yaw: 1.2 },
+  ],
+  pieces: [
+    S(200),
+    L(90, 26),
+    S(90, { y: 10 }),
+    R(45, 22),
+    L(45, 22),
+    S(60, { y: 20 }),
+    R(60, 24, { bank: 5 }),
+    S(70, { y: 30 }),
+    L(60, 24, { bank: 5 }),
+    S(50, { y: 36 }),
+    R(170, 21, { y: 38, bank: 8 }),
+    S(40, { y: 34 }),
+    L(40, 24, { y: 30 }),
+    R(40, 24, { y: 26 }),
+    S(30, { ...causeway, y: 21 }),
+    S(30, { ...causeway, y: 20, items: leap(35) }),
+    S(16, { gap: true, y: 15 }),
+    S(90, { ...causeway, y: 5 }),
+    S(80, { ...causeway, y: 3 }),
+    R(100, 26, { ...causeway, y: 3 }),
+    S(30, { y: 0, w: 32 }),
+    S(50, { isle: { d: -10, half: 1, bot: 1 } }),
+    L(60, 42, { isle: { d: -10, half: 2.5, bot: 1 }, items: [{ kind: "boost", at: 0.8, d: -0.86 }] }),
+    S(60, { w: 12 }),
+    R(150, 22, { bank: 6 }),
+    S(90),
+    L(90, 22, { bank: 6 }),
+    S(40),
+    R(60, 20),
+    L(60, 20),
+    S(40),
+    R(90, 22),
+    S(50),
+    R(90, 26),
+    S(70),
+  ],
+};
 
 export const CUP_TIDE: Cup = {
   id: "tide",
@@ -9,16 +235,5 @@ export const CUP_TIDE: Cup = {
   idea: "the track does things",
   scale: 1.12,
   difficulty: 0.94,
-  tracks: [
-    {
-      id: "tide1",
-      name: "Tide Cup Stub",
-      theme: "tide",
-      blurb: "Stand-in.",
-      width: 15,
-      runoff: 10,
-      edge: "wall",
-      pieces: [S(240), R(90, 40), S(120), R(90, 40), S(240), R(90, 40), S(120), R(90, 40)],
-    },
-  ],
+  tracks: [pierhead, hopscotch, stilts, lighthouse],
 };

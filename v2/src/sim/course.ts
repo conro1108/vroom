@@ -409,7 +409,7 @@ function solveLine(c: Course, aLat: number, isleBot: Int8Array, brake = 34, acce
     let d = Math.atan2(bz, bx) - Math.atan2(az, ax);
     d = Math.atan2(Math.sin(d), Math.cos(d));
     const k = Math.abs(d) / (3 * seg);
-    vmax[i] = Math.min(top * 1.4, Math.sqrt(aLat / Math.max(k, 1e-4)));
+    vmax[i] = Math.min(top * 1.4, Math.sqrt((aLat * SURFACE_GRIP[c.surface[i]!]) / Math.max(k, 1e-4)));
   }
   for (let pass = 0; pass < 2; pass++) {
     for (let i = n - 1; i >= 0; i--) {

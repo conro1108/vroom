@@ -273,13 +273,19 @@ function features(car: Car, c: Course, T: Tuning) {
   for (const idx of list) {
     const f = c.features[idx]!;
     if (Math.abs(car.d - f.d) > (f.kind === "rock" ? 2 : 2.6)) continue;
+    if (car.padCooldown > 0) continue;
     if (f.kind === "rock") {
+      // one knock per rock: slowing every step it overlapped pinned cars to it
+      car.padCooldown = 0.5;
       car.vx *= 0.6;
       car.vz *= 0.6;
-      car.d += car.d >= f.d ? 0.5 : -0.5;
+      const side = car.d >= f.d ? 1 : -1;
+      const a = c.h[car.i]!;
+      car.x -= Math.sin(a) * side * 1.2;
+      car.z += Math.cos(a) * side * 1.2;
+      car.events.push({ type: "wall", hit: 0.6 });
       continue;
     }
-    if (car.padCooldown > 0) continue;
     car.padCooldown = 0.5;
     if (f.kind === "boost") {
       car.boostT = Math.max(car.boostT, T.boostPad);
