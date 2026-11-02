@@ -1,0 +1,13 @@
+:root { --ink:#0d1320; --blue:#0b5fff; --red:#e8392f; --yellow:#ffd21f; --paper:#fff;
+  --display:"Barlow Condensed",system-ui,sans-serif; --body:"Barlow",system-ui,sans-serif; }
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:#0a1830;touch-action:none;user-select:none;-webkit-user-select:none;overscroll-behavior:none}
+#world{position:fixed;inset:0;width:100%;height:100%;display:block}
+#ui{position:fixed;inset:0;font-family:var(--body);color:#fff;pointer-events:none}
+#ui button{pointer-events:auto;font-family:var(--display)}
+.hud-place{position:absolute;left:14px;top:calc(env(safe-area-inset-top) + 10px);font:italic 800 64px/1 var(--display);text-shadow:0 3px 0 #0006}
+.hud-lap{position:absolute;right:14px;top:calc(env(safe-area-inset-top) + 14px);font:italic 700 24px/1.1 var(--display);text-align:right;text-shadow:0 2px 0 #0006}
+.hud-speed{position:absolute;right:14px;bottom:calc(env(safe-area-inset-bottom) + 18px);font:italic 800 44px/1 var(--display);text-shadow:0 3px 0 #0006}
+.hud-count{position:absolute;inset:0;display:grid;place-items:center;font:italic 800 150px/1 var(--display);text-shadow:0 6px 0 #0007}
+.center{position:absolute;inset:0;display:grid;place-items:center;pointer-events:auto}
+.big-btn{font:italic 800 32px var(--display);padding:12px 34px;background:var(--yellow);color:var(--ink);border:0;transform:skewX(-8deg)}
