@@ -65,7 +65,7 @@ export class Race {
       const who = isPlayer ? opts.player : opts.rivals[rival++]!;
       const racer: Racer = {
         car: createCar(c, i, d), name: who.name, color: who.color, isPlayer,
-        pace: isPlayer ? 1 : opts.difficulty * (0.985 - 0.012 * (rival - 1) + this.rand() * 0.006),
+        pace: isPlayer ? 1 : opts.difficulty * (0.985 - 0.012 * opts.rivals.indexOf(who as RaceOptions["rivals"][number]) + this.rand() * 0.006),
         bias: isPlayer ? 0 : (slot % 2 ? 1 : -1) * (0.6 + this.rand() * 2.4),
         lap: 0, progress: -back, lastI: i, finishT: null, bestLap: null, lapStart: 0, placeAtFinish: 0,
       };

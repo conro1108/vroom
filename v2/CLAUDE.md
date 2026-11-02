@@ -27,11 +27,14 @@ screenshots at exact race times, needs dev server on :5310).
 | Touch and keyboard | `src/app/input.ts` |
 | Game flow, HUD data | `src/app/game.ts` |
 | Rivals, points, save, unlocks | `src/app/career.ts` |
-| Menus and HUD | `src/ui/` |
+| Menus and HUD (one file per screen) | `src/ui/` |
+| Wordmark, trophy, track-map art | `src/ui/art.tsx` |
+| PWA icons (regenerate: `node scripts/icons.mjs`) | `scripts/icons.mjs` |
 | Sound | `src/audio/` |
 
 URL knobs: `?track=<id>` jump to a race, `&auto=1` bot drives, `&skip=1` skip the
-intro, `?all` unlocks every cup. `src/tracks/lab.ts` has `lab8` and `labjump`, which
+intro, `?all` unlocks every cup, `?dev` opens the live tuning panel (sliders
+over `tuning.ts`, copy-JSON to paste back). `src/tracks/lab.ts` has `lab8` and `labjump`, which
 exercise every course feature. `window.__game.advance(s)` steps time deterministically.
 
 ## Gotchas

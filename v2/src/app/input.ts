@@ -4,8 +4,8 @@
 // no matter how far you've dragged. Keyboard: arrows/WASD, Shift or Space drifts.
 import type { Input } from "../sim/car";
 
-const THROW = 62; // css px of drag for full lock
-const DRIFT_IN = 0.86; // steer past this...
+export const THROW = 62; // css px of drag for full lock
+export const DRIFT_IN = 0.86; // steer past this...
 const DRIFT_HOLD = 0.11; // ...for this long, and the car breaks loose
 const DRIFT_OUT = 0.22; // back under this (or across centre) ends it
 
@@ -19,6 +19,7 @@ export class Controls {
   private touchDrift = false;
   /** Where the thumb went down and how far it's dragged, for the on-screen stick. */
   thumb: { x: number; y: number; dx: number } | null = null;
+  private active = false;
 
   constructor() {
     addEventListener("keydown", (e) => {
@@ -34,8 +35,21 @@ export class Controls {
     addEventListener("touchcancel", (e) => this.end(e), o);
   }
 
+  /** Menus need their touches: tracking one would preventDefault its scroll. */
+  setActive(on: boolean) {
+    if (on === this.active) return;
+    this.active = on;
+    if (!on) {
+      this.touchId = null;
+      this.stick = 0;
+      this.thumb = null;
+      this.touchDrift = false;
+      this.hard = 0;
+    }
+  }
+
   private start(e: TouchEvent) {
-    if (this.touchId !== null || (e.target as HTMLElement)?.closest?.("button,a,input")) return;
+    if (!this.active || this.touchId !== null || (e.target as HTMLElement)?.closest?.("button,a,input,[data-noinput]")) return;
     const t = e.changedTouches[0]!;
     this.touchId = t.identifier;
     this.anchor = t.clientX;

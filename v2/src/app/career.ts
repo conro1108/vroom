@@ -32,6 +32,11 @@ const read = (): Save => {
   }
 };
 
+export const freshStandings = (): Standing[] => [
+  { name: "You", color: PLAYER_COLOR, points: 0, player: true },
+  ...RIVALS.map((r) => ({ name: r.name, color: r.color, points: 0, player: false })),
+];
+
 export function addResult(cupId: string, place: number) {
   const s = read();
   s[cupId] = Math.min(place, s[cupId] ?? 99);
@@ -45,3 +50,24 @@ export function cupOpen(index: number) {
   const prev = bestPlace(CUPS[index - 1]!.id);
   return prev !== null && prev <= 3;
 }
+
+// ---- small preferences ----
+
+const HINT = "vroom2.hinted";
+const pref = (k: string) => {
+  try {
+    return localStorage.getItem(k) === "1";
+  } catch {
+    return false;
+  }
+};
+const setPref = (k: string, v: boolean) => {
+  try {
+    localStorage.setItem(k, v ? "1" : "0");
+  } catch {
+    // private mode: the preference just lasts this session
+  }
+};
+
+export const hintDone = () => pref(HINT);
+export const markHintDone = () => setPref(HINT, true);

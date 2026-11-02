@@ -202,8 +202,9 @@ export class View {
     }
     if (this.mode === "orbit") {
       this.orbit += dt * 0.35;
-      const dist = portrait ? 11 : 8;
-      cam.position.set(x + Math.cos(this.orbit) * dist, y + 2.2, z + Math.sin(this.orbit) * dist);
+      // high enough to sweep over the cars gridded alongside, not through them
+      const dist = portrait ? 11 : 8.5;
+      cam.position.set(x + Math.cos(this.orbit) * dist, y + 4.6, z + Math.sin(this.orbit) * dist);
       cam.lookAt(x, y + 0.9, z);
       cam.fov = 45;
       cam.updateProjectionMatrix();
