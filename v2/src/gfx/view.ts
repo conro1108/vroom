@@ -31,6 +31,7 @@ export class View {
   private camH = 0;
   private camY = 0;
   private shake = 0;
+  private shakeT = 0;
   private fovKick = 0;
   private orbit = 0;
   private aspect = 1;
@@ -103,11 +104,11 @@ export class View {
       switch (ev.e.type) {
         case "wall":
           fx.impact(car.x, car.y, car.z, ev.e.hit);
-          if (near) this.shake = Math.max(this.shake, ev.e.hit * 0.5);
+          if (near && ev.e.hit > 0.35) this.shake = Math.max(this.shake, ev.e.hit * 0.3);
           break;
         case "land":
           this.models[i]!.bounce(Math.min(2.4, ev.e.drop * 0.16));
-          if (near) this.shake = Math.max(this.shake, Math.min(0.45, ev.e.drop * 0.03));
+          if (near && ev.e.drop > 6) this.shake = Math.max(this.shake, Math.min(0.3, ev.e.drop * 0.02));
           if (this.world!.theme.ground !== "void") {
             const puffs = Math.min(5, Math.round(ev.e.drop * 0.35));
             for (let k = 0; k < puffs; k++) fx.dust(car.x, car.y, car.z, this.world!.theme.verge, car.vx, car.vz, 0.25);
@@ -223,12 +224,14 @@ export class View {
     const back = (portrait ? 8.6 : 6.4) + sf * 1.6;
     const up = (portrait ? 5 : 2.7) + sf * 0.35;
     const [fx, fz] = [Math.cos(this.camH), Math.sin(this.camH)];
-    this.shake *= Math.exp(-dt * 8);
-    const sh = this.shake;
+    // a short, smooth thud: per-frame random jitter read as the screen vibrating
+    this.shake *= Math.exp(-dt * 10);
+    this.shakeT += dt;
+    const sh = this.shake < 0.02 ? 0 : this.shake;
     cam.position.set(
-      x - fx * back + (Math.random() - 0.5) * sh,
-      this.camY + up + (Math.random() - 0.5) * sh,
-      z - fz * back + (Math.random() - 0.5) * sh
+      x - fx * back + Math.sin(this.shakeT * 37) * sh * 0.5,
+      this.camY + up + Math.sin(this.shakeT * 53 + 1) * sh,
+      z - fz * back + Math.sin(this.shakeT * 41 + 2) * sh * 0.5
     );
     const ahead = (portrait ? 6 : 9) + sf * 5;
     const ly = c.y[(car.i + Math.round(ahead / c.ds)) % c.n]!;

@@ -343,6 +343,10 @@ export class Game {
     });
   }
 
+  private placeSeen = 0;
+  private placeHeld = 0;
+  private placeShown = 0;
+
   private publish(dt: number) {
     const race = this.race!;
     const r = race.player;
@@ -351,8 +355,16 @@ export class Game {
     const t = TUNING;
     this.bannerT -= dt;
     if (this.bannerT <= 0) this.banner = "";
+    // In a pack the true order flips every few frames; show a place only once it
+    // has held for a moment, so the HUD reports overtakes rather than noise.
+    const now = race.place(r);
+    if (now !== this.placeSeen) {
+      this.placeSeen = now;
+      this.placeHeld = 0;
+    } else this.placeHeld += dt;
+    if (this.placeShown === 0 || this.placeHeld > 0.45 || r.finishT !== null || !race.started) this.placeShown = now;
     hud.value = {
-      place: race.place(r),
+      place: this.placeShown,
       field: race.racers.length,
       lap: Math.min(race.laps, r.lap + 1),
       laps: race.laps,

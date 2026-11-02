@@ -38,13 +38,14 @@ export interface Car {
   fallT: number; // >0 = falling or being recovered
   safeI: number; // last solid sample
   padCooldown: number;
+  knockT: number;
   events: CarEvent[];
 }
 
 export function createCar(c: Course, i: number, d: number): Car {
   const car: Car = {
     x: 0, y: 0, z: 0, vx: 0, vz: 0, vy: 0, h: 0, steer: 0, i, d: 0, onRoad: true, grounded: true, air: 0,
-    driftDir: 0, driftT: 0, tier: 0, boostT: 0, fallT: 0, safeI: i, padCooldown: 0, events: [],
+    driftDir: 0, driftT: 0, tier: 0, boostT: 0, fallT: 0, safeI: i, padCooldown: 0, knockT: 0, events: [],
   };
   placeCar(car, c, i, d);
   return car;
@@ -72,6 +73,7 @@ export function stepCar(car: Car, inp: Input, c: Course, T: Tuning, scale: numbe
 
   car.boostT = Math.max(0, car.boostT - dt);
   car.padCooldown = Math.max(0, car.padCooldown - dt);
+  car.knockT = Math.max(0, car.knockT - dt);
   car.steer += (inp.steer - car.steer) * Math.min(1, T.steerResponse * dt);
 
   let f = [Math.cos(car.h), Math.sin(car.h)] as const;
@@ -136,8 +138,8 @@ export function stepCar(car: Car, inp: Input, c: Course, T: Tuning, scale: numbe
     } else if (inp.throttle === 0) {
       vf -= Math.sign(vf) * Math.min(Math.abs(vf), T.drag * dt);
     }
-    if (vf > top) vf -= Math.min(vf - top, (off ? T.offDrag * 3 : T.offDrag) * dt);
-    if (off) vf -= T.offDrag * 0.15 * Math.sign(vf) * dt;
+    // grass eases you down to its cap rather than grabbing the car
+    if (vf > top) vf -= Math.min(vf - top, (off ? T.offDrag : T.overTopDrag) * dt);
     // hills: climbing costs a little, descending pays
     const j = (car.i + 3) % c.n;
     const grade = (c.y[j]! - c.y[car.i]!) / (3 * c.ds);
@@ -174,7 +176,8 @@ export function stepCar(car: Car, inp: Input, c: Course, T: Tuning, scale: numbe
     car.y = ground;
     car.vy = Math.min(car.vy, 12);
   } else if (clear <= 0 && clear > -3) {
-    if (!car.grounded) car.events.push({ type: "land", drop: -car.vy });
+    // only real air counts as a landing; a crest flutter shouldn't thump the camera
+    if (!car.grounded && car.air > 0.25) car.events.push({ type: "land", drop: -car.vy });
     car.y = ground;
     car.vy = Math.max(0, car.vy * 0);
     car.grounded = true;
@@ -239,7 +242,11 @@ function walls(car: Car, c: Course, T: Tuning) {
     let e = c.h[i]! - car.h;
     e = Math.atan2(Math.sin(e), Math.cos(e));
     car.h += e * 0.12;
-    if (hit > 0.12) car.events.push({ type: "wall", hit: Math.min(1, hit * 1.4) });
+    // one knock per contact: scraping along a wall used to report every step
+    if (hit > 0.12 && car.knockT <= 0) {
+      car.events.push({ type: "wall", hit: Math.min(1, hit * 1.4) });
+      car.knockT = 0.35;
+    }
   }
 }
 

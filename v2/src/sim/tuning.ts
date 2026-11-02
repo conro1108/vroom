@@ -25,8 +25,9 @@ export const TUNING = {
   boostPad: 1.3,
   boostTop: 1.33, // top-speed multiple while boosting
   boostAccel: 2.4,
-  offTop: 0.5, // top-speed multiple on the grass
-  offDrag: 16,
+  offTop: 0.72, // top-speed multiple on the grass
+  offDrag: 7, // m/s² shed on the grass while above its top speed
+  overTopDrag: 16, // m/s² shed on the road when a boost ends above top speed
   gravity: 30,
   stick: 0.06, // metres of air below which the car counts as on the road
   wallBounce: 0.25,
