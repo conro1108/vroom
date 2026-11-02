@@ -48,7 +48,9 @@ export class Race {
   private seed = 7;
 
   constructor(def: TrackDef, readonly opts: RaceOptions) {
-    this.course = buildCourse(def);
+    // Bots drive vmax * scale, but grip doesn't grow with the cup's speed, so the
+    // corner limits are solved with the grip divided back out.
+    this.course = buildCourse(def, 19 / (opts.scale * opts.scale));
     this.laps = def.laps ?? 3;
     const c = this.course;
     const field = opts.rivals.length + 1;

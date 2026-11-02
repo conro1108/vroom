@@ -210,6 +210,16 @@ export class World {
 
   private heightAt?: (x: number, z: number) => number;
 
+  /** Is (x,z) on a stretch of road lower than y? Pillars mustn't stand on it. */
+  private overRoad(x: number, z: number, y: number): boolean {
+    const c = this.c;
+    for (let i = 0; i < c.n; i++) {
+      if (c.y[i]! > y - 3) continue;
+      if (Math.hypot(c.x[i]! - x, c.z[i]! - z) < c.half[i]! + 3) return true;
+    }
+    return false;
+  }
+
   private terrain() {
     const { theme, c } = this;
     const b = this.bounds;
@@ -417,6 +427,8 @@ export class World {
         for (const s of [-1, 1]) {
           const d = s * c.half[i]! * 0.7;
           const a = c.h[i]!;
+          const [px, pz] = [c.x[i]! - Math.sin(a) * d, c.z[i]! + Math.cos(a) * d];
+          if (this.overRoad(px, pz, c.y[i]!)) continue;
           spots.push({ x: c.x[i]! - Math.sin(a) * d, y: (c.y[i]! + ground) / 2, z: c.z[i]! + Math.cos(a) * d, h: c.y[i]! - ground });
         }
       }

@@ -155,11 +155,11 @@ export class View {
         const [wx, wz] = [x - fx0 * 1.05 + rx * s * 0.86, z - fz0 * 1.05 + rz * s * 0.86];
         if (sliding) {
           fx.skid(key, wx, y, wz, h);
-          if (Math.random() < dt * 34) fx.dust(wx, y, wz, c.onRoad ? 0xe9edf2 : road, c.vx, c.vz);
+          if (Math.random() < dt * 34) fx.dust(wx, y, wz, c.onRoad || world.theme.ground === "void" ? 0xe9edf2 : road, c.vx, c.vz);
           if (c.tier > 0 && Math.random() < dt * 90) fx.spark(wx, y, wz, c.tier, c.vx, c.vz);
         } else {
           fx.skidEnd(key);
-          if (!c.onRoad && c.grounded && speed > 6 && Math.random() < dt * 24) fx.dust(wx, y, wz, road, c.vx, c.vz);
+          if (!c.onRoad && c.grounded && speed > 6 && world.theme.ground !== "void" && Math.random() < dt * 24) fx.dust(wx, y, wz, road, c.vx, c.vz);
         }
       }
     });

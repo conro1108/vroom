@@ -163,7 +163,7 @@ export function stepCar(car: Car, inp: Input, c: Course, T: Tuning, scale: numbe
   walls(car, c, T);
 
   // ---- height ----
-  const ground = c.gap[car.i] ? -Infinity : roadY(c, car.i, car.d);
+  const ground = c.gap[car.i] ? -Infinity : groundAt(car, c);
   car.vy -= T.gravity * dt;
   car.y += car.vy * dt;
   const clear = car.y - ground;
@@ -194,6 +194,17 @@ export function stepCar(car: Car, inp: Input, c: Course, T: Tuning, scale: numbe
     car.fallT = T.fallSeconds + T.respawnSeconds;
     car.events.push({ type: "fall" });
   }
+}
+
+/** Road height under the car, blended between the two nearest samples: snapping to
+ *  one sample made steep drops a staircase the car fell off. */
+function groundAt(car: Car, c: Course): number {
+  const i = car.i;
+  const along = (car.x - c.x[i]!) * Math.cos(c.h[i]!) + (car.z - c.z[i]!) * Math.sin(c.h[i]!);
+  const j = (i + (along >= 0 ? 1 : -1) + c.n) % c.n;
+  if (c.gap[j]) return roadY(c, i, car.d);
+  const t = Math.min(1, Math.abs(along) / c.ds);
+  return roadY(c, i, car.d) * (1 - t) + roadY(c, j, car.d) * t;
 }
 
 function walls(car: Car, c: Course, T: Tuning) {
@@ -292,8 +303,17 @@ function stepRecovery(car: Car, c: Course, T: Tuning, dt: number) {
     return;
   }
   if (car.fallT + dt > T.respawnSeconds) {
-    // put down a little behind the drop, clear of the lip that caused it
+    // A missed jump puts you down past the gap: standing before the lip again
+    // would just drop you back in, forever. Anything else, a little behind the drop.
     let i = (car.safeI - 6 + c.n) % c.n;
+    for (let k = 0; k < 40; k++) {
+      const j = (car.safeI + k) % c.n;
+      if (!c.gap[j]) continue;
+      i = j;
+      while (c.gap[i]) i = (i + 1) % c.n;
+      i = (i + 4) % c.n;
+      break;
+    }
     for (let g = 0; g < 80 && c.gap[i]; g++) i = (i - 1 + c.n) % c.n;
     placeCar(car, c, i, 0);
     car.boostT = 0;

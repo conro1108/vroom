@@ -2,7 +2,7 @@
 // this after authoring a layout: `npm run sim` or `npm run sim -- <trackId>`.
 import { speedOf } from "../src/sim/car";
 import { DT, Race } from "../src/sim/race";
-import { ALL_TRACKS } from "../src/tracks";
+import { ALL_TRACKS, CUPS } from "../src/tracks";
 import { LAB } from "../src/tracks/lab";
 
 const only = process.argv.slice(2);
@@ -10,7 +10,7 @@ const rows = [];
 for (const def of [...ALL_TRACKS, ...LAB]) {
   if (only.length && !only.includes(def.id)) continue;
   const race = new Race(def, {
-    scale: 1, difficulty: 1, rivals: [], player: { name: "bot", color: 0 }, grid: 0, autopilot: true,
+    scale: CUPS.find((cup) => cup.tracks.includes(def))?.scale ?? 1, difficulty: 1, rivals: [], player: { name: "bot", color: 0 }, grid: 0, autopilot: true,
   });
   const c = race.course;
   race.started = true;
