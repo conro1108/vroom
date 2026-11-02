@@ -293,7 +293,7 @@ function Banner() {
 
 const coarse = matchMedia("(pointer: coarse)").matches;
 const STEPS = coarse
-  ? ["HOLD TO GO", "DRAG TO STEER", "PULL DOWN IN A CORNER TO DRIFT", "SLIDE BACK UP TO BOOST"]
+  ? ["HOLD TO GO", "DRAG TO STEER", "FLICK DOWN IN A CORNER TO DRIFT", "SLIDE BACK UP TO BOOST"]
   : ["UP ARROW TO GO", "LEFT AND RIGHT TO STEER", "HOLD SPACE IN A CORNER TO DRIFT", "LET GO TO BOOST"];
 
 function Hint() {

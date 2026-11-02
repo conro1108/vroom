@@ -7,12 +7,12 @@ export const TUNING = {
   brake: 34,
   drag: 5,
   steerResponse: 11, // 1/s, how fast the wheels chase input
-  gripLat: 21, // m/s² of cornering before the fronts give up; radius = v²/this
+  gripLat: 24, // m/s² of cornering before the fronts give up; radius = v²/this
   maxYaw: 2.5, // rad/s, low-speed yaw ceiling
   grip: 9.5, // 1/s decay of sideways velocity
-  driftGrip: 2.9,
-  driftWide: 0.72, // yaw multiplier with the thumb backed off during a drift
-  driftTight: 1.7, // yaw multiplier with full lock into the drift
+  driftGrip: 4.2, // low enough to slide, high enough that a drift never swaps ends
+  driftWide: 0.8, // yaw multiplier with the thumb backed off during a drift
+  driftTight: 1.32, // yaw multiplier with full lock into the drift
   driftCarry: 0.85, // share of scrubbed speed a slide keeps
   driftMinSpeed: 11,
   hop: 3.4, // m/s, the little jump that starts a drift
@@ -36,9 +36,11 @@ export const TUNING = {
   respawnSeconds: 0.7,
   slope: 0.5, // how much of gravity's along-road pull is felt on hills
   bumpRadius: 1.25, // car-to-car collision radius
-  touchThrow: 0.32, // share of screen width dragged for full lock
-  touchCurve: 1.9, // >1 makes small drags gentle and saves full lock for big ones
-  driftPull: 36, // css px of downward thumb pull that throws the car into a drift
+  touchThrow: 0.26, // share of screen width dragged for full lock
+  touchCurve: 1.35, // >1 makes small drags gentle and saves full lock for big ones
+  driftPull: 60, // css px the thumb must flick down, quickly, to throw the car into a drift
+  driftFlick: 0.28, // seconds that flick has to happen within; a slow sag never drifts
+  driftSteer: 0.35, // steer needed before a flick counts, so the drift has a clear direction
 };
 
 export type Tuning = typeof TUNING;

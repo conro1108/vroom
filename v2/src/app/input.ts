@@ -1,6 +1,7 @@
-// One thumb: touch anywhere and hold to go, drag sideways to steer, pull the thumb
-// down while steering to drift, slide back up to cash the boost. Drift is a
-// deliberate gesture: triggering it from hard steering made every corner a slide.
+// One thumb: touch anywhere and hold to go, drag sideways to steer, flick the thumb
+// down while steering to drift, slide back up to cash the boost. The flick has to
+// be quick and deliberate: thumbs sag and reposition constantly, and any slow
+// downward drift counting as a drift made every correction a slide.
 // The stick's anchor trails the thumb, so reversing direction responds instantly
 // no matter how far you've dragged. Keyboard: arrows/WASD, Shift or Space drifts.
 import type { Input } from "../sim/car";
@@ -16,6 +17,8 @@ export class Controls {
   private anchor = 0;
   private startY = 0;
   private pull = 0;
+  private trail: { t: number; y: number }[] = [];
+  private flicked = false;
   private stick = 0;
   private touchDrift = false;
   /** Where the thumb went down and how far it's dragged, for the on-screen stick. */
@@ -46,6 +49,7 @@ export class Controls {
       this.thumb = null;
       this.touchDrift = false;
       this.pull = 0;
+      this.flicked = false;
     }
   }
 
@@ -56,6 +60,8 @@ export class Controls {
     this.anchor = t.clientX;
     this.startY = t.clientY;
     this.pull = 0;
+    this.trail = [{ t: performance.now(), y: t.clientY }];
+    this.flicked = false;
     this.stick = 0;
     this.thumb = { x: t.clientX, y: t.clientY, dx: 0, dy: 0 };
   }
@@ -73,6 +79,10 @@ export class Controls {
       // the drift pull's origin trails upward too, so lifting always releases it
       if (t.clientY < this.startY) this.startY = t.clientY;
       this.pull = t.clientY - this.startY;
+      const now = performance.now();
+      this.trail.push({ t: now, y: t.clientY });
+      while (this.trail.length > 2 && now - this.trail[0]!.t > TUNING.driftFlick * 1000) this.trail.shift();
+      if (t.clientY - this.trail[0]!.y >= TUNING.driftPull) this.flicked = true;
       if (this.thumb) this.thumb = { ...this.thumb, dx, dy: this.pull };
       e.preventDefault();
     }
@@ -101,7 +111,8 @@ export class Controls {
       i.throttle = 1;
       i.brake = 0;
       const pull = TUNING.driftPull;
-      if (!this.touchDrift && this.pull > pull && Math.abs(s) > 0.15) this.touchDrift = true;
+      if (!this.touchDrift && this.flicked && Math.abs(s) > TUNING.driftSteer) this.touchDrift = true;
+      this.flicked = false;
       if (this.touchDrift && this.pull < pull * 0.45) this.touchDrift = false;
       i.drift = this.touchDrift;
     } else if (usingKeys) {
