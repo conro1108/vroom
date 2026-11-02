@@ -35,6 +35,9 @@ export const TUNING = {
   respawnSeconds: 0.7,
   slope: 0.5, // how much of gravity's along-road pull is felt on hills
   bumpRadius: 1.25, // car-to-car collision radius
+  touchThrow: 0.32, // share of screen width dragged for full lock
+  touchCurve: 1.9, // >1 makes small drags gentle and saves full lock for big ones
+  driftPull: 36, // css px of downward thumb pull that throws the car into a drift
 };
 
 export type Tuning = typeof TUNING;

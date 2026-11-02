@@ -53,7 +53,7 @@ export function cupOpen(index: number) {
 
 // ---- small preferences ----
 
-const HINT = "vroom2.hinted";
+const HINT = "vroom2.hinted.pull";
 const pref = (k: string) => {
   try {
     return localStorage.getItem(k) === "1";

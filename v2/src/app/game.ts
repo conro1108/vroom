@@ -33,7 +33,7 @@ export interface Hud {
   banner: string;
   auto: boolean; // a bot is driving
   cars: { x: number; z: number; player: boolean; color: number }[];
-  thumb: { x: number; y: number; dx: number } | null;
+  thumb: { x: number; y: number; dx: number; dy: number } | null;
 }
 
 export interface RaceRow {

@@ -6,7 +6,7 @@ import { computed } from "@preact/signals";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { course, hud, phase, type Game, type Hud as HudData } from "../app/game";
 import { hintDone, markHintDone } from "../app/career";
-import { DRIFT_IN, THROW } from "../app/input";
+import { throwPx } from "../app/input";
 import { TUNING } from "../sim/tuning";
 import { PauseIcon } from "./art";
 import { clock, hex, ordinal } from "./look";
@@ -243,7 +243,6 @@ function Thumb() {
   const root = useRef<HTMLDivElement>(null);
   const knob = useRef<HTMLElement>(null);
   const shown = useRef(false);
-  const out = THROW * DRIFT_IN;
   useFrame((h) => {
     const el = root.current;
     if (!el) return;
@@ -254,8 +253,9 @@ function Thumb() {
     }
     if (t) {
       el.style.transform = `translate3d(${t.x - t.dx}px,${t.y - 76}px,0)`;
-      if (knob.current) knob.current.style.transform = `translate3d(${t.dx}px,0,0) skewX(-12deg)`;
-      el.classList.toggle("hard", Math.abs(t.dx) >= out);
+      const down = Math.min(t.dy, TUNING.driftPull * 1.4);
+      if (knob.current) knob.current.style.transform = `translate3d(${t.dx * (62 / throwPx())}px,${down}px,0) skewX(-12deg)`;
+      el.classList.toggle("hard", t.dy >= TUNING.driftPull);
     }
   });
   return (
@@ -293,7 +293,7 @@ function Banner() {
 
 const coarse = matchMedia("(pointer: coarse)").matches;
 const STEPS = coarse
-  ? ["HOLD TO GO", "DRAG TO STEER", "KEEP IT HARD OVER TO DRIFT", "EASE OFF TO BOOST"]
+  ? ["HOLD TO GO", "DRAG TO STEER", "PULL DOWN IN A CORNER TO DRIFT", "SLIDE BACK UP TO BOOST"]
   : ["UP ARROW TO GO", "LEFT AND RIGHT TO STEER", "HOLD SPACE IN A CORNER TO DRIFT", "LET GO TO BOOST"];
 
 function Hint() {
