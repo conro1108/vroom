@@ -1,5 +1,9 @@
 // One thumb: touch anywhere and hold to go, drag sideways to steer, flick the thumb
-// down while steering to drift, slide back up to cash the boost. Lifting never
+// down while steering to drift, slide back up to cash the boost. When a drift
+// starts the stick re-centres under the thumb: that spot holds the drift's middle
+// arc, and nudging in or out tightens or opens it. It re-centres again as the
+// drift ends, so you come out pointing straight. Without that, the thumb was
+// already dragged into the turn, so every drift began near its tightest. Lifting never
 // brakes: thumbs come off to regrip all the time, so a lift keeps the throttle for
 // a moment, then coasts. The flick has to
 // be quick and deliberate: thumbs sag and reposition constantly, and any slow
@@ -17,6 +21,8 @@ export class Controls {
   private keys = new Set<string>();
   private touchId: number | null = null;
   private anchor = 0;
+  private lastX = 0;
+  private wasDrifting = false; // the stick re-centres when this flips
   private fullL = 100;
   private fullR = 100;
   private startY = 0;
@@ -64,13 +70,7 @@ export class Controls {
     if (!this.active || this.touchId !== null || (e.target as HTMLElement)?.closest?.("button,a,input,[data-noinput]")) return;
     const t = e.changedTouches[0]!;
     this.touchId = t.identifier;
-    this.anchor = t.clientX;
-    // A thumb lands near its own edge of the screen, so the throw toward that edge
-    // shrinks to the room actually there: full lock always fits on the glass.
-    const full = throwPx();
-    const margin = 18;
-    this.fullR = Math.max(40, Math.min(full, innerWidth - t.clientX - margin));
-    this.fullL = Math.max(40, Math.min(full, t.clientX - margin));
+    this.centre(t.clientX);
     this.startY = t.clientY;
     this.pull = 0;
     this.trail = [{ t: performance.now(), y: t.clientY }];
@@ -79,9 +79,23 @@ export class Controls {
     this.thumb = { x: t.clientX, y: t.clientY, dx: 0, dy: 0, f: 0 };
   }
 
+  /** Zero the stick at x. A thumb sits near its own edge of the screen, so the throw
+   *  toward that edge shrinks to the room actually there: full lock fits on the glass. */
+  private centre(x: number) {
+    this.anchor = x;
+    this.lastX = x;
+    const full = throwPx();
+    const margin = 18;
+    this.fullR = Math.max(40, Math.min(full, innerWidth - x - margin));
+    this.fullL = Math.max(40, Math.min(full, x - margin));
+    this.stick = 0;
+    if (this.thumb) this.thumb = { ...this.thumb, x, dx: 0, f: 0 };
+  }
+
   private move(e: TouchEvent) {
     for (const t of Array.from(e.changedTouches)) {
       if (t.identifier !== this.touchId) continue;
+      this.lastX = t.clientX;
       let dx = t.clientX - this.anchor;
       const full = dx >= 0 ? this.fullR : this.fullL;
       if (Math.abs(dx) > full) {
@@ -113,8 +127,8 @@ export class Controls {
     }
   }
 
-  /** Sample once per sim step. */
-  poll(dt: number): Input {
+  /** Sample once per sim step. `drifting`: the car is actually in a drift. */
+  poll(dt: number, drifting = false): Input {
     const k = this.keys;
     const key = (...names: string[]) => names.some((n) => k.has(n));
     const left = key("arrowleft", "a");
@@ -123,6 +137,12 @@ export class Controls {
     const i = this.input;
     if (this.touchId !== null) {
       this.coast = 0;
+      // Re-centre when the car really starts sliding (a flick at low speed or in
+      // the air doesn't drift, and mustn't straighten the steering), and again when
+      // it stops: a thumb nudged out to open the arc would otherwise exit the drift
+      // into a hard counter-steer.
+      if (drifting !== this.wasDrifting) this.centre(this.lastX);
+      this.wasDrifting = drifting;
       const s = this.stick;
       i.steer = Math.sign(s) * Math.abs(s) ** TUNING.touchCurve;
       i.throttle = 1;

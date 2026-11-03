@@ -11,8 +11,8 @@ export const TUNING = {
   maxYaw: 2.5, // rad/s, low-speed yaw ceiling
   grip: 9.5, // 1/s decay of sideways velocity
   driftGrip: 4.2, // low enough to slide, high enough that a drift never swaps ends
-  driftWide: 0.8, // yaw multiplier with the thumb backed off during a drift
-  driftTight: 2.2, // yaw multiplier with full lock into the drift: hairpins are drift corners
+  driftWideR: 60, // m, drift arc at base top speed steering fully away from the turn
+  driftTightR: 17, // m, drift arc at base top speed steering fully into it: a hairpin
   driftCarry: 0.6, // share of scrubbed speed a slide keeps; a hard drift sheds speed, which is the touch brake
   driftMinSpeed: 11,
   hop: 3.4, // m/s, the little jump that starts a drift

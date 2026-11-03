@@ -1,8 +1,8 @@
-// How tight can the car turn? Holds a full-lock grip turn and a full-lock drift from
-// top speed for each speed scale and prints the arc radius (whole 180° and its second
+// How tight can the car turn? Holds a full-lock grip turn, then drifts steering fully
+// in, neutral and fully out, from top speed for each speed scale and prints the arc radius (whole 180° and its second
 // half, where a hairpin apex is) and the speed coming out.
 // Compare against `minV`/`minR` in `npm run sim`: a racing-line hairpin is ~19m.
-//   npm run turn   (SET=driftTight=2,driftCarry=0.6 npm run turn to try values)
+//   npm run turn   (SET=driftTightR=20,driftCarry=0.6 npm run turn to try values)
 import { createCar, speedOf, stepCar } from "../src/sim/car";
 import { buildCourse } from "../src/sim/course";
 import { DT } from "../src/sim/race";
@@ -18,7 +18,7 @@ for (const kv of (process.env.SET ?? "").split(",").filter(Boolean)) {
 }
 const rows = [];
 for (const scale of [1, 1.1, 1.25]) {
-  for (const [mode, steer, drift] of [["grip", 1, false], ["drift", 1, true], ["drift, thumb centred", 0, true]] as const) {
+  for (const [mode, steer, drift] of [["grip", 1, false], ["drift in", 1, true], ["drift neutral", 0, true], ["drift out", -1, true]] as const) {
     const car = createCar(c, 0, 0);
     const top = TUNING.top * scale;
     car.vx = Math.cos(car.h) * top; car.vz = Math.sin(car.h) * top;

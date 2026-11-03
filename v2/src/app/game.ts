@@ -274,7 +274,7 @@ export class Game {
     this.acc += dt;
     while (this.acc >= DT) {
       this.view.capture();
-      race.input = this.controls.poll(DT);
+      race.input = this.controls.poll(DT, race.player.car.driftDir !== 0);
       race.step();
       this.acc -= DT;
     }

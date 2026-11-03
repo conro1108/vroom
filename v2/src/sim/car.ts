@@ -1,6 +1,6 @@
 // One car, one fixed physics step. Arcade by design: heading and velocity are
 // separate, sideways velocity bleeds off at `grip`, and the slide you see is just
-// that gap. A drift locks a direction, drops grip, and lets the thumb choose how
+// that gap. A drift locks a direction, drops grip, and lets steering choose how
 // tight the arc runs; held long enough it charges a mini-turbo in three tiers.
 import { lateral, locate, roadY, SURFACE_GRIP, type Course } from "./course";
 import type { Tuning } from "./tuning";
@@ -113,9 +113,14 @@ export function stepCar(car: Car, inp: Input, c: Course, T: Tuning, scale: numbe
   const gripYaw = Math.min(T.maxYaw, (T.gripLat * surf) / Math.max(sp, 1));
   let yaw: number;
   if (car.driftDir !== 0) {
+    // Steering within the drift: neutral holds a middle arc, into the turn tightens
+    // it, away opens it, and the drift never changes sides. A fixed turn rate rather
+    // than grip-limited, so an arc is roughly the same corner in every speed class
+    // (grip-limited, radius grew with speed squared). Capped so slow drifts slide
+    // rather than swap ends.
     const into = (car.steer * car.driftDir + 1) / 2;
-    // capped so a slow drift slides rather than swapping ends
-    yaw = car.driftDir * Math.min(T.maxYaw, gripYaw * (T.driftWide + (T.driftTight - T.driftWide) * into));
+    const k = 1 / T.driftWideR + (1 / T.driftTightR - 1 / T.driftWideR) * into;
+    yaw = car.driftDir * Math.min(T.maxYaw, T.top * k * surf);
   } else {
     yaw = car.steer * gripYaw;
   }

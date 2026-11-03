@@ -1,8 +1,8 @@
 # CLAUDE.md
 
 VROOM v2 is a mobile-first 3D arcade racer: chase camera, low-poly sunny-Sega look,
-one thumb (hold to go, drag to steer, stay hard over to drift, ease off to cash the
-boost). It's a standalone app with no code shared with the repo root, so either can
+one thumb (hold to go, drag to steer, flick down to drift and steer within it, slide
+up to cash the boost). It's a standalone app with no code shared with the repo root, so either can
 be deleted. Vite, TypeScript, three.js for the world, Preact + signals for the UI,
 static on Vercel (set the project's Root Directory to `v2`).
 
