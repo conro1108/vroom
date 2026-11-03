@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+`v2/` is a standalone 3D rebuild (three.js + Preact) with its own map in
+`v2/CLAUDE.md`; no code is shared, and everything below is about the
+original at the repo root.
+
 vroom is a mobile-first pixel-art arcade racing game (a PWA, deployed
 statically on Vercel). One thumb: drag sideways to steer, hold to go. The
 whole point is feel — a satisfying, slightly drift-y car you want to keep

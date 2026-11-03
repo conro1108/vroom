@@ -20,7 +20,7 @@ screenshots at exact race times, needs dev server on :5310).
 | Bots, laps, positions | `src/sim/race.ts` |
 | A cup or its tracks | `src/tracks/<cup>.ts` |
 | A world's look and scatter | `src/gfx/worlds/<theme>.ts` |
-| Shared props | `src/gfx/props.ts` |
+| Shared props; the low-poly kit all art is built from | `src/gfx/props.ts`, `src/gfx/geo.ts` |
 | Terrain, road, barriers, bridges | `src/gfx/world.ts` |
 | Car model | `src/gfx/carmodel.ts` |
 | Particles, skids, speed lines | `src/gfx/fx.ts` |
@@ -29,6 +29,7 @@ screenshots at exact race times, needs dev server on :5310).
 | Game flow, HUD data | `src/app/game.ts` |
 | Rivals, points, save, unlocks | `src/app/career.ts` |
 | Menus and HUD (one file per screen) | `src/ui/` |
+| Cup colours, number formatting | `src/ui/look.ts` |
 | Wordmark, trophy, track-map art | `src/ui/art.tsx` |
 | PWA icons (regenerate: `node scripts/icons.mjs`) | `scripts/icons.mjs` |
 | Sound | `src/audio/` |
