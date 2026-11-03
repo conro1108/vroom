@@ -114,7 +114,8 @@ export function stepCar(car: Car, inp: Input, c: Course, T: Tuning, scale: numbe
   let yaw: number;
   if (car.driftDir !== 0) {
     const into = (car.steer * car.driftDir + 1) / 2;
-    yaw = car.driftDir * gripYaw * (T.driftWide + (T.driftTight - T.driftWide) * into);
+    // capped so a slow drift slides rather than swapping ends
+    yaw = car.driftDir * Math.min(T.maxYaw, gripYaw * (T.driftWide + (T.driftTight - T.driftWide) * into));
   } else {
     yaw = car.steer * gripYaw;
   }

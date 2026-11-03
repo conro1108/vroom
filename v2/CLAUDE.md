@@ -8,6 +8,7 @@ static on Vercel (set the project's Root Directory to `v2`).
 
 `npm run dev` · `npm run build` · `npm test` (`*.check.ts`, keep under 3s) ·
 `npm run sim` (bot-drives every track, prints what each lap is like) ·
+`npm run turn` (tightest grip and drift arcs per speed class; hairpins need ~19m) ·
 `node scripts/shot.mjs "track=sunrise&auto=1&skip=1" 8,20 390x844 name` (headless
 screenshots at exact race times, needs dev server on :5310).
 

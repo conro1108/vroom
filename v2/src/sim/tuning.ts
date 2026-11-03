@@ -12,8 +12,8 @@ export const TUNING = {
   grip: 9.5, // 1/s decay of sideways velocity
   driftGrip: 4.2, // low enough to slide, high enough that a drift never swaps ends
   driftWide: 0.8, // yaw multiplier with the thumb backed off during a drift
-  driftTight: 1.32, // yaw multiplier with full lock into the drift
-  driftCarry: 0.85, // share of scrubbed speed a slide keeps
+  driftTight: 2.2, // yaw multiplier with full lock into the drift: hairpins are drift corners
+  driftCarry: 0.6, // share of scrubbed speed a slide keeps; a hard drift sheds speed, which is the touch brake
   driftMinSpeed: 11,
   hop: 3.4, // m/s, the little jump that starts a drift
   tier1: 0.55, // seconds of drift for each mini-turbo tier
