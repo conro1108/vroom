@@ -35,13 +35,14 @@ export const TUNING = {
   fallSeconds: 0.9,
   respawnSeconds: 0.7,
   slope: 0.5, // how much of gravity's along-road pull is felt on hills
-  bumpRadius: 1.25, // car-to-car collision radius
+  bumpRadius: 0.95, // car-to-car: radius of the nose and tail circles (half the car's width)
+  bumpReach: 0.9, // how far ahead and behind centre those circles sit
   touchThrow: 0.26, // share of screen width dragged for full lock
   touchCurve: 1.35, // >1 makes small drags gentle and saves full lock for big ones
   driftPull: 60, // css px the thumb must flick down, quickly, to throw the car into a drift
   driftFlick: 0.28, // seconds that flick has to happen within; a slow sag never drifts
   driftRelease: 20, // css px back up from the deepest point of the pull that ends a drift
-  releaseCoast: 0.45, // seconds of throttle kept after lifting the thumb out of a drift, so the boost pays
+  liftCoast: 0.45, // seconds of throttle kept after the thumb lifts, so a regrip or a drift release costs nothing
   driftSteer: 0.35, // steer needed before a flick counts, so the drift has a clear direction
 };
 

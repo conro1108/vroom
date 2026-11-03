@@ -1,5 +1,7 @@
 // One thumb: touch anywhere and hold to go, drag sideways to steer, flick the thumb
-// down while steering to drift, slide back up to cash the boost. The flick has to
+// down while steering to drift, slide back up to cash the boost. Lifting never
+// brakes: thumbs come off to regrip all the time, so a lift keeps the throttle for
+// a moment, then coasts. The flick has to
 // be quick and deliberate: thumbs sag and reposition constantly, and any slow
 // downward drift counting as a drift made every correction a slide.
 // The stick's anchor trails the thumb, so reversing direction responds instantly
@@ -24,7 +26,7 @@ export class Controls {
   private stick = 0;
   private touchDrift = false;
   private deepest = 0; // furthest the thumb has pulled down during this drift
-  private coast = 0; // throttle held after lifting out of a drift
+  private coast = 0; // throttle still held after the thumb lifts
   /** Where the thumb went down and how far it's dragged, for the on-screen stick. */
   thumb: { x: number; y: number; dx: number; dy: number; f: number } | null = null;
   private active = false;
@@ -51,6 +53,7 @@ export class Controls {
       this.touchId = null;
       this.stick = 0;
       this.thumb = null;
+      this.coast = 0; // a lift to tap pause mustn't drive on after resuming
       this.touchDrift = false;
       this.pull = 0;
       this.flicked = false;
@@ -101,9 +104,9 @@ export class Controls {
   private end(e: TouchEvent) {
     for (const t of Array.from(e.changedTouches)) {
       if (t.identifier !== this.touchId) continue;
-      // lifting out of a drift is how thumbs naturally end one: cash the boost
-      // rather than reading it as "thumb off, brake"
-      if (this.touchDrift) this.coast = TUNING.releaseCoast;
+      // a lift is usually a regrip, and how thumbs naturally end a drift (so the
+      // boost pays out): keep driving for a beat
+      this.coast = TUNING.liftCoast;
       this.touchId = null;
       this.stick = 0;
       this.thumb = null;
@@ -119,6 +122,7 @@ export class Controls {
     const usingKeys = left || right || key("arrowup", "w", "arrowdown", "s", " ", "shift");
     const i = this.input;
     if (this.touchId !== null) {
+      this.coast = 0;
       const s = this.stick;
       i.steer = Math.sign(s) * Math.abs(s) ** TUNING.touchCurve;
       i.throttle = 1;
@@ -149,8 +153,8 @@ export class Controls {
       this.touchDrift = false;
     } else {
       i.steer = 0;
-      i.throttle = 0;
-      i.brake = 0.6; // thumb off: lift and scrub
+      i.throttle = 0; // thumb off: coast, never brake or creep backward
+      i.brake = 0;
       i.drift = false;
       this.touchDrift = false;
     }

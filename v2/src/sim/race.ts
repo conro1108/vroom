@@ -154,19 +154,33 @@ export class Race {
     };
   }
 
+  // Each car is two circles, nose and tail: one circle wide enough for the car's
+  // length let them sink a metre into each other nose-to-tail, and one sized to its
+  // width let them sit inside each other's bodies in the pack.
   private bump() {
     const R = TUNING.bumpRadius;
+    const L = TUNING.bumpReach;
     const cars = this.racers;
     for (let a = 0; a < cars.length; a++) {
       for (let b = a + 1; b < cars.length; b++) {
         const [p, q] = [cars[a]!.car, cars[b]!.car];
         if (p.fallT > 0 || q.fallT > 0 || Math.abs(p.y - q.y) > 2) continue;
-        const dx = q.x - p.x;
-        const dz = q.z - p.z;
-        const dist = Math.hypot(dx, dz);
-        if (dist >= R * 2 || dist === 0) continue;
-        const [nx, nz] = [dx / dist, dz / dist];
-        const push = (R * 2 - dist) / 2;
+        if (Math.abs(q.x - p.x) > 2 * (L + R) || Math.abs(q.z - p.z) > 2 * (L + R)) continue;
+        // deepest overlap among the four circle pairs
+        let best = 0, nx = 0, nz = 0;
+        for (const sp of [-L, L]) {
+          for (const sq of [-L, L]) {
+            const dx = q.x + Math.cos(q.h) * sq - (p.x + Math.cos(p.h) * sp);
+            const dz = q.z + Math.sin(q.h) * sq - (p.z + Math.sin(p.h) * sp);
+            const dist = Math.hypot(dx, dz);
+            if (dist === 0 || R * 2 - dist <= best) continue;
+            best = R * 2 - dist;
+            nx = dx / dist;
+            nz = dz / dist;
+          }
+        }
+        if (best <= 0) continue;
+        const push = best / 2;
         p.x -= nx * push;
         p.z -= nz * push;
         q.x += nx * push;

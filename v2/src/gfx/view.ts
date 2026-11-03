@@ -30,6 +30,7 @@ export class View {
   private prev: { x: number; y: number; z: number; h: number }[] = [];
   private camH = 0;
   private camY = 0;
+  private lookY = 0;
   private shake = 0;
   private shakeT = 0;
   private fovKick = 0;
@@ -70,6 +71,7 @@ export class View {
     const p = race.player.car;
     this.camH = p.h;
     this.camY = p.y;
+    this.lookY = p.y;
   }
 
   unload() {
@@ -199,6 +201,7 @@ export class View {
       cam.updateProjectionMatrix();
       this.camH = car.h;
       this.camY = car.y;
+      this.lookY = car.y;
       return;
     }
     if (this.mode === "orbit") {
@@ -235,8 +238,15 @@ export class View {
       z - fz * back + Math.sin(this.shakeT * 41 + 2) * sh * 0.5
     );
     const ahead = (portrait ? 6 : 9) + sf * 5;
-    const ly = c.y[(car.i + Math.round(ahead / c.ds)) % c.n]!;
-    cam.lookAt(x + fx * ahead, Math.max(ly, this.camY - 3) + 0.9, z + fz * ahead);
+    // Aim at the road height ahead of where the car actually is between samples:
+    // aimed from the sample index alone, the view twitched about a degree every time
+    // the car crossed one on a hill. The low-pass only rounds off what's left.
+    const along = (x - c.x[car.i]!) * Math.cos(c.h[car.i]!) + (z - c.z[car.i]!) * Math.sin(c.h[car.i]!);
+    const u = car.i + c.n + (along + ahead) / c.ds;
+    const i0 = Math.floor(u);
+    const ly = c.y[i0 % c.n]! + (c.y[(i0 + 1) % c.n]! - c.y[i0 % c.n]!) * (u - i0);
+    this.lookY += (Math.max(ly, this.camY - 3) - this.lookY) * Math.min(1, dt * 15);
+    cam.lookAt(x + fx * ahead, this.lookY + 0.9, z + fz * ahead);
 
     this.fovKick *= Math.exp(-dt * 2.4);
     const base = portrait ? 74 : 60;

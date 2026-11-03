@@ -117,6 +117,10 @@ class Strip {
 export class World {
   readonly group = new THREE.Group();
   readonly sun: THREE.DirectionalLight;
+  private sunDir: THREE.Vector3;
+  private sunRight: THREE.Vector3;
+  private sunUp: THREE.Vector3;
+  private snapped = new THREE.Vector3();
   readonly theme: Theme;
   private pad?: THREE.Texture;
   private sky: THREE.Mesh;
@@ -141,9 +145,14 @@ export class World {
     s.bias = -0.0006;
     s.normalBias = 0.05;
     this.sun.castShadow = true;
+    // light-space axes the shadow camera sees, for texel snapping in update()
+    this.sunDir = new THREE.Vector3(...theme.sun.dir).normalize();
+    const ref = Math.abs(this.sunDir.y) > 0.99 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+    this.sunRight = new THREE.Vector3().crossVectors(ref, this.sunDir).normalize();
+    this.sunUp = new THREE.Vector3().crossVectors(this.sunDir, this.sunRight).normalize();
     this.group.add(this.sun, this.sun.target);
 
-    const sunDir = new THREE.Vector3(...theme.sun.dir).normalize();
+    const sunDir = this.sunDir;
     this.sky = new THREE.Mesh(
       new THREE.SphereGeometry(1, 24, 16),
       new THREE.ShaderMaterial({
@@ -629,9 +638,16 @@ export class World {
 
   /** Per-frame: shadows follow the car; the sky rides with the camera. */
   update(dt: number, focus: THREE.Vector3, camera: THREE.Camera) {
-    const d = new THREE.Vector3(...this.theme.sun.dir).normalize();
-    this.sun.position.copy(focus).addScaledVector(d, 160);
-    this.sun.target.position.copy(focus);
+    // Snap the shadow frustum to whole texels in light space: slid smoothly with
+    // the car, every shadow edge in the world crawled and shimmered.
+    const d = this.sunDir;
+    const texel = (this.sun.shadow.camera.right - this.sun.shadow.camera.left) / this.sun.shadow.mapSize.x;
+    const r = this.sunRight, u = this.sunUp;
+    const a = Math.round(focus.dot(r) / texel) * texel - focus.dot(r);
+    const b = Math.round(focus.dot(u) / texel) * texel - focus.dot(u);
+    const f = this.snapped.copy(focus).addScaledVector(r, a).addScaledVector(u, b);
+    this.sun.position.copy(f).addScaledVector(d, 160);
+    this.sun.target.position.copy(f);
     this.sky.position.copy(camera.position);
     if (this.pad) this.pad.offset.y = (this.pad.offset.y + dt * 1.6) % 1;
   }
